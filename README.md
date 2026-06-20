@@ -1,0 +1,125 @@
+# Postman Onboarding TDD Preview
+
+`postman-onboarding-tdd` is a GitHub Action for PR-scoped, spec-driven TDD.
+
+It generates a temporary Postman contract collection from the pull request version of an OpenAPI spec, runs that collection against the PR implementation on localhost in CI, and reports failures back to the PR for humans or agents to iterate on.
+
+## Model
+
+- One shared Postman TDD preview workspace.
+- One Spec Hub spec and one TDD contract collection per PR.
+- PR number is the asset namespace.
+- Every new commit to the PR overwrites the same PR-scoped assets.
+- The canonical onboarding workflow remains responsible for durable main-branch Postman assets.
+
+## Repository Config
+
+Add TDD settings to `.postman-template/onboarding.yml`:
+
+```yaml
+spec:
+  path: api/openapi.yaml
+
+service:
+  name: reference-service
+
+tdd:
+  enabled: true
+  workspace:
+    name: Banner Health - API TDD Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./scripts/postman-tdd-start.sh
+  stopCommand: ./scripts/postman-tdd-stop.sh # optional
+  timeoutSeconds: 90
+```
+
+On the first run, if `tdd.workspace.id` is missing, the action finds or creates `tdd.workspace.name` and writes the ID back to the config according to `config-write-mode`.
+
+The customer-owned `startCommand` is responsible for making the PR implementation reachable at `baseUrl`. It can run a local process, Docker Compose, dependent mocks, seed data, or anything else the service needs.
+
+## Example Workflow
+
+```yaml
+name: Postman TDD Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - api/**
+      - src/**
+      - scripts/postman-tdd-start.sh
+      - .postman-template/onboarding.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: postman-tdd-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  tdd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - uses: postman-cs/postman-onboarding-tdd@main
+        with:
+          mode: ${{ github.event.action == 'closed' && 'cleanup' || 'run' }}
+          postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
+          postman-access-token: ${{ secrets.POSTMAN_ACCESS_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
+```
+
+## Agent Handoff
+
+When the TDD collection fails, the action uploads an artifact named `postman-tdd-agent-context` containing:
+
+```text
+.postman-tdd/
+  agent-task.md
+  failures.json
+```
+
+The PR comment summarizes the failure and points agents to the artifact. The success criterion is always:
+
+```text
+The latest PR commit has a passing GitHub check named Postman TDD Preview.
+```
+
+## Inputs
+
+| Input | Required | Default | Description |
+| --- | --- | --- | --- |
+| `mode` | no | `run` | `run` or `cleanup`. |
+| `onboarding-config-path` | no | `.postman-template/onboarding.yml` | Service onboarding config path. |
+| `project-name` | no | `service.name` | Optional service name override. |
+| `spec-path` | no | `spec.path` | Optional OpenAPI spec path override. |
+| `pr-number` | no | pull request event number | Optional PR number override. |
+| `postman-api-key` | yes | | Postman API key. |
+| `postman-access-token` | no | | Compatibility input for onboarding pipelines. |
+| `github-token` | yes | | Token for PR comments and config writeback. |
+| `workspace-team-id` | no | | Numeric Postman sub-team ID for org-mode workspace creation. |
+| `config-write-mode` | no | `commit-and-push` | `commit-and-push`, `commit-only`, or `none`. |
+| `committer-name` | no | `Postman` | Commit author name for config writeback. |
+| `committer-email` | no | `support@postman.com` | Commit author email for config writeback. |
+| `postman-region` | no | `us` | `us` or `eu`. |
+| `postman-stack` | no | `prod` | `prod` or `beta`. |
+
+## Development
+
+```bash
+npm install
+npm test
+npm run typecheck
+npm run build
+npm run check:dist
+```

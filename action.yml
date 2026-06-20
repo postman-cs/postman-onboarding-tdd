@@ -1,0 +1,80 @@
+name: 'Postman Onboarding: TDD Preview'
+description: Generate a PR-scoped Postman TDD contract collection from a PR OpenAPI spec and run it against the PR implementation.
+author: Postman
+branding:
+  icon: check-circle
+  color: orange
+inputs:
+  mode:
+    description: Action mode. Use run for PR preview or cleanup for PR close cleanup.
+    required: false
+    default: run
+  onboarding-config-path:
+    description: Path to .postman-template/onboarding.yml.
+    required: false
+    default: .postman-template/onboarding.yml
+  project-name:
+    description: Optional service project name override. Defaults to service.name from onboarding config.
+    required: false
+  spec-path:
+    description: Optional OpenAPI spec path override. Defaults to spec.path from onboarding config.
+    required: false
+  pr-number:
+    description: Optional PR number override. Defaults to the pull_request event number.
+    required: false
+  postman-api-key:
+    description: Postman API key used for workspace, spec, and collection operations.
+    required: true
+  postman-access-token:
+    description: Compatibility input for broader onboarding pipelines. The TDD action does not require it in v1.
+    required: false
+  github-token:
+    description: GitHub token used for PR comments, artifact context, and config writeback.
+    required: true
+  workspace-team-id:
+    description: Numeric Postman sub-team ID for org-mode workspace creation.
+    required: false
+  config-write-mode:
+    description: How workspace ID bootstrap should write back onboarding config. One of commit-and-push, commit-only, none.
+    required: false
+    default: commit-and-push
+  committer-name:
+    description: Git committer name for workspace ID writeback commits.
+    required: false
+    default: Postman
+  committer-email:
+    description: Git committer email for workspace ID writeback commits.
+    required: false
+    default: support@postman.com
+  postman-region:
+    description: Postman data residency region. One of us or eu.
+    required: false
+    default: us
+  postman-stack:
+    description: Postman stack profile. Leave prod unless Postman support directs otherwise.
+    required: false
+    default: prod
+outputs:
+  status:
+    description: passed, failed, skipped, or cleaned-up.
+  failure-phase:
+    description: none, config, workspace, asset_upsert, service_startup, health_check, collection_run, or cleanup.
+  workspace-id:
+    description: Shared TDD preview workspace ID.
+  spec-id:
+    description: PR-scoped TDD Spec Hub ID.
+  tdd-collection-id:
+    description: PR-scoped TDD contract collection ID.
+  agent-context-dir:
+    description: Agent context directory path.
+  agent-task-path:
+    description: Agent task markdown path.
+  failures-json-path:
+    description: Agent failure JSON path.
+  config-commit-sha:
+    description: Commit SHA produced by workspace ID config writeback, if any.
+  pr-comment-id:
+    description: GitHub PR comment ID for the sticky TDD preview comment.
+runs:
+  using: node24
+  main: dist/action.cjs

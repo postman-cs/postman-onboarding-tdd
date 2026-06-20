@@ -1,0 +1,45 @@
+{
+  "name": "@postman-cse/onboarding-tdd",
+  "version": "0.1.0",
+  "description": "Postman onboarding TDD preview GitHub Action.",
+  "type": "module",
+  "main": "dist/action.cjs",
+  "files": [
+    "action.yml",
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "npm run typecheck && rm -rf dist && esbuild src/main.ts --bundle --platform=node --target=node24 --format=cjs --define:__ACTION_VERSION__=\\\"$npm_package_version\\\" --outfile=dist/action.cjs",
+    "check:dist": "npm run build && git diff --exit-code -- dist",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": [
+    "github-action",
+    "postman",
+    "tdd",
+    "openapi"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@actions/artifact": "^6.2.1",
+    "@actions/core": "^3.0.1",
+    "@actions/github": "^9.1.1",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/postman-cs/postman-onboarding-tdd"
+  }
+}
