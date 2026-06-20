@@ -82,7 +82,7 @@ jobs:
 
 ## Agent Handoff
 
-When the TDD collection fails, the action writes local agent context files during the run and mirrors the failure details into the sticky PR comment:
+When the TDD collection fails, the action writes local agent context files during the run and uploads them as the `postman-tdd-agent-context` workflow artifact:
 
 ```text
 .postman-tdd/
@@ -90,7 +90,7 @@ When the TDD collection fails, the action writes local agent context files durin
   failures.json
 ```
 
-The PR comment summarizes the failure and includes machine-readable failure JSON. The success criterion is always:
+The PR comment names the artifact, summarizes the failure, and includes machine-readable failure JSON for quick agent handoff. The success criterion is always:
 
 ```text
 The latest PR commit has a passing GitHub check named Postman TDD Preview.

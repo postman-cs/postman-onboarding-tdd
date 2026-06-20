@@ -1,4 +1,5 @@
 import * as core from '@actions/core';
+import { DefaultArtifactClient } from '@actions/artifact';
 import { readFileSync } from 'node:fs';
 
 import { createFailureDocument, writeAgentContext } from './agent-context.js';
@@ -24,10 +25,21 @@ import type {
   PreviewAssetState,
   ResolvedOnboardingConfig
 } from './types.js';
+import type { UploadArtifactResponse } from '@actions/artifact';
 
 const AGENT_CONTEXT_DIR = '.postman-tdd';
+const AGENT_CONTEXT_ARTIFACT_NAME = 'postman-tdd-agent-context';
+
+interface AgentContextArtifactClient {
+  uploadArtifact(
+    name: string,
+    files: string[],
+    rootDirectory: string
+  ): Promise<UploadArtifactResponse>;
+}
 
 export interface RunActionOptions {
+  artifactClient?: AgentContextArtifactClient;
   githubClient?: GitHubPrClient;
   postmanClient?: PostmanClient;
 }
@@ -75,6 +87,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
   });
   const pr = resolvePrMetadata(inputs.prNumber);
   const github = options.githubClient ?? new GitHubPrClient(inputs.githubToken, pr.repository);
+  const artifactClient = options.artifactClient ?? new DefaultArtifactClient();
   let prCommentId = '';
   let currentPhase: FailurePhase = 'config';
   let failurePublished = false;
@@ -185,6 +198,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
           timeoutSeconds: config.runtime.timeoutSeconds
         });
         await publishFailure({
+          artifactClient,
           document,
           github,
           prNumber: pr.number,
@@ -212,6 +226,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
           specPath: config.specPath
         });
         await publishFailure({
+          artifactClient,
           document,
           github,
           prNumber: pr.number,
@@ -410,6 +425,7 @@ async function cleanupPreviewAssets(options: {
 }
 
 async function publishFailure(options: {
+  artifactClient: AgentContextArtifactClient;
   document: AgentFailureDocument;
   github: GitHubPrClient;
   prNumber: number;
@@ -418,7 +434,30 @@ async function publishFailure(options: {
 }): Promise<void> {
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
   core.setOutput('failure-phase', options.document.phase);
+
+  let artifact: UploadArtifactResponse | undefined;
+  try {
+    artifact = await options.artifactClient.uploadArtifact(
+      AGENT_CONTEXT_ARTIFACT_NAME,
+      [paths.agentTaskPath, paths.failuresJsonPath],
+      '.'
+    );
+    core.setOutput('agent-context-artifact', AGENT_CONTEXT_ARTIFACT_NAME);
+    if (artifact.id) {
+      core.setOutput('agent-context-artifact-id', String(artifact.id));
+    }
+    if (artifact.digest) {
+      core.setOutput('agent-context-artifact-digest', artifact.digest);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    core.warning(`Unable to upload agent context artifact: ${message}`);
+  }
+
   const commentId = await options.github.upsertStickyComment(options.prNumber, options.state, {
+    agentContextArtifactDigest: artifact?.digest,
+    agentContextArtifactId: artifact?.id,
+    agentContextArtifactName: artifact ? AGENT_CONTEXT_ARTIFACT_NAME : undefined,
     agentTaskPath: paths.agentTaskPath,
     collectionId: options.state.collectionId,
     collectionName: options.summary.collectionName,

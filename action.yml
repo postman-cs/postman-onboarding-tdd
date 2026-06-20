@@ -71,10 +71,16 @@ outputs:
     description: Agent task markdown path.
   failures-json-path:
     description: Agent failure JSON path.
+  agent-context-artifact:
+    description: Workflow artifact containing agent-task.md and failures.json.
+  agent-context-artifact-id:
+    description: GitHub Actions artifact ID for the agent context, when uploaded.
+  agent-context-artifact-digest:
+    description: SHA-256 digest for the uploaded agent context artifact, when available.
   config-commit-sha:
     description: Commit SHA produced by workspace ID config writeback, if any.
   pr-comment-id:
     description: GitHub PR comment ID for the sticky TDD preview comment.
 runs:
   using: node24
-  main: dist/action.cjs
+  main: dist/action.mjs

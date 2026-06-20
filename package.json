@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Postman onboarding TDD preview GitHub Action.",
   "type": "module",
-  "main": "dist/action.cjs",
+  "main": "dist/action.mjs",
   "files": [
     "action.yml",
     "dist/",
@@ -14,7 +14,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "npm run typecheck && rm -rf dist && esbuild src/main.ts --bundle --platform=node --target=node24 --format=cjs --define:__ACTION_VERSION__=\\\"$npm_package_version\\\" --outfile=dist/action.cjs",
+    "build": "npm run typecheck && rm -rf dist && esbuild src/main.ts --bundle --platform=node --target=node24 --format=esm --banner:js='import { createRequire as __createRequire } from \"node:module\"; const require = __createRequire(import.meta.url);' --define:__ACTION_VERSION__=\\\"$npm_package_version\\\" --outfile=dist/action.mjs",
     "check:dist": "npm run build && git diff --exit-code -- dist",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
@@ -27,6 +27,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@actions/artifact": "^6.2.1",
     "@actions/core": "^3.0.1",
     "@actions/github": "^9.1.1",
     "yaml": "^2.9.0"

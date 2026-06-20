@@ -12,6 +12,9 @@ export interface StickyComment {
 }
 
 export interface PrCommentSummary {
+  agentContextArtifactDigest?: string;
+  agentContextArtifactId?: number;
+  agentContextArtifactName?: string;
   agentTaskPath?: string;
   collectionId?: string;
   collectionName?: string;
@@ -139,7 +142,16 @@ export function renderStickyComment(
   } else {
     lines.push(`**Failure phase:** ${summary.failurePhase || summary.failureDocument?.phase || 'unknown'}`);
     lines.push('');
-    lines.push('Agent context files generated during the run: `.postman-tdd/agent-task.md` and `.postman-tdd/failures.json`.');
+    if (summary.agentContextArtifactName) {
+      const artifactDetails = [
+        summary.agentContextArtifactId ? `id: ${summary.agentContextArtifactId}` : '',
+        summary.agentContextArtifactDigest ? `digest: ${summary.agentContextArtifactDigest}` : ''
+      ].filter(Boolean).join(', ');
+      lines.push(`Agent context artifact: \`${summary.agentContextArtifactName}\`${artifactDetails ? ` (${artifactDetails})` : ''}.`);
+      lines.push('Artifact contents: `.postman-tdd/agent-task.md` and `.postman-tdd/failures.json`.');
+    } else {
+      lines.push('Agent context files generated during the run: `.postman-tdd/agent-task.md` and `.postman-tdd/failures.json`.');
+    }
     if (summary.agentTaskPath) {
       lines.push(`Agent entrypoint: \`${summary.agentTaskPath}\``);
     }

@@ -24,11 +24,14 @@ describe('PR sticky comment marker', () => {
     expect(body).toContain('Postman TDD Preview (PASSED)');
   });
 
-  it('renders failure summaries with the agent context pointer', () => {
+  it('renders failure summaries with the agent artifact pointer', () => {
     const body = renderStickyComment({
       prNumber: 123,
       schemaVersion: 1
     }, {
+      agentContextArtifactDigest: 'sha256:abc123',
+      agentContextArtifactId: 456,
+      agentContextArtifactName: 'postman-tdd-agent-context',
       agentTaskPath: '.postman-tdd/agent-task.md',
       failureDocument: {
         failures: [{ message: 'Expected status 200' }],
@@ -44,7 +47,10 @@ describe('PR sticky comment marker', () => {
       status: 'failed'
     });
 
-    expect(body).toContain('Agent context files generated during the run');
+    expect(body).toContain('Agent context artifact: `postman-tdd-agent-context`');
+    expect(body).toContain('id: 456');
+    expect(body).toContain('sha256:abc123');
+    expect(body).toContain('Artifact contents: `.postman-tdd/agent-task.md` and `.postman-tdd/failures.json`');
     expect(body).toContain('Expected status 200');
     expect(body).toContain('Agent failure JSON');
   });
