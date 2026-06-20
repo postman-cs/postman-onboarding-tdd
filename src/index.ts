@@ -1,5 +1,4 @@
 import * as core from '@actions/core';
-import { DefaultArtifactClient } from '@actions/artifact';
 import { readFileSync } from 'node:fs';
 
 import { createFailureDocument, writeAgentContext } from './agent-context.js';
@@ -29,7 +28,6 @@ import type {
 const AGENT_CONTEXT_DIR = '.postman-tdd';
 
 export interface RunActionOptions {
-  artifactClient?: Pick<DefaultArtifactClient, 'uploadArtifact'>;
   githubClient?: GitHubPrClient;
   postmanClient?: PostmanClient;
 }
@@ -77,7 +75,6 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
   });
   const pr = resolvePrMetadata(inputs.prNumber);
   const github = options.githubClient ?? new GitHubPrClient(inputs.githubToken, pr.repository);
-  const artifactClient = options.artifactClient ?? new DefaultArtifactClient();
   let prCommentId = '';
   let currentPhase: FailurePhase = 'config';
   let failurePublished = false;
@@ -188,7 +185,6 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
           timeoutSeconds: config.runtime.timeoutSeconds
         });
         await publishFailure({
-          artifactClient,
           document,
           github,
           prNumber: pr.number,
@@ -216,7 +212,6 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
           specPath: config.specPath
         });
         await publishFailure({
-          artifactClient,
           document,
           github,
           prNumber: pr.number,
@@ -415,7 +410,6 @@ async function cleanupPreviewAssets(options: {
 }
 
 async function publishFailure(options: {
-  artifactClient: Pick<DefaultArtifactClient, 'uploadArtifact'>;
   document: AgentFailureDocument;
   github: GitHubPrClient;
   prNumber: number;
@@ -424,11 +418,6 @@ async function publishFailure(options: {
 }): Promise<void> {
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
   core.setOutput('failure-phase', options.document.phase);
-  await options.artifactClient.uploadArtifact(
-    'postman-tdd-agent-context',
-    [paths.agentTaskPath, paths.failuresJsonPath],
-    paths.dir
-  );
   const commentId = await options.github.upsertStickyComment(options.prNumber, options.state, {
     agentTaskPath: paths.agentTaskPath,
     collectionId: options.state.collectionId,

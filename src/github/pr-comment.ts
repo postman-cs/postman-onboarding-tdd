@@ -139,7 +139,7 @@ export function renderStickyComment(
   } else {
     lines.push(`**Failure phase:** ${summary.failurePhase || summary.failureDocument?.phase || 'unknown'}`);
     lines.push('');
-    lines.push('Agent context artifact: `postman-tdd-agent-context`');
+    lines.push('Agent context files generated during the run: `.postman-tdd/agent-task.md` and `.postman-tdd/failures.json`.');
     if (summary.agentTaskPath) {
       lines.push(`Agent entrypoint: \`${summary.agentTaskPath}\``);
     }
@@ -154,6 +154,17 @@ export function renderStickyComment(
       if (failures.length > 10) {
         lines.push(`- ...and ${failures.length - 10} more failure(s).`);
       }
+    }
+    if (summary.failureDocument) {
+      lines.push('');
+      lines.push('<details>');
+      lines.push('<summary>Agent failure JSON</summary>');
+      lines.push('');
+      lines.push('```json');
+      lines.push(JSON.stringify(summary.failureDocument, null, 2));
+      lines.push('```');
+      lines.push('');
+      lines.push('</details>');
     }
   }
 

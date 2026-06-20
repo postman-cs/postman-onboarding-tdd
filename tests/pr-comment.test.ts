@@ -24,7 +24,7 @@ describe('PR sticky comment marker', () => {
     expect(body).toContain('Postman TDD Preview (PASSED)');
   });
 
-  it('renders failure summaries with the agent artifact pointer', () => {
+  it('renders failure summaries with the agent context pointer', () => {
     const body = renderStickyComment({
       prNumber: 123,
       schemaVersion: 1
@@ -44,7 +44,8 @@ describe('PR sticky comment marker', () => {
       status: 'failed'
     });
 
-    expect(body).toContain('Agent context artifact');
+    expect(body).toContain('Agent context files generated during the run');
     expect(body).toContain('Expected status 200');
+    expect(body).toContain('Agent failure JSON');
   });
 });

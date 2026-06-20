@@ -29,7 +29,7 @@ inputs:
     description: Compatibility input for broader onboarding pipelines. The TDD action does not require it in v1.
     required: false
   github-token:
-    description: GitHub token used for PR comments, artifact context, and config writeback.
+    description: GitHub token used for PR comments and config writeback.
     required: true
   workspace-team-id:
     description: Numeric Postman sub-team ID for org-mode workspace creation.

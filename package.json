@@ -27,7 +27,6 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@actions/artifact": "^6.2.1",
     "@actions/core": "^3.0.1",
     "@actions/github": "^9.1.1",
     "yaml": "^2.9.0"
