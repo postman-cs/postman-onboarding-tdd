@@ -63,6 +63,7 @@ concurrency:
 
 jobs:
   tdd:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
