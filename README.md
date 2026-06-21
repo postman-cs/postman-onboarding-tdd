@@ -38,6 +38,26 @@ On the first run, if `tdd.workspace.id` is missing, the action finds or creates 
 
 The customer-owned `startCommand` is responsible for making the PR implementation reachable at `baseUrl`. It can run a local process, Docker Compose, dependent mocks, seed data, or anything else the service needs.
 
+## Agent Instructions
+
+Copy this repository's [`.postman-template/tdd-agent.md`](.postman-template/tdd-agent.md) into the customer service repository at the same path:
+
+```text
+.postman-template/tdd-agent.md
+```
+
+Commit it to the customer repository's default branch, usually `main`, so all future PR branches inherit the same generic agent instructions.
+
+The file is intentionally static and branch-safe. It tells any coding agent to read the latest `Postman TDD Preview` sticky PR comment, use the inline failure JSON as the source of truth, fix implementation code only, and wait for the next TDD workflow result after each push.
+
+Do not commit generated run-specific files from `.postman-tdd/`. Those files are created during CI and can become stale after every commit.
+
+The generic prompt for an agent can stay small:
+
+```text
+Follow .postman-template/tdd-agent.md for this PR.
+```
+
 ## Example Workflow
 
 ```yaml

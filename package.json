@@ -6,6 +6,7 @@
   "main": "dist/action.mjs",
   "files": [
     "action.yml",
+    ".postman-template/",
     "dist/",
     "README.md",
     "LICENSE"
