@@ -61,12 +61,18 @@ export interface AgentFailure {
   path?: string;
 }
 
+export interface ImmutablePathHash {
+  path: string;
+  sha256: string;
+}
+
 export interface AgentFailureDocument {
   baseUrl?: string;
   collectionName?: string;
   commit?: string;
   failures: AgentFailure[];
   healthUrl?: string;
+  immutablePathHashes: ImmutablePathHash[];
   immutablePaths: string[];
   message: string;
   phase: FailurePhase;

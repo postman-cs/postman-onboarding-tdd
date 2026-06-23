@@ -108,6 +108,7 @@ When the TDD collection fails, the action writes local agent context files durin
 .postman-tdd/
   agent-task.md
   failures.json
+  immutable-spec-guard.mjs
 ```
 
 The PR comment names the artifact, summarizes the failure, and includes machine-readable failure JSON for quick agent handoff. The success criterion is always:
@@ -116,7 +117,7 @@ The PR comment names the artifact, summarizes the failure, and includes machine-
 The latest PR commit has a passing GitHub check named Postman TDD Preview.
 ```
 
-The failure JSON also includes `immutablePaths`, defaulting to the configured OpenAPI `spec.path`. Humans can submit spec changes in the PR, but implementation-fix agents must treat those paths as read-only once a TDD failure exists.
+The failure JSON also includes `immutablePaths`, defaulting to the configured OpenAPI `spec.path`, plus `immutablePathHashes`. Humans can submit spec changes in the PR, but implementation-fix agents must treat those paths as read-only once a TDD failure exists. Agents can run `node .postman-tdd/immutable-spec-guard.mjs snapshot` at start and `node .postman-tdd/immutable-spec-guard.mjs verify` before commit/push.
 
 ## Inputs
 

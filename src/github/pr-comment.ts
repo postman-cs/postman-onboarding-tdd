@@ -152,9 +152,9 @@ export function renderStickyComment(
         summary.agentContextArtifactDigest ? `digest: ${summary.agentContextArtifactDigest}` : ''
       ].filter(Boolean).join(', ');
       lines.push(`Agent context artifact: \`${summary.agentContextArtifactName}\`${artifactDetails ? ` (${artifactDetails})` : ''}.`);
-      lines.push('Artifact contents: `.postman-tdd/agent-task.md` and `.postman-tdd/failures.json`.');
+      lines.push('Artifact contents: `.postman-tdd/agent-task.md`, `.postman-tdd/failures.json`, and `.postman-tdd/immutable-spec-guard.mjs`.');
     } else {
-      lines.push('Agent context files generated during the run: `.postman-tdd/agent-task.md` and `.postman-tdd/failures.json`.');
+      lines.push('Agent context files generated during the run: `.postman-tdd/agent-task.md`, `.postman-tdd/failures.json`, and `.postman-tdd/immutable-spec-guard.mjs`.');
     }
     if (summary.agentTaskPath) {
       lines.push(`Agent entrypoint: \`${summary.agentTaskPath}\``);

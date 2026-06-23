@@ -36,7 +36,25 @@ Use the `immutablePaths` array from the inline failure JSON, for example:
 }
 ```
 
-Before pushing, verify your diff does not include any immutable path. If the only reasonable fix requires changing the spec, stop and report that the API intent or spec is unclear instead of editing the spec.
+At agent start, record the hash of every immutable path. If the `.postman-tdd` artifact is available, run:
+
+```bash
+node .postman-tdd/immutable-spec-guard.mjs snapshot
+```
+
+Before committing or pushing, verify the spec hash is unchanged:
+
+```bash
+node .postman-tdd/immutable-spec-guard.mjs verify
+```
+
+If verification fails, stop with:
+
+```text
+The OpenAPI spec is immutable during implementation repair. Revert spec changes and fix code only.
+```
+
+If the artifact is unavailable, compute and record `sha256` hashes for `immutablePaths` yourself at the start, then compare them before commit/push. If the only reasonable fix requires changing the spec, stop and report that the API intent or spec is unclear instead of editing the spec.
 
 ## Iteration Loop
 

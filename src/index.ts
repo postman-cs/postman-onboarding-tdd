@@ -2,7 +2,7 @@ import * as core from '@actions/core';
 import { DefaultArtifactClient } from '@actions/artifact';
 import { readFileSync } from 'node:fs';
 
-import { createFailureDocument, writeAgentContext } from './agent-context.js';
+import { createFailureDocument, hashImmutablePaths, writeAgentContext } from './agent-context.js';
 import { loadOnboardingConfig, patchWorkspaceId, resolveWorkspacePath, validateConfigWriteMode } from './config.js';
 import { buildContractIndex, instrumentContractCollection, parseOpenApiDocument } from './contract.js';
 import { GitHubPrClient, resolvePrMetadata } from './github/pr-comment.js';
@@ -171,6 +171,8 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
       mask,
       postmanRegion: inputs.postmanRegion
     });
+    const immutablePaths = [config.specPath];
+    const immutablePathHashes = hashImmutablePaths(immutablePaths);
 
     currentPhase = 'service_startup';
     const running = startBackgroundCommand(config.runtime.startCommand, { mask });
@@ -191,6 +193,8 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
             message: health.message
           }],
           healthUrl: config.runtime.healthUrl,
+          immutablePathHashes,
+          immutablePaths,
           message: health.message,
           phase: health.phase,
           specPath: config.specPath,
@@ -221,6 +225,8 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
           collectionName: assetNames.collectionName,
           commit: pr.sha,
           failures,
+          immutablePathHashes,
+          immutablePaths,
           message: `Postman TDD collection failed with exit code ${collectionRun.exitCode}`,
           phase: 'collection_run',
           specPath: config.specPath
@@ -439,7 +445,7 @@ async function publishFailure(options: {
   try {
     artifact = await options.artifactClient.uploadArtifact(
       AGENT_CONTEXT_ARTIFACT_NAME,
-      [paths.agentTaskPath, paths.failuresJsonPath],
+      [paths.agentTaskPath, paths.failuresJsonPath, paths.immutableSpecGuardPath],
       '.'
     );
     core.setOutput('agent-context-artifact', AGENT_CONTEXT_ARTIFACT_NAME);
