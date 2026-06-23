@@ -141,6 +141,10 @@ export function renderStickyComment(
     lines.push('TDD preview is disabled for this repository.');
   } else {
     lines.push(`**Failure phase:** ${summary.failurePhase || summary.failureDocument?.phase || 'unknown'}`);
+    const immutablePaths = summary.failureDocument?.immutablePaths || [];
+    if (immutablePaths.length > 0) {
+      lines.push(`**Immutable paths:** ${immutablePaths.map((path) => `\`${path}\``).join(', ')}`);
+    }
     lines.push('');
     if (summary.agentContextArtifactName) {
       const artifactDetails = [

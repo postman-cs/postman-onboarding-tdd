@@ -67,6 +67,7 @@ export interface AgentFailureDocument {
   commit?: string;
   failures: AgentFailure[];
   healthUrl?: string;
+  immutablePaths: string[];
   message: string;
   phase: FailurePhase;
   schemaVersion: 1;

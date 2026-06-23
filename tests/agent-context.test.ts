@@ -26,8 +26,11 @@ describe('agent context', () => {
     const paths = writeAgentContext(document, dir);
     expect(readFileSync(paths.agentTaskPath, 'utf8')).toContain('Success Criteria');
     expect(JSON.parse(readFileSync(paths.failuresJsonPath, 'utf8'))).toMatchObject({
+      immutablePaths: ['api/openapi.yaml'],
       phase: 'collection_run',
       status: 'failed'
     });
+    expect(readFileSync(paths.agentTaskPath, 'utf8')).toContain('Do not change files listed in `immutablePaths`');
+    expect(readFileSync(paths.agentTaskPath, 'utf8')).toContain('verify your diff does not include any path listed in `immutablePaths`');
   });
 });

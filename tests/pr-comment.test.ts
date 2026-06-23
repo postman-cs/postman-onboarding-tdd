@@ -35,6 +35,7 @@ describe('PR sticky comment marker', () => {
       agentTaskPath: '.postman-tdd/agent-task.md',
       failureDocument: {
         failures: [{ message: 'Expected status 200' }],
+        immutablePaths: ['api/openapi.yaml'],
         message: 'failed',
         phase: 'collection_run',
         schemaVersion: 1,
@@ -48,6 +49,8 @@ describe('PR sticky comment marker', () => {
     });
 
     expect(body).toContain('Agent context artifact: `postman-tdd-agent-context`');
+    expect(body).toContain('**Immutable paths:** `api/openapi.yaml`');
+    expect(body).toContain('"immutablePaths": [');
     expect(body).toContain('id: 456');
     expect(body).toContain('sha256:abc123');
     expect(body).toContain('Artifact contents: `.postman-tdd/agent-task.md` and `.postman-tdd/failures.json`');

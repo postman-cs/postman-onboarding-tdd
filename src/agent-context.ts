@@ -11,11 +11,18 @@ export interface AgentContextPaths {
 
 const DEFAULT_DIR = '.postman-tdd';
 
+type AgentFailureDocumentInput =
+  Omit<AgentFailureDocument, 'immutablePaths' | 'schemaVersion' | 'status' | 'successCriteria'> & {
+    immutablePaths?: string[];
+  };
+
 export function createFailureDocument(
-  input: Omit<AgentFailureDocument, 'schemaVersion' | 'status' | 'successCriteria'>
+  input: AgentFailureDocumentInput
 ): AgentFailureDocument {
+  const immutablePaths = input.immutablePaths ?? (input.specPath ? [input.specPath] : []);
   return {
     ...input,
+    immutablePaths,
     schemaVersion: 1,
     status: 'failed',
     successCriteria: {
@@ -36,6 +43,9 @@ export function writeAgentContext(document: AgentFailureDocument, dir = DEFAULT_
 
 export function renderAgentTask(document: AgentFailureDocument): string {
   const target = document.specPath || 'the OpenAPI spec';
+  const immutablePaths = document.immutablePaths.length > 0
+    ? document.immutablePaths.map((path) => `- \`${path}\``)
+    : ['- No immutable paths were provided. Treat the configured OpenAPI spec path as read-only.'];
   const lines = [
     '# Postman TDD Task',
     '',
@@ -55,9 +65,18 @@ export function renderAgentTask(document: AgentFailureDocument): string {
     '- the generated TDD collection passed against the local CI service',
     '- no generated TDD assertions were weakened or bypassed',
     '',
+    '## Immutable Paths',
+    '',
+    'Humans may submit OpenAPI spec changes in the PR. During implementation repair, treat these paths as read-only:',
+    ...immutablePaths,
+    '',
+    'Do not edit, reformat, move, regenerate, or weaken these files. If the failure requires a spec change, stop and report the API intent issue.',
+    '',
     '## Rules',
     '',
-    '- Do not weaken the OpenAPI spec unless the product intent is wrong.',
+    '- Fix implementation code only.',
+    '- Do not change files listed in `immutablePaths`.',
+    '- Before pushing, verify your diff does not include any path listed in `immutablePaths`.',
     '- Do not edit generated Postman assertions or `.postman-tdd/failures.json`.',
     '- Prefer the smallest implementation change that satisfies the spec.',
     '- Push code changes to this PR branch; the GitHub workflow will rerun automatically.',

@@ -105843,8 +105843,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join as join2 } from "node:path";
 var DEFAULT_DIR = ".postman-tdd";
 function createFailureDocument(input) {
+  const immutablePaths = input.immutablePaths ?? (input.specPath ? [input.specPath] : []);
   return {
     ...input,
+    immutablePaths,
     schemaVersion: 1,
     status: "failed",
     successCriteria: {
@@ -105864,6 +105866,7 @@ function writeAgentContext(document2, dir = DEFAULT_DIR) {
 }
 function renderAgentTask(document2) {
   const target = document2.specPath || "the OpenAPI spec";
+  const immutablePaths = document2.immutablePaths.length > 0 ? document2.immutablePaths.map((path4) => `- \`${path4}\``) : ["- No immutable paths were provided. Treat the configured OpenAPI spec path as read-only."];
   const lines = [
     "# Postman TDD Task",
     "",
@@ -105883,9 +105886,18 @@ function renderAgentTask(document2) {
     "- the generated TDD collection passed against the local CI service",
     "- no generated TDD assertions were weakened or bypassed",
     "",
+    "## Immutable Paths",
+    "",
+    "Humans may submit OpenAPI spec changes in the PR. During implementation repair, treat these paths as read-only:",
+    ...immutablePaths,
+    "",
+    "Do not edit, reformat, move, regenerate, or weaken these files. If the failure requires a spec change, stop and report the API intent issue.",
+    "",
     "## Rules",
     "",
-    "- Do not weaken the OpenAPI spec unless the product intent is wrong.",
+    "- Fix implementation code only.",
+    "- Do not change files listed in `immutablePaths`.",
+    "- Before pushing, verify your diff does not include any path listed in `immutablePaths`.",
     "- Do not edit generated Postman assertions or `.postman-tdd/failures.json`.",
     "- Prefer the smallest implementation change that satisfies the spec.",
     "- Push code changes to this PR branch; the GitHub workflow will rerun automatically.",
@@ -106435,6 +106447,10 @@ ${MARKER_END}`;
     lines.push("TDD preview is disabled for this repository.");
   } else {
     lines.push(`**Failure phase:** ${summary2.failurePhase || summary2.failureDocument?.phase || "unknown"}`);
+    const immutablePaths = summary2.failureDocument?.immutablePaths || [];
+    if (immutablePaths.length > 0) {
+      lines.push(`**Immutable paths:** ${immutablePaths.map((path4) => `\`${path4}\``).join(", ")}`);
+    }
     lines.push("");
     if (summary2.agentContextArtifactName) {
       const artifactDetails = [

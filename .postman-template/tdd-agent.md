@@ -17,11 +17,26 @@ Only act on failure context for the latest PR head commit. If the sticky comment
 ## Rules
 
 - Fix implementation code only.
-- Do not weaken the OpenAPI spec.
+- Treat every path listed in the latest failure JSON `immutablePaths` array as read-only.
+- Do not edit, reformat, move, regenerate, or weaken immutable OpenAPI spec files.
 - Do not edit generated Postman assertions.
 - Do not change test expectations just to make the check pass.
 - Prefer the smallest implementation change that satisfies the contract.
 - Push changes to the PR branch and let CI rerun.
+
+## Immutable Spec Rule
+
+Humans may submit OpenAPI spec changes in the PR. Once the `Postman TDD Preview` failure exists and you are acting as an implementation-fix agent, the PR spec is the contract to satisfy.
+
+Use the `immutablePaths` array from the inline failure JSON, for example:
+
+```json
+{
+  "immutablePaths": ["api/openapi.yaml"]
+}
+```
+
+Before pushing, verify your diff does not include any immutable path. If the only reasonable fix requires changing the spec, stop and report that the API intent or spec is unclear instead of editing the spec.
 
 ## Iteration Loop
 

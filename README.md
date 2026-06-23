@@ -116,6 +116,8 @@ The PR comment names the artifact, summarizes the failure, and includes machine-
 The latest PR commit has a passing GitHub check named Postman TDD Preview.
 ```
 
+The failure JSON also includes `immutablePaths`, defaulting to the configured OpenAPI `spec.path`. Humans can submit spec changes in the PR, but implementation-fix agents must treat those paths as read-only once a TDD failure exists.
+
 ## Inputs
 
 | Input | Required | Default | Description |
