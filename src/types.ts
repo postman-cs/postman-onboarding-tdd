@@ -7,6 +7,7 @@ export type FailurePhase =
   | 'config'
   | 'workspace'
   | 'asset_upsert'
+  | 'immutable_state_tampered'
   | 'immutable_spec'
   | 'service_startup'
   | 'health_check'
@@ -46,6 +47,7 @@ export interface PrMetadata {
 
 export interface PreviewAssetState {
   collectionId?: string;
+  immutableState?: SignedImmutableState;
   prNumber: number;
   schemaVersion: 1;
   specId?: string;
@@ -67,6 +69,22 @@ export interface ImmutablePathHash {
   sha256: string;
 }
 
+export interface ImmutableStatePayload {
+  commit?: string;
+  immutablePathHashes: ImmutablePathHash[];
+  prNumber: number;
+  repository: string;
+  schemaVersion: 1;
+  specPath?: string;
+}
+
+export interface SignedImmutableState {
+  algorithm: 'hmac-sha256';
+  payload: ImmutableStatePayload;
+  schemaVersion: 1;
+  signature: string;
+}
+
 export interface AgentFailureDocument {
   baseUrl?: string;
   collectionName?: string;
@@ -75,6 +93,7 @@ export interface AgentFailureDocument {
   healthUrl?: string;
   immutablePathHashes: ImmutablePathHash[];
   immutablePaths: string[];
+  immutableState?: SignedImmutableState;
   message: string;
   phase: FailurePhase;
   schemaVersion: 1;
@@ -93,6 +112,7 @@ export interface ActionInputs {
   committerName: string;
   configWriteMode: ConfigWriteMode;
   githubToken: string;
+  immutableStateSigningKey?: string;
   mode: ActionMode;
   onboardingConfigPath: string;
   postmanAccessToken?: string;

@@ -31,6 +31,9 @@ inputs:
   github-token:
     description: GitHub token used for PR comments and config writeback.
     required: true
+  immutable-state-signing-key:
+    description: Optional HMAC signing key for immutable spec baselines. When set, previous sticky comment baselines must have a valid signature.
+    required: false
   workspace-team-id:
     description: Numeric Postman sub-team ID for org-mode workspace creation.
     required: false
@@ -58,7 +61,7 @@ outputs:
   status:
     description: passed, failed, skipped, or cleaned-up.
   failure-phase:
-    description: none, config, workspace, asset_upsert, immutable_spec, service_startup, health_check, collection_run, or cleanup.
+    description: none, config, workspace, asset_upsert, immutable_state_tampered, immutable_spec, service_startup, health_check, collection_run, or cleanup.
   workspace-id:
     description: Shared TDD preview workspace ID.
   spec-id:

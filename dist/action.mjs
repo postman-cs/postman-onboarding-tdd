@@ -106657,6 +106657,80 @@ function resolvePrMetadata(inputPrNumber) {
   };
 }
 
+// src/immutable-state.ts
+import { createHmac as createHmac4, timingSafeEqual } from "node:crypto";
+var IMMUTABLE_STATE_TAMPERED_MESSAGE = "The signed immutable spec baseline could not be verified. Treat the sticky comment as tampered and do not continue implementation repair.";
+function createImmutableStatePayload(context5) {
+  return {
+    ...context5.commit ? { commit: context5.commit } : {},
+    immutablePathHashes: sortHashes(context5.immutablePathHashes),
+    prNumber: context5.prNumber,
+    repository: context5.repository,
+    schemaVersion: 1,
+    ...context5.specPath ? { specPath: context5.specPath } : {}
+  };
+}
+function signImmutableState(payload, signingKey) {
+  return {
+    algorithm: "hmac-sha256",
+    payload,
+    schemaVersion: 1,
+    signature: `hmac-sha256:${createSignature(payload, signingKey)}`
+  };
+}
+function verifyImmutableState(signedState, signingKey, expectation) {
+  if (!signedState || signedState.schemaVersion !== 1 || signedState.algorithm !== "hmac-sha256") {
+    return false;
+  }
+  if (signedState.payload.schemaVersion !== 1 || signedState.payload.prNumber !== expectation.prNumber || signedState.payload.repository !== expectation.repository || signedState.payload.specPath !== expectation.specPath) {
+    return false;
+  }
+  if (!signedState.signature.startsWith("hmac-sha256:")) {
+    return false;
+  }
+  const actual = Buffer.from(signedState.signature.slice("hmac-sha256:".length), "hex");
+  const expected = Buffer.from(createSignature(signedState.payload, signingKey), "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+function resolveTrustedImmutableBaseline(document2, signingKey, expectation, signedStateOverride) {
+  const signedState = signedStateOverride || document2?.immutableState;
+  const hashes = signedState?.payload.immutablePathHashes || document2?.immutablePathHashes || [];
+  if (hashes.length === 0) {
+    return { hashes: [], ok: true };
+  }
+  if (!signingKey) {
+    return { hashes, ok: true };
+  }
+  if (!verifyImmutableState(signedState, signingKey, expectation)) {
+    return {
+      hashes,
+      message: IMMUTABLE_STATE_TAMPERED_MESSAGE,
+      ok: false
+    };
+  }
+  return {
+    hashes: signedState.payload.immutablePathHashes,
+    ok: true,
+    signedState
+  };
+}
+function canonicalize(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalize).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value).filter(([, child]) => child !== void 0).sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${canonicalize(child)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function createSignature(payload, signingKey) {
+  return createHmac4("sha256", signingKey).update(canonicalize(payload)).digest("hex");
+}
+function sortHashes(hashes) {
+  return hashes.map((hash) => ({ path: hash.path, sha256: hash.sha256 })).sort((left, right) => left.path.localeCompare(right.path));
+}
+
 // src/github/repo-mutation.ts
 import { spawn } from "node:child_process";
 
@@ -107154,6 +107228,7 @@ function readActionInputs() {
     committerName: getInput("committer-name") || "Postman",
     configWriteMode: validateConfigWriteMode(getInput("config-write-mode") || "commit-and-push"),
     githubToken: getInput("github-token", { required: true }),
+    immutableStateSigningKey: getInput("immutable-state-signing-key") || void 0,
     mode: modeRaw,
     onboardingConfigPath: getInput("onboarding-config-path") || ".postman-template/onboarding.yml",
     postmanAccessToken: getInput("postman-access-token") || void 0,
@@ -107171,10 +107246,12 @@ async function runAction(options = {}) {
   setSecret(inputs.postmanApiKey);
   setSecret(inputs.githubToken);
   if (inputs.postmanAccessToken) setSecret(inputs.postmanAccessToken);
+  if (inputs.immutableStateSigningKey) setSecret(inputs.immutableStateSigningKey);
   const mask = createSecretMasker([
     inputs.postmanApiKey,
     inputs.githubToken,
-    inputs.postmanAccessToken
+    inputs.postmanAccessToken,
+    inputs.immutableStateSigningKey
   ]);
   const endpointProfile = resolvePostmanEndpointProfile(inputs.postmanStack, inputs.postmanRegion);
   const postman = options.postmanClient ?? new PostmanClient({
@@ -107229,10 +107306,54 @@ async function runAction(options = {}) {
     }
     const assetNames = createAssetNames(pr.number, config.projectName);
     const previousFailureDocument = sticky?.body ? parseFailureDocument(sticky.body) : void 0;
-    const previousImmutableHashes = previousFailureDocument?.immutablePathHashes || [];
+    const trustedBaseline = resolveTrustedImmutableBaseline(
+      previousFailureDocument,
+      inputs.immutableStateSigningKey,
+      {
+        prNumber: pr.number,
+        repository: pr.repository,
+        specPath: config.specPath
+      },
+      state3.immutableState
+    );
+    if (!trustedBaseline.ok) {
+      currentPhase = "immutable_state_tampered";
+      delete state3.immutableState;
+      const document2 = createFailureDocument({
+        baseUrl: config.runtime.baseUrl,
+        collectionName: assetNames.collectionName,
+        commit: pr.sha,
+        failures: [{
+          message: trustedBaseline.message,
+          path: config.specPath
+        }],
+        immutablePathHashes: trustedBaseline.hashes,
+        immutablePaths: uniquePaths(trustedBaseline.hashes),
+        message: trustedBaseline.message,
+        phase: "immutable_state_tampered",
+        specPath: config.specPath
+      });
+      await publishFailure({
+        artifactClient,
+        document: document2,
+        github,
+        prNumber: pr.number,
+        state: state3,
+        summary: {
+          collectionName: assetNames.collectionName,
+          failurePhase: "immutable_state_tampered"
+        }
+      });
+      failurePublished = true;
+      throw new Error(IMMUTABLE_STATE_TAMPERED_MESSAGE);
+    }
+    const previousImmutableHashes = trustedBaseline.hashes;
     const immutableSpecChanges = findImmutablePathChanges(previousImmutableHashes);
     if (immutableSpecChanges.length > 0) {
       currentPhase = "immutable_spec";
+      if (trustedBaseline.signedState) {
+        state3.immutableState = trustedBaseline.signedState;
+      }
       const document2 = createFailureDocument({
         baseUrl: config.runtime.baseUrl,
         collectionName: assetNames.collectionName,
@@ -107245,6 +107366,7 @@ async function runAction(options = {}) {
         })),
         immutablePathHashes: previousImmutableHashes,
         immutablePaths: uniquePaths(previousImmutableHashes),
+        immutableState: trustedBaseline.signedState,
         message: IMMUTABLE_SPEC_GUARD_MESSAGE,
         phase: "immutable_spec",
         specPath: config.specPath
@@ -107297,6 +107419,13 @@ async function runAction(options = {}) {
     });
     const immutablePaths = [config.specPath];
     const immutablePathHashes = hashImmutablePaths(immutablePaths);
+    const immutableState = inputs.immutableStateSigningKey ? signImmutableState(createImmutableStatePayload({
+      commit: pr.sha,
+      immutablePathHashes,
+      prNumber: pr.number,
+      repository: pr.repository,
+      specPath: config.specPath
+    }), inputs.immutableStateSigningKey) : void 0;
     currentPhase = "service_startup";
     const running = startBackgroundCommand(config.runtime.startCommand, { mask });
     try {
@@ -107318,12 +107447,16 @@ async function runAction(options = {}) {
           healthUrl: config.runtime.healthUrl,
           immutablePathHashes,
           immutablePaths,
+          immutableState,
           message: health.message,
           phase: health.phase,
           specPath: config.specPath,
           startCommand: config.runtime.startCommand,
           timeoutSeconds: config.runtime.timeoutSeconds
         });
+        if (immutableState) {
+          state3.immutableState = immutableState;
+        }
         await publishFailure({
           artifactClient,
           document: document2,
@@ -107349,10 +107482,14 @@ async function runAction(options = {}) {
           failures,
           immutablePathHashes,
           immutablePaths,
+          immutableState,
           message: `Postman TDD collection failed with exit code ${collectionRun.exitCode}`,
           phase: "collection_run",
           specPath: config.specPath
         });
+        if (immutableState) {
+          state3.immutableState = immutableState;
+        }
         await publishFailure({
           artifactClient,
           document: document2,

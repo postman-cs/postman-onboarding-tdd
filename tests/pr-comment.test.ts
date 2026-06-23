@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseAssetState, parseFailureDocument, renderStickyComment } from '../src/github/pr-comment.js';
+import { createImmutableStatePayload, signImmutableState } from '../src/immutable-state.js';
 
 describe('PR sticky comment marker', () => {
   it('round-trips asset state through the hidden marker', () => {
+    const immutableState = signImmutableState(createImmutableStatePayload({
+      immutablePathHashes: [{ path: 'api/openapi.yaml', sha256: 'abc123' }],
+      prNumber: 123,
+      repository: 'postman-cs/pavan-test-TDD',
+      specPath: 'api/openapi.yaml'
+    }), 'secret');
     const body = renderStickyComment({
       collectionId: 'col-1',
+      immutableState,
       prNumber: 123,
       schemaVersion: 1,
       specId: 'spec-1',
@@ -16,6 +24,7 @@ describe('PR sticky comment marker', () => {
 
     expect(parseAssetState(body)).toEqual({
       collectionId: 'col-1',
+      immutableState,
       prNumber: 123,
       schemaVersion: 1,
       specId: 'spec-1',

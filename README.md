@@ -97,6 +97,7 @@ jobs:
           postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
           postman-access-token: ${{ secrets.POSTMAN_ACCESS_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
           workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
 ```
 
@@ -121,6 +122,8 @@ The failure JSON also includes `immutablePaths`, defaulting to the configured Op
 
 On subsequent workflow runs, the action compares the current immutable path hashes against the previous sticky comment baseline before regenerating Postman assets. If an implementation-fix commit changed the spec, the action publishes an `immutable_spec` failure to the sticky PR comment and fails the check.
 
+Set `immutable-state-signing-key` to a GitHub secret that implementation agents cannot read. When configured, the action signs the immutable baseline with HMAC-SHA256 and refuses to trust a missing or invalid signature, publishing `immutable_state_tampered` instead. Without this input, the action keeps the unsigned sticky-comment baseline behavior for backward compatibility.
+
 ## Inputs
 
 | Input | Required | Default | Description |
@@ -133,6 +136,7 @@ On subsequent workflow runs, the action compares the current immutable path hash
 | `postman-api-key` | yes | | Postman API key. |
 | `postman-access-token` | no | | Compatibility input for onboarding pipelines. |
 | `github-token` | yes | | Token for PR comments and config writeback. |
+| `immutable-state-signing-key` | no | | Dedicated HMAC key for signed immutable spec baselines. Store as a GitHub secret that implementation agents cannot read. |
 | `workspace-team-id` | no | | Numeric Postman sub-team ID for org-mode workspace creation. |
 | `config-write-mode` | no | `commit-and-push` | `commit-and-push`, `commit-only`, or `none`. |
 | `committer-name` | no | `Postman` | Commit author name for config writeback. |
