@@ -58,6 +58,24 @@ The generic prompt for an agent can stay small:
 Follow .postman-template/tdd-agent.md for this PR.
 ```
 
+## Required Secrets
+
+Create these GitHub secrets in the customer service repository before enabling the workflow:
+
+| Secret | Required | Used for |
+| --- | --- | --- |
+| `POSTMAN_API_KEY` | yes | Postman API access for workspace, spec, collection, and collection-run operations. |
+| `POSTMAN_ACCESS_TOKEN` | no | Compatibility with broader onboarding pipelines. |
+| `POSTMAN_TDD_SIGNING_KEY` | recommended | HMAC key for signed immutable spec baselines. Implementation agents must not be able to read this secret. |
+
+`POSTMAN_TDD_SIGNING_KEY` should be a long random value. Pass it to the action input named `immutable-state-signing-key`:
+
+```yaml
+immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
+```
+
+The GitHub secret is named `POSTMAN_TDD_SIGNING_KEY`; the action input is named `immutable-state-signing-key`.
+
 ## Example Workflow
 
 ```yaml
@@ -122,7 +140,7 @@ The failure JSON also includes `immutablePaths`, defaulting to the configured Op
 
 On subsequent workflow runs, the action compares the current immutable path hashes against the previous sticky comment baseline before regenerating Postman assets. If an implementation-fix commit changed the spec, the action publishes an `immutable_spec` failure to the sticky PR comment and fails the check.
 
-Set `immutable-state-signing-key` to a GitHub secret that implementation agents cannot read. When configured, the action signs the immutable baseline with HMAC-SHA256 and refuses to trust a missing or invalid signature, publishing `immutable_state_tampered` instead. Without this input, the action keeps the unsigned sticky-comment baseline behavior for backward compatibility.
+For tamper detection, create the GitHub secret `POSTMAN_TDD_SIGNING_KEY` and pass it through the action input `immutable-state-signing-key`. When configured, the action signs the immutable baseline with HMAC-SHA256 and refuses to trust a missing or invalid signature, publishing `immutable_state_tampered` instead. Without this input, the action keeps the unsigned sticky-comment baseline behavior for backward compatibility.
 
 ## Inputs
 
@@ -136,7 +154,7 @@ Set `immutable-state-signing-key` to a GitHub secret that implementation agents 
 | `postman-api-key` | yes | | Postman API key. |
 | `postman-access-token` | no | | Compatibility input for onboarding pipelines. |
 | `github-token` | yes | | Token for PR comments and config writeback. |
-| `immutable-state-signing-key` | no | | Dedicated HMAC key for signed immutable spec baselines. Store as a GitHub secret that implementation agents cannot read. |
+| `immutable-state-signing-key` | no | | Action input for the HMAC key used to sign immutable spec baselines. Recommended value: `${{ secrets.POSTMAN_TDD_SIGNING_KEY }}`. |
 | `workspace-team-id` | no | | Numeric Postman sub-team ID for org-mode workspace creation. |
 | `config-write-mode` | no | `commit-and-push` | `commit-and-push`, `commit-only`, or `none`. |
 | `committer-name` | no | `Postman` | Commit author name for config writeback. |
