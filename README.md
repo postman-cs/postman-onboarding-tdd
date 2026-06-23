@@ -119,6 +119,8 @@ The latest PR commit has a passing GitHub check named Postman TDD Preview.
 
 The failure JSON also includes `immutablePaths`, defaulting to the configured OpenAPI `spec.path`, plus `immutablePathHashes`. Humans can submit spec changes in the PR, but implementation-fix agents must treat those paths as read-only once a TDD failure exists. Agents can run `node .postman-tdd/immutable-spec-guard.mjs snapshot` at start and `node .postman-tdd/immutable-spec-guard.mjs verify` before commit/push.
 
+On subsequent workflow runs, the action compares the current immutable path hashes against the previous sticky comment baseline before regenerating Postman assets. If an implementation-fix commit changed the spec, the action publishes an `immutable_spec` failure to the sticky PR comment and fails the check.
+
 ## Inputs
 
 | Input | Required | Default | Description |

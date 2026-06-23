@@ -2,10 +2,16 @@ import * as core from '@actions/core';
 import { DefaultArtifactClient } from '@actions/artifact';
 import { readFileSync } from 'node:fs';
 
-import { createFailureDocument, hashImmutablePaths, writeAgentContext } from './agent-context.js';
+import {
+  createFailureDocument,
+  findImmutablePathChanges,
+  hashImmutablePaths,
+  IMMUTABLE_SPEC_GUARD_MESSAGE,
+  writeAgentContext
+} from './agent-context.js';
 import { loadOnboardingConfig, patchWorkspaceId, resolveWorkspacePath, validateConfigWriteMode } from './config.js';
 import { buildContractIndex, instrumentContractCollection, parseOpenApiDocument } from './contract.js';
-import { GitHubPrClient, resolvePrMetadata } from './github/pr-comment.js';
+import { GitHubPrClient, parseFailureDocument, resolvePrMetadata } from './github/pr-comment.js';
 import { commitConfigWriteback } from './github/repo-mutation.js';
 import { resolvePostmanEndpointProfile, parsePostmanRegion, parsePostmanStack } from './postman/base-urls.js';
 import { PostmanClient } from './postman/client.js';
@@ -22,6 +28,7 @@ import type {
   AgentFailure,
   AgentFailureDocument,
   FailurePhase,
+  ImmutablePathHash,
   PreviewAssetState,
   ResolvedOnboardingConfig
 } from './types.js';
@@ -136,6 +143,43 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
       return;
     }
 
+    const assetNames = createAssetNames(pr.number, config.projectName);
+    const previousFailureDocument = sticky?.body ? parseFailureDocument(sticky.body) : undefined;
+    const previousImmutableHashes = previousFailureDocument?.immutablePathHashes || [];
+    const immutableSpecChanges = findImmutablePathChanges(previousImmutableHashes);
+    if (immutableSpecChanges.length > 0) {
+      currentPhase = 'immutable_spec';
+      const document = createFailureDocument({
+        baseUrl: config.runtime.baseUrl,
+        collectionName: assetNames.collectionName,
+        commit: pr.sha,
+        failures: immutableSpecChanges.map((change) => ({
+          actual: change.actualSha256 || '(missing)',
+          expected: change.expectedSha256,
+          message: IMMUTABLE_SPEC_GUARD_MESSAGE,
+          path: change.path
+        })),
+        immutablePathHashes: previousImmutableHashes,
+        immutablePaths: uniquePaths(previousImmutableHashes),
+        message: IMMUTABLE_SPEC_GUARD_MESSAGE,
+        phase: 'immutable_spec',
+        specPath: config.specPath
+      });
+      await publishFailure({
+        artifactClient,
+        document,
+        github,
+        prNumber: pr.number,
+        state,
+        summary: {
+          collectionName: assetNames.collectionName,
+          failurePhase: 'immutable_spec'
+        }
+      });
+      failurePublished = true;
+      throw new Error(IMMUTABLE_SPEC_GUARD_MESSAGE);
+    }
+
     currentPhase = 'workspace';
     const resolvedWorkspace = await resolveTddWorkspace({
       config,
@@ -149,7 +193,6 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
     }
 
     currentPhase = 'asset_upsert';
-    const assetNames = createAssetNames(pr.number, config.projectName);
     const assetResult = await upsertPreviewAssets({
       assetNames,
       config,
@@ -275,6 +318,10 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
     }
     throw error;
   }
+}
+
+function uniquePaths(hashes: ImmutablePathHash[]): string[] {
+  return [...new Set(hashes.map((hash) => hash.path).filter(Boolean))];
 }
 
 function setStandardOutputs(paths: { agentTaskPath: string; failuresJsonPath: string }): void {

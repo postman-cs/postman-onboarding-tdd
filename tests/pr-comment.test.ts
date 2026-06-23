@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseAssetState, renderStickyComment } from '../src/github/pr-comment.js';
+import { parseAssetState, parseFailureDocument, renderStickyComment } from '../src/github/pr-comment.js';
 
 describe('PR sticky comment marker', () => {
   it('round-trips asset state through the hidden marker', () => {
@@ -58,5 +58,11 @@ describe('PR sticky comment marker', () => {
     expect(body).toContain('Artifact contents: `.postman-tdd/agent-task.md`, `.postman-tdd/failures.json`, and `.postman-tdd/immutable-spec-guard.mjs`');
     expect(body).toContain('Expected status 200');
     expect(body).toContain('Agent failure JSON');
+    expect(parseFailureDocument(body)).toMatchObject({
+      immutablePathHashes: [{ path: 'api/openapi.yaml', sha256: 'abc123' }],
+      immutablePaths: ['api/openapi.yaml'],
+      phase: 'collection_run',
+      status: 'failed'
+    });
   });
 });

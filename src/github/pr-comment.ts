@@ -111,6 +111,27 @@ export function parseAssetState(body: string): PreviewAssetState | undefined {
   }
 }
 
+export function parseFailureDocument(body: string): AgentFailureDocument | undefined {
+  const summary = '<summary>Agent failure JSON</summary>';
+  const summaryIndex = body.indexOf(summary);
+  if (summaryIndex === -1) return undefined;
+  const fenceStart = body.indexOf('```json', summaryIndex);
+  if (fenceStart === -1) return undefined;
+  const jsonStart = body.indexOf('\n', fenceStart);
+  if (jsonStart === -1) return undefined;
+  const fenceEnd = body.indexOf('```', jsonStart);
+  if (fenceEnd === -1) return undefined;
+  const raw = body.slice(jsonStart, fenceEnd).trim();
+  try {
+    const parsed = JSON.parse(raw) as AgentFailureDocument;
+    return parsed.schemaVersion === 1 && parsed.status === 'failed' && Array.isArray(parsed.failures)
+      ? parsed
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function renderStickyComment(
   state: PreviewAssetState,
   summary: PrCommentSummary

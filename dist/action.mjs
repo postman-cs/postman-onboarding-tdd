@@ -105840,7 +105840,7 @@ import { readFileSync as readFileSync4 } from "node:fs";
 
 // src/agent-context.ts
 import { createHash as createHash3 } from "node:crypto";
-import { readFileSync as readFileSync3, mkdirSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { existsSync as existsSync5, mkdirSync, readFileSync as readFileSync3, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join2 } from "node:path";
 
 // src/config.ts
@@ -105957,6 +105957,26 @@ function hashImmutablePaths(paths) {
     path: path4,
     sha256: createHash3("sha256").update(readFileSync3(resolveWorkspacePath(path4))).digest("hex")
   }));
+}
+function findImmutablePathChanges(expectedHashes) {
+  return expectedHashes.flatMap((expected) => {
+    if (!expected.path || !expected.sha256) {
+      return [];
+    }
+    const absolutePath = resolveWorkspacePath(expected.path);
+    if (!existsSync5(absolutePath)) {
+      return [{
+        expectedSha256: expected.sha256,
+        path: expected.path
+      }];
+    }
+    const actualSha256 = createHash3("sha256").update(readFileSync3(absolutePath)).digest("hex");
+    return actualSha256 === expected.sha256 ? [] : [{
+      actualSha256,
+      expectedSha256: expected.sha256,
+      path: expected.path
+    }];
+  });
 }
 function createFailureDocument(input) {
   const immutablePaths = input.immutablePaths ?? (input.specPath ? [input.specPath] : []);
@@ -106528,6 +106548,24 @@ function parseAssetState(body2) {
   try {
     const parsed = JSON.parse(raw);
     return parsed.schemaVersion === 1 && Number.isInteger(parsed.prNumber) ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function parseFailureDocument(body2) {
+  const summary2 = "<summary>Agent failure JSON</summary>";
+  const summaryIndex = body2.indexOf(summary2);
+  if (summaryIndex === -1) return void 0;
+  const fenceStart = body2.indexOf("```json", summaryIndex);
+  if (fenceStart === -1) return void 0;
+  const jsonStart = body2.indexOf("\n", fenceStart);
+  if (jsonStart === -1) return void 0;
+  const fenceEnd = body2.indexOf("```", jsonStart);
+  if (fenceEnd === -1) return void 0;
+  const raw = body2.slice(jsonStart, fenceEnd).trim();
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed.schemaVersion === 1 && parsed.status === "failed" && Array.isArray(parsed.failures) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -107189,6 +107227,42 @@ async function runAction(options = {}) {
       setOutput("pr-comment-id", prCommentId);
       return;
     }
+    const assetNames = createAssetNames(pr.number, config.projectName);
+    const previousFailureDocument = sticky?.body ? parseFailureDocument(sticky.body) : void 0;
+    const previousImmutableHashes = previousFailureDocument?.immutablePathHashes || [];
+    const immutableSpecChanges = findImmutablePathChanges(previousImmutableHashes);
+    if (immutableSpecChanges.length > 0) {
+      currentPhase = "immutable_spec";
+      const document2 = createFailureDocument({
+        baseUrl: config.runtime.baseUrl,
+        collectionName: assetNames.collectionName,
+        commit: pr.sha,
+        failures: immutableSpecChanges.map((change) => ({
+          actual: change.actualSha256 || "(missing)",
+          expected: change.expectedSha256,
+          message: IMMUTABLE_SPEC_GUARD_MESSAGE,
+          path: change.path
+        })),
+        immutablePathHashes: previousImmutableHashes,
+        immutablePaths: uniquePaths(previousImmutableHashes),
+        message: IMMUTABLE_SPEC_GUARD_MESSAGE,
+        phase: "immutable_spec",
+        specPath: config.specPath
+      });
+      await publishFailure({
+        artifactClient,
+        document: document2,
+        github,
+        prNumber: pr.number,
+        state: state3,
+        summary: {
+          collectionName: assetNames.collectionName,
+          failurePhase: "immutable_spec"
+        }
+      });
+      failurePublished = true;
+      throw new Error(IMMUTABLE_SPEC_GUARD_MESSAGE);
+    }
     currentPhase = "workspace";
     const resolvedWorkspace = await resolveTddWorkspace({
       config,
@@ -107201,7 +107275,6 @@ async function runAction(options = {}) {
       setOutput("config-commit-sha", resolvedWorkspace.configCommitSha);
     }
     currentPhase = "asset_upsert";
-    const assetNames = createAssetNames(pr.number, config.projectName);
     const assetResult = await upsertPreviewAssets({
       assetNames,
       config,
@@ -107322,6 +107395,9 @@ async function runAction(options = {}) {
     }
     throw error2;
   }
+}
+function uniquePaths(hashes) {
+  return [...new Set(hashes.map((hash) => hash.path).filter(Boolean))];
 }
 function setStandardOutputs(paths) {
   setOutput("agent-context-dir", AGENT_CONTEXT_DIR);

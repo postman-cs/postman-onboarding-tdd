@@ -4,12 +4,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createFailureDocument, IMMUTABLE_SPEC_GUARD_MESSAGE, writeAgentContext } from '../src/agent-context.js';
+import {
+  createFailureDocument,
+  findImmutablePathChanges,
+  hashImmutablePaths,
+  IMMUTABLE_SPEC_GUARD_MESSAGE,
+  writeAgentContext
+} from '../src/agent-context.js';
 
 describe('agent context', () => {
   let dir = '';
 
   afterEach(() => {
+    delete process.env.GITHUB_WORKSPACE;
     if (dir) rmSync(dir, { recursive: true, force: true });
     dir = '';
   });
@@ -63,5 +70,22 @@ describe('agent context', () => {
         stdio: 'pipe'
       });
     }).toThrowError(IMMUTABLE_SPEC_GUARD_MESSAGE);
+  });
+
+  it('detects immutable path hash changes for workflow-level enforcement', () => {
+    dir = mkdtempSync(join(tmpdir(), 'postman-tdd-agent-'));
+    process.env.GITHUB_WORKSPACE = dir;
+    mkdirSync(join(dir, 'api'), { recursive: true });
+    writeFileSync(join(dir, 'api/openapi.yaml'), 'openapi: 3.1.0\n', 'utf8');
+
+    const baseline = hashImmutablePaths(['api/openapi.yaml']);
+    expect(findImmutablePathChanges(baseline)).toEqual([]);
+
+    writeFileSync(join(dir, 'api/openapi.yaml'), 'openapi: 3.1.0\ninfo: {}\n', 'utf8');
+
+    expect(findImmutablePathChanges(baseline)).toMatchObject([{
+      expectedSha256: baseline[0]?.sha256,
+      path: 'api/openapi.yaml'
+    }]);
   });
 });

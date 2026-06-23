@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { resolveWorkspacePath } from './config.js';
@@ -15,6 +15,12 @@ export interface AgentContextPaths {
 const DEFAULT_DIR = '.postman-tdd';
 export const IMMUTABLE_SPEC_GUARD_MESSAGE = 'The OpenAPI spec is immutable during implementation repair. Revert spec changes and fix code only.';
 
+export interface ImmutablePathChange {
+  actualSha256?: string;
+  expectedSha256: string;
+  path: string;
+}
+
 type AgentFailureDocumentInput =
   Omit<AgentFailureDocument, 'immutablePathHashes' | 'immutablePaths' | 'schemaVersion' | 'status' | 'successCriteria'> & {
     immutablePathHashes?: ImmutablePathHash[];
@@ -26,6 +32,29 @@ export function hashImmutablePaths(paths: string[]): ImmutablePathHash[] {
     path,
     sha256: createHash('sha256').update(readFileSync(resolveWorkspacePath(path))).digest('hex')
   }));
+}
+
+export function findImmutablePathChanges(expectedHashes: ImmutablePathHash[]): ImmutablePathChange[] {
+  return expectedHashes.flatMap((expected) => {
+    if (!expected.path || !expected.sha256) {
+      return [];
+    }
+    const absolutePath = resolveWorkspacePath(expected.path);
+    if (!existsSync(absolutePath)) {
+      return [{
+        expectedSha256: expected.sha256,
+        path: expected.path
+      }];
+    }
+    const actualSha256 = createHash('sha256').update(readFileSync(absolutePath)).digest('hex');
+    return actualSha256 === expected.sha256
+      ? []
+      : [{
+          actualSha256,
+          expectedSha256: expected.sha256,
+          path: expected.path
+        }];
+  });
 }
 
 export function createFailureDocument(

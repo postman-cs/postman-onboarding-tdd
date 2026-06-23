@@ -7,6 +7,7 @@ export type FailurePhase =
   | 'config'
   | 'workspace'
   | 'asset_upsert'
+  | 'immutable_spec'
   | 'service_startup'
   | 'health_check'
   | 'collection_run'
