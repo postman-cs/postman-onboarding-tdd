@@ -32,6 +32,20 @@ describe('collection failure normalizer', () => {
     expect(JSON.stringify(failures)).not.toContain('Total run duration');
   });
 
+  it('does not treat passing assertion listings as failures', () => {
+    const failures = extractCollectionFailures(`
+      [Postman TDD] getHealth GET /v1/health :: operation mapping exists
+      [Postman TDD] getHealth GET /v1/health :: status code is defined by OpenAPI
+      Sub-folder Get widget
+      -------------------------------------------------------------------
+    `);
+
+    expect(failures).toEqual([{
+      assertion: 'collection run',
+      message: 'Postman TDD collection failed, but no compact assertion details were detected in runner output.'
+    }]);
+  });
+
   it('returns a compact placeholder when no assertion details are detected', () => {
     const failures = extractCollectionFailures('collection exited with code 1');
 

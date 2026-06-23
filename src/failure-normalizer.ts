@@ -23,7 +23,7 @@ export function extractCollectionFailures(logExcerpt: string): AgentFailure[] {
   }
 
   const interesting = dedupeFailures(lines
-    .filter(isInterestingFailureLine)
+    .filter((line) => !line.includes('[Postman TDD]') && isInterestingFailureLine(line))
     .map((line) => ({
       assertion: inferAssertion(line),
       message: normalizeFailureMessage(line)
@@ -45,9 +45,11 @@ function extractTaggedFailures(lines: string[]): AgentFailure[] {
   for (let index = 0; index < lines.length; index += 1) {
     const parsed = parseTaggedAssertion(lines[index] || '');
     if (!parsed) continue;
+    const message = findNearbyFailureMessage(lines, index);
+    if (!message) continue;
     failures.push({
       ...parsed,
-      message: findNearbyFailureMessage(lines, index, parsed.assertion)
+      message
     });
     if (failures.length >= MAX_FAILURES) {
       break;
@@ -74,19 +76,21 @@ function parseTaggedAssertion(line: string): TaggedAssertion | undefined {
   };
 }
 
-function findNearbyFailureMessage(lines: string[], assertionIndex: number, fallbackAssertion: string): string {
+function findNearbyFailureMessage(lines: string[], assertionIndex: number): string | undefined {
   const sameLineDetail = detailAfterAssertion(lines[assertionIndex] || '');
-  if (sameLineDetail) return normalizeFailureMessage(sameLineDetail);
+  if (sameLineDetail && isExplicitFailureLine(sameLineDetail)) {
+    return normalizeFailureMessage(sameLineDetail);
+  }
 
-  for (const line of lines.slice(assertionIndex + 1, assertionIndex + 8)) {
+  for (const line of lines.slice(assertionIndex + 1, assertionIndex + 20)) {
     if (line.includes('[Postman TDD]')) break;
     if (isNoiseLine(line)) continue;
-    if (isInterestingFailureLine(line) || line.length > 0) {
+    if (isExplicitFailureLine(line)) {
       return normalizeFailureMessage(line);
     }
   }
 
-  return `Assertion failed: ${fallbackAssertion}`;
+  return undefined;
 }
 
 function detailAfterAssertion(line: string): string {
@@ -153,9 +157,16 @@ function isInterestingFailureLine(line: string): boolean {
   return !isNoiseLine(line) && /fail|error|assert|expected|actual|required|missing|schema|status|content-type/i.test(line);
 }
 
+function isExplicitFailureLine(line: string): boolean {
+  return !isNoiseLine(line) &&
+    /assertionerror|expected|actual|required|missing|did not|was not|must match|no openapi|not valid|to equal|to exist|fail/i.test(line);
+}
+
 function isNoiseLine(line: string): boolean {
   return line.length === 0 ||
     /^[\u250c\u2510\u2514\u2518\u251c\u2524\u2500\u2501\u256d\u256e\u2570\u256f]+$/.test(line) ||
+    /^[-=_]{3,}$/.test(line) ||
+    /^sub-folder\b/i.test(line) ||
     /^(postman|collection|iteration|request|response|total|duration|data|folder|executed|running)\b/i.test(line) ||
     /^\d+\s+(passed|failed|skipped)\b/i.test(line);
 }
