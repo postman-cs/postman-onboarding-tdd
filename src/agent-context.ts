@@ -70,7 +70,9 @@ export function createFailureDocument(
     status: 'failed',
     successCriteria: {
       requiredCheck: 'Postman TDD Preview',
-      doneWhen: 'requiredCheck passes on the latest PR commit'
+      doneWhen: 'requiredCheck passes on the latest PR head commit',
+      failureContextMustMatchPrHeadCommit: true,
+      latestHeadOnly: true
     }
   };
 }
@@ -102,7 +104,13 @@ export function renderAgentTask(document: AgentFailureDocument): string {
     '',
     '## Success Criteria',
     '',
-    'You are done when the GitHub check named `Postman TDD Preview` passes on your latest commit.',
+    'You are done only when the GitHub check named `Postman TDD Preview` passes on the latest PR head commit.',
+    '',
+    'Before acting, compare this failure document commit to the current PR head SHA:',
+    `- failure document commit: \`${document.commit || 'unknown'}\``,
+    '- current PR head SHA: read from the PR branch metadata in your environment',
+    '',
+    'If these do not match, this failure context may be stale. Wait for the next `Postman TDD Preview` run to finish and for the sticky comment to update before making more changes.',
     '',
     'A passing run means:',
     '- the PR OpenAPI spec was used to generate the TDD contract collection',
@@ -141,14 +149,17 @@ export function renderAgentTask(document: AgentFailureDocument): string {
     '- Do not edit generated Postman assertions or `.postman-tdd/failures.json`.',
     '- Prefer the smallest implementation change that satisfies the spec.',
     '- Push code changes to this PR branch; the GitHub workflow will rerun automatically.',
-    '- If it fails again, use the updated `.postman-tdd/failures.json` and iterate.',
+    '- After pushing, wait for `Postman TDD Preview` on the new PR head commit.',
+    '- If it fails again, use only the updated failure context whose `commit` matches the latest PR head SHA.',
+    '- Continue until the latest-head check passes or a stop condition applies.',
     '',
     '## Exit Conditions',
     '',
     'Stop and report back if:',
-    '- the failure requires changing product/API intent',
-    '- the OpenAPI spec appears internally inconsistent',
-    '- required external secrets, credentials, or infrastructure are missing',
+    '- the API intent is unclear',
+    '- the OpenAPI spec appears incorrect or internally inconsistent',
+    '- required external secrets, credentials, services, databases, or infrastructure are missing',
+    '- the service cannot be started by the configured TDD command',
     '- the same failure remains after two reasonable implementation attempts',
     '- fixing the failure requires unrelated architectural changes',
     '',

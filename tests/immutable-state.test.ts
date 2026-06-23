@@ -25,7 +25,9 @@ function failureDocument(overrides: Partial<AgentFailureDocument> = {}): AgentFa
     schemaVersion: 1,
     status: 'failed',
     successCriteria: {
-      doneWhen: 'requiredCheck passes on the latest PR commit',
+      doneWhen: 'requiredCheck passes on the latest PR head commit',
+      failureContextMustMatchPrHeadCommit: true,
+      latestHeadOnly: true,
       requiredCheck: 'Postman TDD Preview'
     },
     ...overrides

@@ -75,7 +75,7 @@ outputs:
   failures-json-path:
     description: Agent failure JSON path.
   agent-context-artifact:
-    description: Workflow artifact containing agent-task.md and failures.json.
+    description: Workflow artifact containing agent-task.md, failures.json, and immutable-spec-guard.mjs.
   agent-context-artifact-id:
     description: GitHub Actions artifact ID for the agent context, when uploaded.
   agent-context-artifact-digest:

@@ -18,6 +18,7 @@ export interface PrCommentSummary {
   agentTaskPath?: string;
   collectionId?: string;
   collectionName?: string;
+  commit?: string;
   failureDocument?: AgentFailureDocument;
   failurePhase?: string;
   specId?: string;
@@ -153,9 +154,16 @@ export function renderStickyComment(
     `**Collection:** ${summary.collectionId || state.collectionId || '(unresolved)'}`,
     ''
   ];
+  const commit = summary.failureDocument?.commit || summary.commit;
+  if (commit) {
+    lines.push(`**Generated for commit:** \`${commit}\``);
+    lines.push('');
+  }
 
   if (summary.status === 'passed') {
     lines.push('The generated TDD contract collection passed against the current PR implementation.');
+    lines.push('');
+    lines.push('Success: `Postman TDD Preview` passed for the latest PR head commit.');
   } else if (summary.status === 'cleaned-up') {
     lines.push('PR-scoped TDD preview assets were cleaned up.');
   } else if (summary.status === 'skipped') {
@@ -165,6 +173,11 @@ export function renderStickyComment(
     const immutablePaths = summary.failureDocument?.immutablePaths || [];
     if (immutablePaths.length > 0) {
       lines.push(`**Immutable paths:** ${immutablePaths.map((path) => `\`${path}\``).join(', ')}`);
+    }
+    const criteria = summary.failureDocument?.successCriteria;
+    if (criteria) {
+      lines.push(`**Success:** \`${criteria.requiredCheck}\` passes on the latest PR head commit.`);
+      lines.push('Before acting, compare `commit` in the Agent failure JSON to the current PR head SHA. If they differ, wait for the next TDD run.');
     }
     lines.push('');
     if (summary.agentContextArtifactName) {
@@ -186,7 +199,9 @@ export function renderStickyComment(
       lines.push('## Current Failures');
       for (const failure of failures.slice(0, 10)) {
         const target = [failure.method, failure.path].filter(Boolean).join(' ');
-        lines.push(`- ${target ? `${target}: ` : ''}${failure.message}`);
+        const operation = failure.operationId ? `${failure.operationId}: ` : '';
+        const assertion = failure.assertion ? ` [${failure.assertion}]` : '';
+        lines.push(`- ${operation}${target || 'collection'}${assertion}: ${failure.message}`);
       }
       if (failures.length > 10) {
         lines.push(`- ...and ${failures.length - 10} more failure(s).`);

@@ -57,7 +57,8 @@ paths:
     const item = (result.collection.item as Array<Record<string, unknown>>)[0]!;
     const event = (item.event as Array<Record<string, unknown>>)[0]!;
     expect(event.listen).toBe('test');
-    expect(JSON.stringify(event)).toContain('Status code is defined by OpenAPI');
+    expect(JSON.stringify(event)).toContain('[Postman TDD]');
+    expect(JSON.stringify(event)).toContain('status code is defined by OpenAPI');
     expect(result.warnings).toEqual([]);
   });
 });

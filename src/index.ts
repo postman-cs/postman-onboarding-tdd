@@ -11,6 +11,7 @@ import {
 } from './agent-context.js';
 import { loadOnboardingConfig, patchWorkspaceId, resolveWorkspacePath, validateConfigWriteMode } from './config.js';
 import { buildContractIndex, instrumentContractCollection, parseOpenApiDocument } from './contract.js';
+import { extractCollectionFailures } from './failure-normalizer.js';
 import { GitHubPrClient, parseFailureDocument, resolvePrMetadata } from './github/pr-comment.js';
 import {
   createImmutableStatePayload,
@@ -28,10 +29,9 @@ import {
   startBackgroundCommand,
   waitForHealth
 } from './runner.js';
-import { createSecretMasker, sanitizeLogExcerpt } from './secrets.js';
+import { createSecretMasker } from './secrets.js';
 import type {
   ActionInputs,
-  AgentFailure,
   AgentFailureDocument,
   FailurePhase,
   ImmutablePathHash,
@@ -373,6 +373,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
     prCommentId = String(await github.upsertStickyComment(pr.number, state, {
       collectionId: state.collectionId,
       collectionName: assetNames.collectionName,
+      commit: pr.sha,
       specId: state.specId,
       status: 'passed',
       workspaceId: state.workspaceId
@@ -592,19 +593,4 @@ async function publishFailure(options: {
     workspaceId: options.state.workspaceId
   });
   core.setOutput('pr-comment-id', String(commentId));
-}
-
-function extractCollectionFailures(logExcerpt: string): AgentFailure[] {
-  const lines = logExcerpt
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const interesting = lines.filter((line) => /fail|error|assert|expected|actual/i.test(line)).slice(0, 10);
-  if (interesting.length === 0) {
-    return [{
-      logExcerpt: sanitizeLogExcerpt(logExcerpt, (value) => value),
-      message: 'Postman TDD collection failed. Check the log excerpt for details.'
-    }];
-  }
-  return interesting.map((line) => ({ message: line }));
 }

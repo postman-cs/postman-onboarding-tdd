@@ -43,6 +43,7 @@ describe('PR sticky comment marker', () => {
       agentContextArtifactName: 'postman-tdd-agent-context',
       agentTaskPath: '.postman-tdd/agent-task.md',
       failureDocument: {
+        commit: 'abc123',
         failures: [{ message: 'Expected status 200' }],
         immutablePathHashes: [{ path: 'api/openapi.yaml', sha256: 'abc123' }],
         immutablePaths: ['api/openapi.yaml'],
@@ -51,7 +52,9 @@ describe('PR sticky comment marker', () => {
         schemaVersion: 1,
         status: 'failed',
         successCriteria: {
-          doneWhen: 'requiredCheck passes on the latest PR commit',
+          doneWhen: 'requiredCheck passes on the latest PR head commit',
+          failureContextMustMatchPrHeadCommit: true,
+          latestHeadOnly: true,
           requiredCheck: 'Postman TDD Preview'
         }
       },
@@ -59,6 +62,8 @@ describe('PR sticky comment marker', () => {
     });
 
     expect(body).toContain('Agent context artifact: `postman-tdd-agent-context`');
+    expect(body).toContain('**Generated for commit:** `abc123`');
+    expect(body).toContain('Before acting, compare `commit` in the Agent failure JSON to the current PR head SHA');
     expect(body).toContain('**Immutable paths:** `api/openapi.yaml`');
     expect(body).toContain('"immutablePaths": [');
     expect(body).toContain('"immutablePathHashes": [');

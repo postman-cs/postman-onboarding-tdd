@@ -48,7 +48,7 @@ Copy this repository's [`.postman-template/tdd-agent.md`](.postman-template/tdd-
 
 Commit it to the customer repository's default branch, usually `main`, so all future PR branches inherit the same generic agent instructions.
 
-The file is intentionally static and branch-safe. It tells any coding agent to read the latest `Postman TDD Preview` sticky PR comment, use the inline failure JSON as the source of truth, fix implementation code only, and wait for the next TDD workflow result after each push.
+The file is intentionally static and branch-safe. It tells any coding agent to read the latest `Postman TDD Preview` sticky PR comment, use the inline failure JSON as the source of truth, fix implementation code only, push changes, and wait for the next TDD workflow result on the latest PR head commit after each push.
 
 Do not commit generated run-specific files from `.postman-tdd/`. Those files are created during CI and can become stale after every commit.
 
@@ -130,11 +130,29 @@ When the TDD collection fails, the action writes local agent context files durin
   immutable-spec-guard.mjs
 ```
 
-The PR comment names the artifact, summarizes the failure, and includes machine-readable failure JSON for quick agent handoff. The success criterion is always:
+The sticky PR comment is the primary agent interface. It names the artifact when one is available, summarizes the failure, shows the commit that produced the failure context, and includes compact machine-readable failure JSON for quick agent handoff. Artifacts are optional convenience; agents that cannot access artifacts should use the inline JSON from the sticky comment.
+
+The success criterion is always:
 
 ```text
-The latest PR commit has a passing GitHub check named Postman TDD Preview.
+The latest PR head commit has a passing GitHub check named Postman TDD Preview.
 ```
+
+Agents must compare the failure JSON `commit` with the current PR head SHA before acting. If they differ, the sticky comment is stale and the agent should wait for the next `Postman TDD Preview` run to finish.
+
+Collection-run failures are normalized into compact records instead of raw runner logs:
+
+```json
+{
+  "operationId": "createWidget",
+  "method": "POST",
+  "path": "/v1/widgets",
+  "assertion": "response body matches schema",
+  "message": "Missing required property: owner"
+}
+```
+
+Raw sanitized log excerpts are reserved for `service_startup` and `health_check` failures, where startup output is needed to diagnose why the service did not become reachable.
 
 The failure JSON also includes `immutablePaths`, defaulting to the configured OpenAPI `spec.path`, plus `immutablePathHashes`. Humans can submit spec changes in the PR, but implementation-fix agents must treat those paths as read-only once a TDD failure exists. Agents can run `node .postman-tdd/immutable-spec-guard.mjs snapshot` at start and `node .postman-tdd/immutable-spec-guard.mjs verify` before commit/push.
 

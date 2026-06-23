@@ -56,6 +56,7 @@ export interface PreviewAssetState {
 
 export interface AgentFailure {
   actual?: string;
+  assertion?: string;
   expected?: string;
   logExcerpt?: string;
   message: string;
@@ -102,6 +103,8 @@ export interface AgentFailureDocument {
   status: 'failed';
   successCriteria: {
     doneWhen: string;
+    failureContextMustMatchPrHeadCommit: boolean;
+    latestHeadOnly: boolean;
     requiredCheck: string;
   };
   timeoutSeconds?: number;

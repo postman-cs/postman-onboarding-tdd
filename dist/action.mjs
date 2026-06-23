@@ -45081,7 +45081,7 @@ var require_archiver_utils = __commonJS({
     var path4 = __require("path");
     var isStream = require_is_stream();
     var lazystream = require_lazystream();
-    var normalizePath2 = require_normalize_path();
+    var normalizePath3 = require_normalize_path();
     var defaults2 = require_defaults();
     var Stream2 = __require("stream").Stream;
     var PassThrough3 = require_ours().PassThrough;
@@ -45140,13 +45140,13 @@ var require_archiver_utils = __commonJS({
       return source;
     };
     utils.sanitizePath = function(filepath) {
-      return normalizePath2(filepath, false).replace(/^\w+:/, "").replace(/^(\.\.\/|\/)+/, "");
+      return normalizePath3(filepath, false).replace(/^\w+:/, "").replace(/^(\.\.\/|\/)+/, "");
     };
     utils.trailingSlashIt = function(str) {
       return str.slice(-1) !== "/" ? str + "/" : str;
     };
     utils.unixifyPath = function(filepath) {
-      return normalizePath2(filepath, false).replace(/^\w+:/, "");
+      return normalizePath3(filepath, false).replace(/^\w+:/, "");
     };
     utils.walkdir = function(dirpath, base, callback) {
       var results = [];
@@ -46043,7 +46043,7 @@ var require_constants6 = __commonJS({
 var require_zip_archive_entry = __commonJS({
   "node_modules/compress-commons/lib/archivers/zip/zip-archive-entry.js"(exports2, module) {
     var inherits = __require("util").inherits;
-    var normalizePath2 = require_normalize_path();
+    var normalizePath3 = require_normalize_path();
     var ArchiveEntry = require_archive_entry();
     var GeneralPurposeBit = require_general_purpose_bit();
     var UnixStat = require_unix_stat();
@@ -46167,7 +46167,7 @@ var require_zip_archive_entry = __commonJS({
       this.method = method;
     };
     ZipArchiveEntry.prototype.setName = function(name, prependSlash = false) {
-      name = normalizePath2(name, false).replace(/^\w+:/, "").replace(/^(\.\.\/|\/)+/, "");
+      name = normalizePath3(name, false).replace(/^\w+:/, "").replace(/^(\.\.\/|\/)+/, "");
       if (prependSlash) {
         name = `/${name}`;
       }
@@ -105989,7 +105989,9 @@ function createFailureDocument(input) {
     status: "failed",
     successCriteria: {
       requiredCheck: "Postman TDD Preview",
-      doneWhen: "requiredCheck passes on the latest PR commit"
+      doneWhen: "requiredCheck passes on the latest PR head commit",
+      failureContextMustMatchPrHeadCommit: true,
+      latestHeadOnly: true
     }
   };
 }
@@ -106018,7 +106020,13 @@ function renderAgentTask(document2) {
     "",
     "## Success Criteria",
     "",
-    "You are done when the GitHub check named `Postman TDD Preview` passes on your latest commit.",
+    "You are done only when the GitHub check named `Postman TDD Preview` passes on the latest PR head commit.",
+    "",
+    "Before acting, compare this failure document commit to the current PR head SHA:",
+    `- failure document commit: \`${document2.commit || "unknown"}\``,
+    "- current PR head SHA: read from the PR branch metadata in your environment",
+    "",
+    "If these do not match, this failure context may be stale. Wait for the next `Postman TDD Preview` run to finish and for the sticky comment to update before making more changes.",
     "",
     "A passing run means:",
     "- the PR OpenAPI spec was used to generate the TDD contract collection",
@@ -106057,14 +106065,17 @@ function renderAgentTask(document2) {
     "- Do not edit generated Postman assertions or `.postman-tdd/failures.json`.",
     "- Prefer the smallest implementation change that satisfies the spec.",
     "- Push code changes to this PR branch; the GitHub workflow will rerun automatically.",
-    "- If it fails again, use the updated `.postman-tdd/failures.json` and iterate.",
+    "- After pushing, wait for `Postman TDD Preview` on the new PR head commit.",
+    "- If it fails again, use only the updated failure context whose `commit` matches the latest PR head SHA.",
+    "- Continue until the latest-head check passes or a stop condition applies.",
     "",
     "## Exit Conditions",
     "",
     "Stop and report back if:",
-    "- the failure requires changing product/API intent",
-    "- the OpenAPI spec appears internally inconsistent",
-    "- required external secrets, credentials, or infrastructure are missing",
+    "- the API intent is unclear",
+    "- the OpenAPI spec appears incorrect or internally inconsistent",
+    "- required external secrets, credentials, services, databases, or infrastructure are missing",
+    "- the service cannot be started by the configured TDD command",
     "- the same failure remains after two reasonable implementation attempts",
     "- fixing the failure requires unrelated architectural changes",
     "",
@@ -106364,6 +106375,8 @@ function createContractScript(operation) {
     "}",
     'function typeOf(value) { if (Array.isArray(value)) return "array"; if (value === null) return "null"; if (Number.isInteger(value)) return "integer"; return typeof value; }',
     "function schemaTypes(schema) { const type = schema && schema.type; return Array.isArray(type) ? type : type ? [type] : []; }",
+    'function operationLabel() { return [contract.operationId, contract.method, contract.path].filter(Boolean).join(" "); }',
+    'function tddAssertion(name) { return "[Postman TDD] " + operationLabel() + " :: " + name; }',
     "function validateSchema(value, schema, path, errors) {",
     '  if (!schema || typeof schema !== "object") return;',
     '  if (schema.unsupported) { errors.push(path + " uses unsupported schema: " + schema.unsupported); return; }',
@@ -106384,16 +106397,16 @@ function createContractScript(operation) {
     '  if (schema.type === "array" && schema.items && Array.isArray(value)) value.forEach((entry, index) => validateSchema(entry, schema.items, path + "[" + index + "]", errors));',
     "}",
     "const selected = selectResponseContract();",
-    'pm.test("OpenAPI operation mapping exists", function () { pm.expect(contract.path).to.be.a("string").and.not.empty; });',
-    'pm.test("Status code is defined by OpenAPI", function () { pm.expect(selected, "No OpenAPI response defined for " + contract.method + " " + contract.path + " status " + pm.response.code).to.exist; });',
-    'pm.test("Response body matches OpenAPI body contract", function () {',
+    'pm.test(tddAssertion("operation mapping exists"), function () { pm.expect(contract.path).to.be.a("string").and.not.empty; });',
+    'pm.test(tddAssertion("status code is defined by OpenAPI"), function () { pm.expect(selected, "No OpenAPI response defined for " + contract.method + " " + contract.path + " status " + pm.response.code).to.exist; });',
+    'pm.test(tddAssertion("response body matches body contract"), function () {',
     "  if (!selected) return;",
     "  if (isBodyless()) { pm.expect(responseText().trim().length).to.equal(0); return; }",
     "  const media = expectedMedia(selected.value);",
     '  if (media.length === 0) pm.expect(responseText().trim().length, "OpenAPI response defines no body but response body was not empty").to.equal(0);',
     '  else pm.expect(responseText().trim().length, "OpenAPI response defines a body but response body was empty").to.be.above(0);',
     "});",
-    'pm.test("Content-Type matches OpenAPI response content", function () {',
+    'pm.test(tddAssertion("content-type matches OpenAPI response content"), function () {',
     "  if (!selected || isBodyless()) return;",
     "  const media = expectedMedia(selected.value);",
     "  if (media.length === 0) return;",
@@ -106402,7 +106415,7 @@ function createContractScript(operation) {
     '  const matches = media.some((entry) => mediaBase(entry) === actual || (mediaBase(entry) === "application/json" && /json$/.test(actual)));',
     '  pm.expect(matches, "Content-Type " + actual + " did not match OpenAPI content " + media.join(", ")).to.equal(true);',
     "});",
-    'pm.test("Response body matches OpenAPI schema", function () {',
+    'pm.test(tddAssertion("response body matches schema"), function () {',
     "  if (!selected || isBodyless()) return;",
     "  const schema = selectSchema(selected.value);",
     "  if (!schema) return;",
@@ -106473,6 +106486,141 @@ function pathScore(candidate, request2) {
     score += 10;
   }
   return score;
+}
+
+// src/failure-normalizer.ts
+var MAX_FAILURES = 10;
+var MAX_MESSAGE_LENGTH = 400;
+var HTTP_METHOD = "(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD|TRACE)";
+var TDD_ASSERTION_PATTERN = new RegExp(
+  `\\[Postman TDD\\]\\s+(?:(?<operationId>[^\\s:]+)\\s+)?(?<method>${HTTP_METHOD})\\s+(?<path>\\S+)\\s+::\\s+(?<assertion>.+)$`,
+  "i"
+);
+function extractCollectionFailures(logExcerpt) {
+  const lines = compactLines(logExcerpt);
+  const tagged = extractTaggedFailures(lines);
+  if (tagged.length > 0) {
+    return tagged;
+  }
+  const interesting = dedupeFailures(lines.filter(isInterestingFailureLine).map((line) => ({
+    assertion: inferAssertion(line),
+    message: normalizeFailureMessage(line)
+  }))).slice(0, MAX_FAILURES);
+  if (interesting.length > 0) {
+    return interesting;
+  }
+  return [{
+    assertion: "collection run",
+    message: "Postman TDD collection failed, but no compact assertion details were detected in runner output."
+  }];
+}
+function extractTaggedFailures(lines) {
+  const failures = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const parsed = parseTaggedAssertion(lines[index] || "");
+    if (!parsed) continue;
+    failures.push({
+      ...parsed,
+      message: findNearbyFailureMessage(lines, index, parsed.assertion)
+    });
+    if (failures.length >= MAX_FAILURES) {
+      break;
+    }
+  }
+  return dedupeFailures(failures);
+}
+function parseTaggedAssertion(line) {
+  const markerIndex = line.indexOf("[Postman TDD]");
+  if (markerIndex === -1) return void 0;
+  const candidate = line.slice(markerIndex);
+  const match = TDD_ASSERTION_PATTERN.exec(candidate);
+  if (!match?.groups) return void 0;
+  const method = match.groups.method?.toUpperCase();
+  const path4 = normalizePath2(match.groups.path || "");
+  const assertion = normalizeAssertion(match.groups.assertion || "");
+  if (!method || !path4 || !assertion) return void 0;
+  return {
+    assertion,
+    method,
+    operationId: match.groups.operationId,
+    path: path4
+  };
+}
+function findNearbyFailureMessage(lines, assertionIndex, fallbackAssertion) {
+  const sameLineDetail = detailAfterAssertion(lines[assertionIndex] || "");
+  if (sameLineDetail) return normalizeFailureMessage(sameLineDetail);
+  for (const line of lines.slice(assertionIndex + 1, assertionIndex + 8)) {
+    if (line.includes("[Postman TDD]")) break;
+    if (isNoiseLine(line)) continue;
+    if (isInterestingFailureLine(line) || line.length > 0) {
+      return normalizeFailureMessage(line);
+    }
+  }
+  return `Assertion failed: ${fallbackAssertion}`;
+}
+function detailAfterAssertion(line) {
+  const split = line.split(/\s+-\s+|:\s+AssertionError:?|\s+AssertionError:?\s+/i);
+  const candidate = split.length > 1 ? split[split.length - 1] || "" : "";
+  return candidate.includes("[Postman TDD]") ? "" : candidate.trim();
+}
+function compactLines(value) {
+  return value.split(/\r?\n/).map(stripAnsi).map((line) => line.replace(/^[\u2502\u2503|>\s]*\d+[.)]\s*/, "").replace(/^[\u2502\u2503|>\s]*(error|fail(?:ed|ure)?|assertionerror)[:\s-]*/i, "").replace(/^[\u2502\u2503|>\s]+/, "").trim()).filter(Boolean);
+}
+function normalizeFailureMessage(value) {
+  const cleaned = stripAnsi(value).replace(/^[\u2502\u2503|>\s]*/, "").replace(/^AssertionError(?: \[[^\]]+\])?:?\s*/i, "").replace(/^Error:?\s*/i, "").replace(/\s+/g, " ").trim();
+  const required = cleaned.match(/^\$\.?([A-Za-z0-9_.[\]-]+)\s+is required\.?$/);
+  if (required?.[1]) {
+    return truncate(`Missing required property: ${required[1].split(".").pop()}`);
+  }
+  return truncate(cleaned || "Assertion failed.");
+}
+function normalizeAssertion(value) {
+  return value.replace(/\s+/g, " ").replace(/\s+(?:failed|error)$/i, "").trim().toLowerCase();
+}
+function normalizePath2(value) {
+  try {
+    const url2 = new URL(value);
+    return url2.pathname || value;
+  } catch {
+    return value.replace(/[,:;]+$/, "");
+  }
+}
+function inferAssertion(line) {
+  const normalized = line.toLowerCase();
+  if (normalized.includes("content-type")) return "content-type matches OpenAPI response content";
+  if (normalized.includes("status")) return "status code is defined by OpenAPI";
+  if (normalized.includes("schema") || normalized.includes("required property") || normalized.includes(" is required")) {
+    return "response body matches schema";
+  }
+  if (normalized.includes("body")) return "response body matches body contract";
+  return "collection assertion";
+}
+function isInterestingFailureLine(line) {
+  return !isNoiseLine(line) && /fail|error|assert|expected|actual|required|missing|schema|status|content-type/i.test(line);
+}
+function isNoiseLine(line) {
+  return line.length === 0 || /^[\u250c\u2510\u2514\u2518\u251c\u2524\u2500\u2501\u256d\u256e\u2570\u256f]+$/.test(line) || /^(postman|collection|iteration|request|response|total|duration|data|folder|executed|running)\b/i.test(line) || /^\d+\s+(passed|failed|skipped)\b/i.test(line);
+}
+function dedupeFailures(failures) {
+  const seen = /* @__PURE__ */ new Set();
+  return failures.filter((failure) => {
+    const key = [
+      failure.operationId || "",
+      failure.method || "",
+      failure.path || "",
+      failure.assertion || "",
+      failure.message
+    ].join("\0");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+function stripAnsi(value) {
+  return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+function truncate(value) {
+  return value.length > MAX_MESSAGE_LENGTH ? `${value.slice(0, MAX_MESSAGE_LENGTH - 3)}...` : value;
 }
 
 // src/github/pr-comment.ts
@@ -106584,8 +106732,15 @@ ${MARKER_END}`;
     `**Collection:** ${summary2.collectionId || state3.collectionId || "(unresolved)"}`,
     ""
   ];
+  const commit = summary2.failureDocument?.commit || summary2.commit;
+  if (commit) {
+    lines.push(`**Generated for commit:** \`${commit}\``);
+    lines.push("");
+  }
   if (summary2.status === "passed") {
     lines.push("The generated TDD contract collection passed against the current PR implementation.");
+    lines.push("");
+    lines.push("Success: `Postman TDD Preview` passed for the latest PR head commit.");
   } else if (summary2.status === "cleaned-up") {
     lines.push("PR-scoped TDD preview assets were cleaned up.");
   } else if (summary2.status === "skipped") {
@@ -106595,6 +106750,11 @@ ${MARKER_END}`;
     const immutablePaths = summary2.failureDocument?.immutablePaths || [];
     if (immutablePaths.length > 0) {
       lines.push(`**Immutable paths:** ${immutablePaths.map((path4) => `\`${path4}\``).join(", ")}`);
+    }
+    const criteria = summary2.failureDocument?.successCriteria;
+    if (criteria) {
+      lines.push(`**Success:** \`${criteria.requiredCheck}\` passes on the latest PR head commit.`);
+      lines.push("Before acting, compare `commit` in the Agent failure JSON to the current PR head SHA. If they differ, wait for the next TDD run.");
     }
     lines.push("");
     if (summary2.agentContextArtifactName) {
@@ -106616,7 +106776,9 @@ ${MARKER_END}`;
       lines.push("## Current Failures");
       for (const failure of failures.slice(0, 10)) {
         const target = [failure.method, failure.path].filter(Boolean).join(" ");
-        lines.push(`- ${target ? `${target}: ` : ""}${failure.message}`);
+        const operation = failure.operationId ? `${failure.operationId}: ` : "";
+        const assertion = failure.assertion ? ` [${failure.assertion}]` : "";
+        lines.push(`- ${operation}${target || "collection"}${assertion}: ${failure.message}`);
       }
       if (failures.length > 10) {
         lines.push(`- ...and ${failures.length - 10} more failure(s).`);
@@ -107517,6 +107679,7 @@ async function runAction(options = {}) {
     prCommentId = String(await github.upsertStickyComment(pr.number, state3, {
       collectionId: state3.collectionId,
       collectionName: assetNames.collectionName,
+      commit: pr.sha,
       specId: state3.specId,
       status: "passed",
       workspaceId: state3.workspaceId
@@ -107687,17 +107850,6 @@ async function publishFailure(options) {
     workspaceId: options.state.workspaceId
   });
   setOutput("pr-comment-id", String(commentId));
-}
-function extractCollectionFailures(logExcerpt) {
-  const lines = logExcerpt.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const interesting = lines.filter((line) => /fail|error|assert|expected|actual/i.test(line)).slice(0, 10);
-  if (interesting.length === 0) {
-    return [{
-      logExcerpt: sanitizeLogExcerpt(logExcerpt, (value) => value),
-      message: "Postman TDD collection failed. Check the log excerpt for details."
-    }];
-  }
-  return interesting.map((line) => ({ message: line }));
 }
 
 // src/main.ts
