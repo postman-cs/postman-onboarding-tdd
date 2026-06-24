@@ -29,6 +29,8 @@ Only act on failure context for the latest PR head commit. Compare the inline fa
 
 Humans may submit OpenAPI spec changes in the PR. Once the `Postman TDD Preview` failure exists and you are acting as an implementation-fix agent, the PR spec is the contract to satisfy.
 
+If your agent runtime supports pre-tool-use hooks, load `.postman-template/agent-policy.json` before making implementation changes. For Codex, wire `.postman-template/codex/hooks.json` into the project `.codex/hooks.json` layer so tool calls are checked before they run.
+
 Use the `immutablePaths` array from the inline failure JSON, for example:
 
 ```json

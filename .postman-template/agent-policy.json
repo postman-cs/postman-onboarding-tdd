@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "name": "Postman TDD Implementation Repair Policy",
+  "mode": "postman_tdd_implementation_repair",
+  "sources": {
+    "onboardingConfig": ".postman-template/onboarding.yml",
+    "agentInstructions": ".postman-template/tdd-agent.md"
+  },
+  "immutablePathsFrom": [
+    {
+      "type": "yaml",
+      "path": ".postman-template/onboarding.yml",
+      "field": "spec.path",
+      "fallback": "api/openapi.yaml"
+    }
+  ],
+  "deny": [
+    {
+      "id": "immutable-spec",
+      "description": "Block implementation-repair agents from editing the configured OpenAPI spec.",
+      "actions": ["create", "edit", "write", "delete", "move", "rename"],
+      "paths": ["${spec.path}"],
+      "message": "The OpenAPI spec is immutable during implementation repair. Revert spec changes and fix code only."
+    }
+  ],
+  "successCriteria": {
+    "requiredCheck": "Postman TDD Preview",
+    "doneWhen": "requiredCheck passes on latest PR head commit"
+  }
+}

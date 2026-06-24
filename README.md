@@ -46,7 +46,15 @@ Copy this repository's [`.postman-template/tdd-agent.md`](.postman-template/tdd-
 .postman-template/tdd-agent.md
 ```
 
-Commit it to the customer repository's default branch, usually `main`, so all future PR branches inherit the same generic agent instructions.
+Also copy the optional policy and Codex hook templates if implementation-repair agents will run in a Codex harness:
+
+```text
+.postman-template/agent-policy.json
+.postman-template/hooks/codex-pre-tool-use.mjs
+.postman-template/codex/hooks.json
+```
+
+Commit these files to the customer repository's default branch, usually `main`, so all future PR branches inherit the same generic agent instructions and policy.
 
 The file is intentionally static and branch-safe. It tells any coding agent to read the latest `Postman TDD Preview` sticky PR comment, use the inline failure JSON as the source of truth, fix implementation code only, push changes, and wait for the next TDD workflow result on the latest PR head commit after each push.
 
@@ -57,6 +65,34 @@ The generic prompt for an agent can stay small:
 ```text
 Follow .postman-template/tdd-agent.md for this PR.
 ```
+
+### Codex Pre-Tool Hook
+
+For Codex-based repair automation, the v1 policy is artifact-free. It reads committed repo files:
+
+```text
+.postman-template/agent-policy.json
+.postman-template/onboarding.yml
+```
+
+The policy resolves `spec.path` from onboarding config and denies tool calls that try to create, edit, write, delete, move, or rename that path.
+
+To enable the sample Codex hook in a customer repo, copy or merge the template into the Codex project hook layer:
+
+```bash
+mkdir -p .codex
+cp .postman-template/codex/hooks.json .codex/hooks.json
+```
+
+The hook command delegates to:
+
+```bash
+node .postman-template/hooks/codex-pre-tool-use.mjs
+```
+
+Codex project-local hooks require the project `.codex/` layer to be trusted. Non-managed command hooks must be reviewed and trusted in Codex before they run. In vetted automation that already controls the hook source, the agent launcher can use Codex's `--dangerously-bypass-hook-trust` option for that invocation.
+
+This hook is prevention, not the final enforcement layer. The signed workflow-level immutable spec guard remains mandatory and still fails the PR if the spec changes after a TDD failure.
 
 ## Required Secrets
 
