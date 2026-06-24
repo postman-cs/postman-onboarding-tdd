@@ -46,7 +46,7 @@ Copy this repository's [`.postman-template/tdd-agent.md`](.postman-template/tdd-
 .postman-template/tdd-agent.md
 ```
 
-Also copy the optional policy and Codex hook templates if implementation-repair agents will run in a Codex harness:
+Also copy the optional policy and Codex hook templates if implementation-repair agents will run in a Codex-compatible harness that executes lifecycle hooks:
 
 ```text
 .postman-template/agent-policy.json
@@ -54,7 +54,7 @@ Also copy the optional policy and Codex hook templates if implementation-repair 
 .postman-template/codex/hooks.json
 ```
 
-Commit these files to the customer repository's default branch, usually `main`, so all future PR branches inherit the same generic agent instructions and policy.
+Commit these files to the customer repository's default branch, usually `main`, so all future PR branches inherit the same generic agent instructions and policy. The hook templates are optional guardrails; the GitHub Action immutable-spec guard remains the required enforcement layer.
 
 The file is intentionally static and branch-safe. It tells any coding agent to read the latest `Postman TDD Preview` sticky PR comment, use the inline failure JSON as the source of truth, fix implementation code only, push changes, and wait for the next TDD workflow result on the latest PR head commit after each push.
 
@@ -66,18 +66,18 @@ The generic prompt for an agent can stay small:
 Follow .postman-template/tdd-agent.md for this PR.
 ```
 
-### Codex Pre-Tool Hook
+### Optional Codex Pre-Tool Hook
 
-For Codex-based repair automation, the v1 policy is artifact-free. It reads committed repo files:
+For Codex-compatible repair automation that executes lifecycle hooks, the v1 policy is artifact-free. It reads committed repo files:
 
 ```text
 .postman-template/agent-policy.json
 .postman-template/onboarding.yml
 ```
 
-The policy resolves `spec.path` from onboarding config and denies tool calls that try to create, edit, write, delete, move, or rename that path.
+The policy resolves `spec.path` from onboarding config and is intended to deny tool calls that try to create, edit, write, delete, move, or rename that path.
 
-To enable the sample Codex hook in a customer repo, copy or merge the template into the Codex project hook layer:
+To enable the sample hook in a customer repo, copy or merge the template into the project hook layer used by your Codex runtime:
 
 ```bash
 mkdir -p .codex
@@ -90,9 +90,15 @@ The hook command delegates to:
 node .postman-template/hooks/codex-pre-tool-use.mjs
 ```
 
-Codex project-local hooks require the project `.codex/` layer to be trusted. Non-managed command hooks must be reviewed and trusted in Codex before they run. In vetted automation that already controls the hook source, the agent launcher can use Codex's `--dangerously-bypass-hook-trust` option for that invocation.
+Hook support varies by Codex surface and launch mode. Before relying on this guardrail, verify that your runtime actually executes the hook by attempting a harmless test edit to the configured `spec.path`; the expected result is that the tool call is blocked with:
 
-This hook is prevention, not the final enforcement layer. The signed workflow-level immutable spec guard remains mandatory and still fails the PR if the spec changes after a TDD failure.
+```text
+The OpenAPI spec is immutable during implementation repair. Revert spec changes and fix code only.
+```
+
+Codex project-local hooks require the project `.codex/` layer to be trusted. Non-managed command hooks may also need to be reviewed and trusted before they run. In vetted automation that already controls the hook source and runtime, the agent launcher can use Codex's `--dangerously-bypass-hook-trust` option for that invocation.
+
+This hook is prevention, not the final enforcement layer. Treat it as optional local or harness-level ergonomics. The signed workflow-level immutable spec guard remains mandatory and still fails the PR if the spec changes after a TDD failure.
 
 ## Required Secrets
 
