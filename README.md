@@ -12,6 +12,44 @@ For each PR, the action:
 
 The optional repair worker can also call OpenAI, make implementation-only changes, run the same Postman collection locally, and push one repair commit only after the local TDD run passes.
 
+## End-To-End Flow
+
+```mermaid
+flowchart TD
+  A["Developer opens or updates a PR"] --> B["Postman TDD Preview workflow starts"]
+  B --> C["Read PR OpenAPI spec"]
+  C --> D["Upsert PR-scoped Spec Hub spec and TDD collection"]
+  D --> E["Start customer service in CI with tdd.startCommand"]
+  E --> F["Wait for tdd.healthUrl"]
+  F --> G["Run generated Postman collection against tdd.baseUrl"]
+  G --> H{"Collection passed?"}
+
+  H -- "Yes" --> I["Update sticky PR comment: passed"]
+  I --> J["PR has passing Postman TDD Preview check"]
+
+  H -- "No" --> K["Normalize failures into compact JSON"]
+  K --> L["Update sticky PR comment and optional agent artifact"]
+  L --> M{"Automated repair enabled?"}
+
+  M -- "No" --> N["Human or external agent reads sticky comment"]
+  N --> O["Fix implementation only and push"]
+  O --> B
+
+  M -- "Yes" --> P["Postman TDD Repair workflow starts after failed preview"]
+  P --> Q["Verify failure JSON matches latest PR head SHA"]
+  Q --> R{"Repairable and same-repo PR?"}
+  R -- "No" --> S["Post repair comment: blocked"]
+  R -- "Yes" --> T["OpenAI repair worker proposes implementation-only patch"]
+  T --> U["Validate allowed write paths and immutable spec"]
+  U --> V["Run local tests, start service, run Postman collection"]
+  V --> W{"Local TDD passed?"}
+  W -- "No" --> X["Retry until budget exhausted or blocked"]
+  X --> T
+  W -- "Yes" --> Y["Verify immutable paths again"]
+  Y --> Z["Push one repair commit with repair token"]
+  Z --> B
+```
+
 ## What Customers Configure
 
 You add three things to the service repository:
