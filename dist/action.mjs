@@ -107545,6 +107545,7 @@ function commitAndPushRepair(options) {
   execGit(options.repoRoot, ["commit", "-m", options.commitMessage, "--", ...paths]);
   const commitSha = execGit(options.repoRoot, ["rev-parse", "HEAD"]).trim();
   const remote = `https://x-access-token:${encodeURIComponent(options.githubToken)}@github.com/${options.repository}.git`;
+  clearCheckoutCredentials(options.repoRoot);
   execGit(options.repoRoot, ["push", remote, `HEAD:${options.branch}`]);
   return commitSha;
 }
@@ -107565,6 +107566,29 @@ function redactGitArgs(args) {
 }
 function redactSecret(value) {
   return value.replace(/x-access-token:[^@]+@/g, "x-access-token:***@");
+}
+function clearCheckoutCredentials(repoRoot) {
+  const removed = execGitOptional(repoRoot, [
+    "config",
+    "--local",
+    "--unset-all",
+    "http.https://github.com/.extraheader"
+  ]);
+  if (removed) {
+    info("[postman-tdd] Cleared actions/checkout GitHub auth header before repair push.");
+  }
+}
+function execGitOptional(cwd, args) {
+  try {
+    execFileSync2("git", args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // src/repair/tools.ts

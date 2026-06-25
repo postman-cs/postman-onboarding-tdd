@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import * as core from '@actions/core';
 
 import { isPathDenied, matchesAny, normalizeRepoPath, repoRelativePath, type PatchPolicy } from './patch.js';
 
@@ -74,6 +75,7 @@ export function commitAndPushRepair(options: GitRepairCommitOptions): string {
   const commitSha = execGit(options.repoRoot, ['rev-parse', 'HEAD']).trim();
 
   const remote = `https://x-access-token:${encodeURIComponent(options.githubToken)}@github.com/${options.repository}.git`;
+  clearCheckoutCredentials(options.repoRoot);
   execGit(options.repoRoot, ['push', remote, `HEAD:${options.branch}`]);
   return commitSha;
 }
@@ -99,4 +101,29 @@ function redactGitArgs(args: string[]): string[] {
 
 function redactSecret(value: string): string {
   return value.replace(/x-access-token:[^@]+@/g, 'x-access-token:***@');
+}
+
+function clearCheckoutCredentials(repoRoot: string): void {
+  const removed = execGitOptional(repoRoot, [
+    'config',
+    '--local',
+    '--unset-all',
+    'http.https://github.com/.extraheader'
+  ]);
+  if (removed) {
+    core.info('[postman-tdd] Cleared actions/checkout GitHub auth header before repair push.');
+  }
+}
+
+function execGitOptional(cwd: string, args: string[]): boolean {
+  try {
+    execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
