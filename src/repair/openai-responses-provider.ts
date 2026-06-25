@@ -21,7 +21,7 @@ export type OpenAiRepairResult =
   | { status: 'no_change'; message: string };
 
 export async function runOpenAiRepairTurn(options: OpenAiRepairOptions): Promise<OpenAiRepairResult> {
-  const input: unknown[] = [{
+  let input: unknown[] = [{
     content: [{
       text: buildRepairPrompt(options.failure, options.repairContext),
       type: 'input_text'
@@ -29,6 +29,7 @@ export async function runOpenAiRepairTurn(options: OpenAiRepairOptions): Promise
     role: 'user'
   }];
   const tools = createRepairTools(options.repairContext);
+  let previousResponseId: string | undefined;
 
   for (let round = 0; round < (options.maxToolRounds || 12); round += 1) {
     const response = await createResponse({
@@ -36,9 +37,13 @@ export async function runOpenAiRepairTurn(options: OpenAiRepairOptions): Promise
       fetchImpl: options.fetchImpl,
       input,
       model: options.model,
+      previousResponseId,
       secretMasker: options.secretMasker,
       tools
     });
+    if (typeof response.id === 'string') {
+      previousResponseId = response.id;
+    }
     const calls = (Array.isArray(response.output) ? response.output : [])
       .filter((item): item is JsonRecord => isFunctionCall(item));
     if (calls.length === 0) {
@@ -48,12 +53,12 @@ export async function runOpenAiRepairTurn(options: OpenAiRepairOptions): Promise
       };
     }
 
+    const toolOutputs: unknown[] = [];
     for (const call of calls) {
       const name = String(call.name || '');
       const args = parseArguments(call.arguments);
       const result = executeRepairTool(name, args, options.repairContext);
-      input.push(call);
-      input.push({
+      toolOutputs.push({
         call_id: call.call_id,
         output: JSON.stringify(result),
         type: 'function_call_output'
@@ -75,6 +80,7 @@ export async function runOpenAiRepairTurn(options: OpenAiRepairOptions): Promise
         return { status: 'no_change', message: message || 'Repair agent reported ready without changes.' };
       }
     }
+    input = toolOutputs;
   }
 
   return {
@@ -88,6 +94,7 @@ async function createResponse(options: {
   fetchImpl?: FetchLike;
   input: unknown[];
   model: string;
+  previousResponseId?: string;
   secretMasker: SecretMasker;
   tools: unknown[];
 }): Promise<JsonRecord> {
@@ -101,6 +108,7 @@ async function createResponse(options: {
     body: JSON.stringify({
       input: options.input,
       model: options.model,
+      ...(options.previousResponseId ? { previous_response_id: options.previousResponseId } : {}),
       tool_choice: 'auto',
       tools: options.tools
     })

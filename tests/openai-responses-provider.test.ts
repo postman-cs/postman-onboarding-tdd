@@ -114,4 +114,75 @@ describe('OpenAI Responses repair provider', () => {
     expect(readFileSync(join(repoRoot, 'src', 'app.js'), 'utf8')).toContain('fixed');
     expect(JSON.stringify(requests)).not.toContain('openapi: 3.0.3');
   });
+
+  it('continues tool rounds with function_call_output and previous_response_id', async () => {
+    const repoRoot = createRepo();
+    const patch = diffFor(repoRoot);
+    const requests: Array<Record<string, unknown>> = [];
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      requests.push(body);
+      if (requests.length === 1) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            id: 'resp_1',
+            output: [{
+              arguments: JSON.stringify({ path: 'src/app.js' }),
+              call_id: 'call_read',
+              name: 'read_file',
+              type: 'function_call'
+            }]
+          })
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          id: 'resp_2',
+          output: [{
+            arguments: JSON.stringify({
+              patch,
+              summary: 'Add the missing response field.'
+            }),
+            call_id: 'call_patch',
+            name: 'propose_patch',
+            type: 'function_call'
+          }]
+        })
+      } as Response;
+    };
+
+    const result = await runOpenAiRepairTurn({
+      apiKey: 'openai-secret',
+      failure: failure(),
+      fetchImpl,
+      model: 'gpt-5.5',
+      repairContext: {
+        allowedReadPaths: ['src/**'],
+        patchPolicy: {
+          allowedWritePaths: ['src/**'],
+          immutablePaths: ['api/openapi.yaml'],
+          repoRoot
+        },
+        repoRoot
+      },
+      secretMasker: (value) => value.replace(/openai-secret/g, '***')
+    });
+
+    expect(result.status).toBe('changed');
+    expect(requests).toHaveLength(2);
+    const firstRequest = requests[0];
+    const secondRequest = requests[1];
+    expect(firstRequest?.previous_response_id).toBeUndefined();
+    expect(secondRequest?.previous_response_id).toBe('resp_1');
+    expect(secondRequest?.input).toEqual([{
+      call_id: 'call_read',
+      output: expect.stringContaining('"content"'),
+      type: 'function_call_output'
+    }]);
+    expect(JSON.stringify(secondRequest?.input)).not.toContain('"type":"function_call"');
+  });
 });
