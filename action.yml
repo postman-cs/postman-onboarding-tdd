@@ -6,7 +6,7 @@ branding:
   color: orange
 inputs:
   mode:
-    description: Action mode. Use run for PR preview or cleanup for PR close cleanup.
+    description: Action mode. Use run for PR preview, cleanup for PR close cleanup, or repair for automated implementation repair.
     required: false
     default: run
   onboarding-config-path:
@@ -28,9 +28,31 @@ inputs:
   postman-access-token:
     description: Compatibility input for broader onboarding pipelines. The TDD action does not require it in v1.
     required: false
+  openai-api-key:
+    description: OpenAI API key used by mode=repair with repair-provider=openai-responses.
+    required: false
   github-token:
     description: GitHub token used for PR comments and config writeback.
     required: true
+  repair-github-token:
+    description: Optional token used by mode=repair for pushing repair commits. Prefer a PAT or GitHub App token so pushed commits trigger follow-up workflows.
+    required: false
+  repair-provider:
+    description: Repair provider for mode=repair. V1 supports openai-responses.
+    required: false
+    default: openai-responses
+  repair-model:
+    description: OpenAI model for mode=repair.
+    required: false
+    default: gpt-5.5
+  repair-max-attempts:
+    description: Maximum accepted implementation patch attempts in mode=repair.
+    required: false
+    default: '3'
+  repair-commit-message:
+    description: Commit message used when mode=repair pushes a passing implementation change.
+    required: false
+    default: Postman TDD repair
   immutable-state-signing-key:
     description: Optional HMAC signing key for immutable spec baselines. When set, previous sticky comment baselines must have a valid signature.
     required: false
@@ -84,6 +106,16 @@ outputs:
     description: Commit SHA produced by workspace ID config writeback, if any.
   pr-comment-id:
     description: GitHub PR comment ID for the sticky TDD preview comment.
+  repair-status:
+    description: repaired, blocked, skipped, or failed.
+  repair-blocked-reason:
+    description: Machine-readable reason when repair-status is blocked.
+  repair-attempts:
+    description: Number of accepted implementation patch attempts.
+  repair-commit-sha:
+    description: Commit SHA pushed by the repair worker after a green local collection run.
+  repair-summary-path:
+    description: Path to the local repair summary JSON.
 runs:
   using: node24
   main: dist/action.mjs

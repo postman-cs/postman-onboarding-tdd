@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parseDocument } from 'yaml';
 
-import type { ConfigWriteMode, ResolvedOnboardingConfig } from './types.js';
+import type { ConfigWriteMode, RepairProvider, ResolvedOnboardingConfig } from './types.js';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -27,13 +27,28 @@ function stringValue(value: unknown): string {
   return String(value || '').trim();
 }
 
-function numberValue(value: unknown, fallback: number): number {
+function numberValue(value: unknown, fallback: number, label: string): number {
   if (value === undefined || value === null || value === '') return fallback;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`tdd.timeoutSeconds must be a positive number, got: ${String(value)}`);
+    throw new Error(`${label} must be a positive number, got: ${String(value)}`);
   }
   return parsed;
+}
+
+function stringArrayValue(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => stringValue(entry))
+    .filter(Boolean);
+}
+
+export function validateRepairProvider(value: string | undefined): RepairProvider {
+  const normalized = stringValue(value || 'openai-responses');
+  if (normalized === 'openai-responses') {
+    return normalized;
+  }
+  throw new Error(`Unsupported repair-provider "${value}". Expected openai-responses`);
 }
 
 export function loadOnboardingConfig(options: ConfigLoadOptions): ResolvedOnboardingConfig {
@@ -56,6 +71,7 @@ export function loadOnboardingConfig(options: ConfigLoadOptions): ResolvedOnboar
   const spec = asRecord(root.spec);
   const tdd = asRecord(root.tdd);
   const workspace = asRecord(tdd.workspace);
+  const repairConfig = asRecord(tdd.repair);
 
   const projectName = stringValue(options.projectNameOverride || service.name);
   const specPath = stringValue(options.specPathOverride || spec.path);
@@ -78,13 +94,29 @@ export function loadOnboardingConfig(options: ConfigLoadOptions): ResolvedOnboar
     healthUrl: stringValue(tdd.healthUrl),
     startCommand: stringValue(tdd.startCommand),
     stopCommand: stringValue(tdd.stopCommand) || undefined,
-    timeoutSeconds: numberValue(tdd.timeoutSeconds, 90)
+    timeoutSeconds: numberValue(tdd.timeoutSeconds, 90, 'tdd.timeoutSeconds')
+  };
+
+  const repairEnabled = repairConfig.enabled === true ||
+    stringValue(repairConfig.enabled).toLowerCase() === 'true';
+  const repairAllowedWritePaths = stringArrayValue(repairConfig.allowedWritePaths);
+  const repairAllowedReadPaths = stringArrayValue(repairConfig.allowedReadPaths);
+  const repair = {
+    allowedReadPaths: repairAllowedReadPaths.length > 0 ? repairAllowedReadPaths : repairAllowedWritePaths,
+    allowedWritePaths: repairAllowedWritePaths,
+    enabled: repairEnabled,
+    localTestCommand: stringValue(repairConfig.localTestCommand) || undefined,
+    maxAttempts: numberValue(repairConfig.maxAttempts, 3, 'tdd.repair.maxAttempts'),
+    provider: validateRepairProvider(stringValue(repairConfig.provider) || 'openai-responses')
   };
 
   if (enabled) {
     if (!runtime.baseUrl) throw new Error('tdd.baseUrl is required when tdd.enabled=true');
     if (!runtime.healthUrl) throw new Error('tdd.healthUrl is required when tdd.enabled=true');
     if (!runtime.startCommand) throw new Error('tdd.startCommand is required when tdd.enabled=true');
+  }
+  if (repair.enabled && repair.allowedWritePaths.length === 0) {
+    throw new Error('tdd.repair.allowedWritePaths is required when tdd.repair.enabled=true');
   }
 
   return {
@@ -96,7 +128,8 @@ export function loadOnboardingConfig(options: ConfigLoadOptions): ResolvedOnboar
       ...(workspaceId ? { id: workspaceId } : {}),
       name: workspaceName
     },
-    runtime
+    runtime,
+    repair
   };
 }
 

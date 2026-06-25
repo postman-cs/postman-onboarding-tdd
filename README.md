@@ -32,11 +32,24 @@ tdd:
   startCommand: ./scripts/postman-tdd-start.sh
   stopCommand: ./scripts/postman-tdd-stop.sh # optional
   timeoutSeconds: 90
+  repair:
+    enabled: true
+    provider: openai-responses
+    maxAttempts: 3
+    allowedWritePaths:
+      - src/**
+    allowedReadPaths:
+      - src/**
+      - package.json
+      - package-lock.json
+    localTestCommand: npm test # optional
 ```
 
 On the first run, if `tdd.workspace.id` is missing, the action finds or creates `tdd.workspace.name` and writes the ID back to the config according to `config-write-mode`.
 
 The customer-owned `startCommand` is responsible for making the PR implementation reachable at `baseUrl`. It can run a local process, Docker Compose, dependent mocks, seed data, or anything else the service needs.
+
+`tdd.repair` is optional. When enabled, `allowedWritePaths` is required and should be kept as narrow as practical. `allowedReadPaths` defaults to `allowedWritePaths` when omitted.
 
 ## Agent Instructions
 
@@ -109,6 +122,8 @@ Create these GitHub secrets in the customer service repository before enabling t
 | `POSTMAN_API_KEY` | yes | Postman API access for workspace, spec, collection, and collection-run operations. |
 | `POSTMAN_ACCESS_TOKEN` | no | Compatibility with broader onboarding pipelines. |
 | `POSTMAN_TDD_SIGNING_KEY` | recommended | HMAC key for signed immutable spec baselines. Implementation agents must not be able to read this secret. |
+| `OPENAI_API_KEY` | repair only | OpenAI Responses API access for `mode: repair`. |
+| `POSTMAN_TDD_REPAIR_TOKEN` | repair recommended | PAT or GitHub App token used to push repair commits and trigger follow-up workflows. |
 
 `POSTMAN_TDD_SIGNING_KEY` should be a long random value. Pass it to the action input named `immutable-state-signing-key`:
 
@@ -202,18 +217,82 @@ On subsequent workflow runs, the action compares the current immutable path hash
 
 For tamper detection, create the GitHub secret `POSTMAN_TDD_SIGNING_KEY` and pass it through the action input `immutable-state-signing-key`. When configured, the action signs the immutable baseline with HMAC-SHA256 and refuses to trust a missing or invalid signature, publishing `immutable_state_tampered` instead. Without this input, the action keeps the unsigned sticky-comment baseline behavior for backward compatibility.
 
+## Automated Repair Worker
+
+`mode: repair` is an opt-in worker that runs after a failed `Postman TDD Preview` check. It reads the latest sticky preview comment, verifies that the failure JSON matches the current PR head SHA, calls the OpenAI Responses API with guarded repo tools, applies implementation-only patches, runs the generated Postman collection locally, and pushes one commit only after the collection passes inside the worker.
+
+V1 repair is deliberately narrow:
+
+- Provider: `openai-responses` only.
+- PR scope: same-repo PRs only. Fork PRs are blocked because repair needs secrets and write access.
+- Failure phases: `collection_run`, `service_startup`, and `health_check`.
+- Non-repairable failures such as config, workspace, immutable-state, and immutable-spec failures are reported as blocked.
+- Write access is limited to `tdd.repair.allowedWritePaths`.
+- The model never receives Postman/GitHub secrets, the canonical spec file content, generated collection content, shell access, git access, or raw filesystem write tools.
+
+Use a separate `workflow_run` workflow so repair starts only after preview fails:
+
+```yaml
+name: Postman TDD Repair
+
+on:
+  workflow_run:
+    workflows: [Postman TDD Preview]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: postman-tdd-repair-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: >
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+
+      - uses: postman-cs/postman-onboarding-tdd@main
+        with:
+          mode: repair
+          postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repair-github-token: ${{ secrets.POSTMAN_TDD_REPAIR_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
+```
+
+Production repair should use a PAT or GitHub App token for `repair-github-token`. Commits pushed with the default `GITHUB_TOKEN` may not trigger the follow-up `Postman TDD Preview` workflow, which means the final proof check may not rerun automatically.
+
+The repair worker posts a separate sticky comment titled `Postman TDD Repair`. It does not overwrite the preview sticky comment.
+
 ## Inputs
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `mode` | no | `run` | `run` or `cleanup`. |
+| `mode` | no | `run` | `run`, `cleanup`, or `repair`. |
 | `onboarding-config-path` | no | `.postman-template/onboarding.yml` | Service onboarding config path. |
 | `project-name` | no | `service.name` | Optional service name override. |
 | `spec-path` | no | `spec.path` | Optional OpenAPI spec path override. |
 | `pr-number` | no | pull request event number | Optional PR number override. |
 | `postman-api-key` | yes | | Postman API key. |
 | `postman-access-token` | no | | Compatibility input for onboarding pipelines. |
+| `openai-api-key` | repair only | | OpenAI API key for `mode: repair`. |
 | `github-token` | yes | | Token for PR comments and config writeback. |
+| `repair-github-token` | no | `github-token` | Token used by `mode: repair` for pushing repair commits. Prefer a PAT or GitHub App token. |
+| `repair-provider` | no | `openai-responses` | Repair provider. V1 only accepts `openai-responses`. |
+| `repair-model` | no | `gpt-5.5` | OpenAI model used by `mode: repair`. |
+| `repair-max-attempts` | no | `3` | Maximum accepted implementation patch attempts. |
+| `repair-commit-message` | no | `Postman TDD repair` | Commit message used for a passing repair commit. |
 | `immutable-state-signing-key` | no | | Action input for the HMAC key used to sign immutable spec baselines. Recommended value: `${{ secrets.POSTMAN_TDD_SIGNING_KEY }}`. |
 | `workspace-team-id` | no | | Numeric Postman sub-team ID for org-mode workspace creation. |
 | `config-write-mode` | no | `commit-and-push` | `commit-and-push`, `commit-only`, or `none`. |

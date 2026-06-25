@@ -1,6 +1,5 @@
 import * as core from '@actions/core';
 import { DefaultArtifactClient } from '@actions/artifact';
-import { readFileSync } from 'node:fs';
 
 import {
   createFailureDocument,
@@ -9,8 +8,7 @@ import {
   IMMUTABLE_SPEC_GUARD_MESSAGE,
   writeAgentContext
 } from './agent-context.js';
-import { loadOnboardingConfig, patchWorkspaceId, resolveWorkspacePath, validateConfigWriteMode } from './config.js';
-import { buildContractIndex, instrumentContractCollection, parseOpenApiDocument } from './contract.js';
+import { loadOnboardingConfig, validateConfigWriteMode, validateRepairProvider } from './config.js';
 import { extractCollectionFailures } from './failure-normalizer.js';
 import { GitHubPrClient, parseFailureDocument, resolvePrMetadata } from './github/pr-comment.js';
 import {
@@ -19,7 +17,8 @@ import {
   resolveTrustedImmutableBaseline,
   signImmutableState
 } from './immutable-state.js';
-import { commitConfigWriteback } from './github/repo-mutation.js';
+import { runRepairMode } from './repair/orchestrator.js';
+import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from './preview-assets.js';
 import { resolvePostmanEndpointProfile, parsePostmanRegion, parsePostmanStack } from './postman/base-urls.js';
 import { PostmanClient } from './postman/client.js';
 import {
@@ -60,8 +59,12 @@ export interface RunActionOptions {
 export function readActionInputs(): ActionInputs {
   const prNumberInput = core.getInput('pr-number');
   const modeRaw = core.getInput('mode') || 'run';
-  if (modeRaw !== 'run' && modeRaw !== 'cleanup') {
-    throw new Error(`Unsupported mode "${modeRaw}". Expected run or cleanup`);
+  if (modeRaw !== 'run' && modeRaw !== 'cleanup' && modeRaw !== 'repair') {
+    throw new Error(`Unsupported mode "${modeRaw}". Expected run, cleanup, or repair`);
+  }
+  const repairMaxAttempts = Number(core.getInput('repair-max-attempts') || '3');
+  if (!Number.isFinite(repairMaxAttempts) || repairMaxAttempts <= 0) {
+    throw new Error(`repair-max-attempts must be a positive number, got: ${core.getInput('repair-max-attempts')}`);
   }
   return {
     committerEmail: core.getInput('committer-email') || 'support@postman.com',
@@ -71,12 +74,18 @@ export function readActionInputs(): ActionInputs {
     immutableStateSigningKey: core.getInput('immutable-state-signing-key') || undefined,
     mode: modeRaw,
     onboardingConfigPath: core.getInput('onboarding-config-path') || '.postman-template/onboarding.yml',
+    openaiApiKey: core.getInput('openai-api-key') || undefined,
     postmanAccessToken: core.getInput('postman-access-token') || undefined,
     postmanApiKey: core.getInput('postman-api-key', { required: true }),
     postmanRegion: parsePostmanRegion(core.getInput('postman-region') || 'us'),
     postmanStack: parsePostmanStack(core.getInput('postman-stack') || 'prod'),
     prNumber: prNumberInput ? Number(prNumberInput) : undefined,
     projectName: core.getInput('project-name') || undefined,
+    repairCommitMessage: core.getInput('repair-commit-message') || 'Postman TDD repair',
+    repairGithubToken: core.getInput('repair-github-token') || undefined,
+    repairMaxAttempts,
+    repairModel: core.getInput('repair-model') || 'gpt-5.5',
+    repairProvider: validateRepairProvider(core.getInput('repair-provider') || 'openai-responses'),
     specPath: core.getInput('spec-path') || undefined,
     workspaceTeamId: core.getInput('workspace-team-id') || undefined
   };
@@ -88,12 +97,16 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
   core.setSecret(inputs.githubToken);
   if (inputs.postmanAccessToken) core.setSecret(inputs.postmanAccessToken);
   if (inputs.immutableStateSigningKey) core.setSecret(inputs.immutableStateSigningKey);
+  if (inputs.openaiApiKey) core.setSecret(inputs.openaiApiKey);
+  if (inputs.repairGithubToken) core.setSecret(inputs.repairGithubToken);
 
   const mask = createSecretMasker([
     inputs.postmanApiKey,
     inputs.githubToken,
     inputs.postmanAccessToken,
-    inputs.immutableStateSigningKey
+    inputs.immutableStateSigningKey,
+    inputs.openaiApiKey,
+    inputs.repairGithubToken
   ]);
   const endpointProfile = resolvePostmanEndpointProfile(inputs.postmanStack, inputs.postmanRegion);
   const postman = options.postmanClient ?? new PostmanClient({
@@ -104,6 +117,18 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
   const pr = resolvePrMetadata(inputs.prNumber);
   const github = options.githubClient ?? new GitHubPrClient(inputs.githubToken, pr.repository);
   const artifactClient = options.artifactClient ?? new DefaultArtifactClient();
+
+  if (inputs.mode === 'repair') {
+    await runRepairMode({
+      endpointProfile,
+      github,
+      inputs,
+      mask,
+      postman,
+      pr
+    });
+    return;
+  }
   let prCommentId = '';
   let currentPhase: FailurePhase = 'config';
   let failurePublished = false;
@@ -400,137 +425,6 @@ function setStandardOutputs(paths: { agentTaskPath: string; failuresJsonPath: st
   core.setOutput('agent-context-dir', AGENT_CONTEXT_DIR);
   core.setOutput('agent-task-path', paths.agentTaskPath);
   core.setOutput('failures-json-path', paths.failuresJsonPath);
-}
-
-async function resolveTddWorkspace(options: {
-  config: ResolvedOnboardingConfig;
-  inputs: ActionInputs;
-  postman: PostmanClient;
-  repository: string;
-}): Promise<{ configCommitSha?: string; workspaceId: string }> {
-  const configuredId = options.config.workspace.id;
-  if (configuredId) {
-    core.info(`Using configured TDD workspace: ${configuredId}`);
-    return { workspaceId: configuredId };
-  }
-
-  const matches = await options.postman.findWorkspacesByName(options.config.workspace.name);
-  if (matches.length > 1) {
-    throw new Error(
-      `Multiple Postman workspaces named "${options.config.workspace.name}" exist. Set tdd.workspace.id explicitly.`
-    );
-  }
-
-  const workspaceId = matches[0]?.id ||
-    (await options.postman.createWorkspace(
-      options.config.workspace.name,
-      `Shared TDD preview workspace for ${options.config.projectName}`,
-      parseWorkspaceTeamId(options.inputs.workspaceTeamId)
-    )).id;
-
-  if (options.inputs.configWriteMode === 'none') {
-    core.warning(`Resolved TDD workspace ${workspaceId}, but config-write-mode=none so tdd.workspace.id was not persisted.`);
-    return { workspaceId };
-  }
-
-  const patch = patchWorkspaceId(options.config.configPath, workspaceId);
-  if (!patch.changed) {
-    return { workspaceId };
-  }
-  const result = await commitConfigWriteback({
-    committerEmail: options.inputs.committerEmail,
-    committerName: options.inputs.committerName,
-    configPath: options.config.configPath,
-    githubToken: options.inputs.githubToken,
-    mode: options.inputs.configWriteMode,
-    repository: options.repository
-  });
-  return { configCommitSha: result.commitSha, workspaceId };
-}
-
-function parseWorkspaceTeamId(value: string | undefined): number | undefined {
-  if (!value) return undefined;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) {
-    throw new Error(`workspace-team-id must be numeric, got: ${value}`);
-  }
-  return parsed;
-}
-
-function createAssetNames(prNumber: number, projectName: string): { collectionName: string; specName: string } {
-  return {
-    collectionName: `[TDD PR-${prNumber}] [Contract] ${projectName}`,
-    specName: `[TDD PR-${prNumber}] ${projectName}`
-  };
-}
-
-async function upsertPreviewAssets(options: {
-  assetNames: { collectionName: string; specName: string };
-  config: ResolvedOnboardingConfig;
-  postman: PostmanClient;
-  state: PreviewAssetState;
-}): Promise<{ collectionId: string; specId: string }> {
-  const specContent = readFileSync(resolveWorkspacePath(options.config.specPath), 'utf8');
-  const document = parseOpenApiDocument(specContent);
-  const contractIndex = buildContractIndex(document);
-  const specId = await upsertSpec({
-    content: specContent,
-    name: options.assetNames.specName,
-    openapiVersion: contractIndex.openapiVersion,
-    postman: options.postman,
-    specId: options.state.specId,
-    workspaceId: options.state.workspaceId || ''
-  });
-
-  const tempCollectionId = await options.postman.generateCollection(
-    specId,
-    options.config.projectName,
-    `[TDD PR-${options.state.prNumber}] [Contract]`
-  );
-  const tempCollection = await options.postman.getCollection(tempCollectionId);
-  if (!tempCollection || typeof tempCollection !== 'object') {
-    throw new Error(`Generated TDD collection ${tempCollectionId} could not be fetched`);
-  }
-  const planned = instrumentContractCollection(tempCollection as Record<string, unknown>, contractIndex);
-  for (const warning of planned.warnings) {
-    core.warning(warning);
-  }
-
-  let collectionId = options.state.collectionId || '';
-  if (collectionId) {
-    try {
-      await options.postman.updateCollection(collectionId, planned.collection);
-      await options.postman.deleteCollection(tempCollectionId);
-    } catch {
-      core.warning(`Existing PR TDD collection ${collectionId} could not be updated; adopting generated collection ${tempCollectionId}`);
-      collectionId = tempCollectionId;
-      await options.postman.updateCollection(collectionId, planned.collection);
-    }
-  } else {
-    collectionId = tempCollectionId;
-    await options.postman.updateCollection(collectionId, planned.collection);
-  }
-
-  return { collectionId, specId };
-}
-
-async function upsertSpec(options: {
-  content: string;
-  name: string;
-  openapiVersion: '3.0' | '3.1';
-  postman: PostmanClient;
-  specId?: string;
-  workspaceId: string;
-}): Promise<string> {
-  if (options.specId) {
-    try {
-      await options.postman.updateSpec(options.specId, options.content);
-      return options.specId;
-    } catch {
-      core.warning(`Existing PR TDD spec ${options.specId} could not be updated; creating a new spec.`);
-    }
-  }
-  return options.postman.uploadSpec(options.workspaceId, options.name, options.content, options.openapiVersion);
 }
 
 async function cleanupPreviewAssets(options: {

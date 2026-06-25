@@ -88,4 +88,86 @@ tdd:
 
     expect(() => loadOnboardingConfig({ configPath: path })).toThrow('tdd.baseUrl is required');
   });
+
+  it('loads repair config and defaults allowedReadPaths to allowedWritePaths', () => {
+    const path = writeConfig(`
+spec:
+  path: api/openapi.yaml
+service:
+  name: reference-service
+tdd:
+  enabled: true
+  workspace:
+    name: Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  repair:
+    enabled: true
+    provider: openai-responses
+    maxAttempts: 2
+    allowedWritePaths:
+      - src/**
+    localTestCommand: npm test
+`);
+
+    expect(loadOnboardingConfig({ configPath: path })).toMatchObject({
+      repair: {
+        allowedReadPaths: ['src/**'],
+        allowedWritePaths: ['src/**'],
+        enabled: true,
+        localTestCommand: 'npm test',
+        maxAttempts: 2,
+        provider: 'openai-responses'
+      }
+    });
+  });
+
+  it('uses explicit repair allowedReadPaths when provided', () => {
+    const path = writeConfig(`
+spec:
+  path: api/openapi.yaml
+service:
+  name: reference-service
+tdd:
+  enabled: true
+  workspace:
+    name: Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  repair:
+    enabled: true
+    allowedWritePaths:
+      - src/**
+    allowedReadPaths:
+      - src/**
+      - package.json
+`);
+
+    expect(loadOnboardingConfig({ configPath: path }).repair).toMatchObject({
+      allowedReadPaths: ['src/**', 'package.json'],
+      allowedWritePaths: ['src/**']
+    });
+  });
+
+  it('requires repair allowedWritePaths when repair is enabled', () => {
+    const path = writeConfig(`
+spec:
+  path: api/openapi.yaml
+service:
+  name: reference-service
+tdd:
+  enabled: true
+  workspace:
+    name: Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  repair:
+    enabled: true
+`);
+
+    expect(() => loadOnboardingConfig({ configPath: path })).toThrow('tdd.repair.allowedWritePaths is required');
+  });
 });

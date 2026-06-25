@@ -2093,9 +2093,9 @@ var require_dispatcher_base = __commonJS({
       }
       close(callback) {
         if (callback === void 0) {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve7, reject) => {
             this.close((err, data) => {
-              return err ? reject(err) : resolve3(data);
+              return err ? reject(err) : resolve7(data);
             });
           });
         }
@@ -2133,12 +2133,12 @@ var require_dispatcher_base = __commonJS({
           err = null;
         }
         if (callback === void 0) {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve7, reject) => {
             this.destroy(err, (err2, data) => {
               return err2 ? (
                 /* istanbul ignore next: should never error */
                 reject(err2)
-              ) : resolve3(data);
+              ) : resolve7(data);
             });
           });
         }
@@ -4405,8 +4405,8 @@ var require_util2 = __commonJS({
     function createDeferredPromise() {
       let res;
       let rej;
-      const promise = new Promise((resolve3, reject) => {
-        res = resolve3;
+      const promise = new Promise((resolve7, reject) => {
+        res = resolve7;
         rej = reject;
       });
       return { promise, resolve: res, reject: rej };
@@ -6643,12 +6643,12 @@ upgrade: ${upgrade}\r
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve3, reject) => {
+      const waitForDrain = () => new Promise((resolve7, reject) => {
         assert(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve3;
+          callback = resolve7;
         }
       });
       socket.on("close", onDrain).on("drain", onDrain);
@@ -7285,12 +7285,12 @@ var require_client_h2 = __commonJS({
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve3, reject) => {
+      const waitForDrain = () => new Promise((resolve7, reject) => {
         assert(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve3;
+          callback = resolve7;
         }
       });
       h2stream.on("close", onDrain).on("drain", onDrain);
@@ -7768,16 +7768,16 @@ var require_client = __commonJS({
         return this[kNeedDrain] < 2;
       }
       async [kClose]() {
-        return new Promise((resolve3) => {
+        return new Promise((resolve7) => {
           if (this[kSize]) {
-            this[kClosedResolve] = resolve3;
+            this[kClosedResolve] = resolve7;
           } else {
-            resolve3(null);
+            resolve7(null);
           }
         });
       }
       async [kDestroy](err) {
-        return new Promise((resolve3) => {
+        return new Promise((resolve7) => {
           const requests = this[kQueue].splice(this[kPendingIdx]);
           for (let i = 0; i < requests.length; i++) {
             const request2 = requests[i];
@@ -7788,7 +7788,7 @@ var require_client = __commonJS({
               this[kClosedResolve]();
               this[kClosedResolve] = null;
             }
-            resolve3(null);
+            resolve7(null);
           };
           if (this[kHTTPContext]) {
             this[kHTTPContext].destroy(err, callback);
@@ -7839,7 +7839,7 @@ var require_client = __commonJS({
         });
       }
       try {
-        const socket = await new Promise((resolve3, reject) => {
+        const socket = await new Promise((resolve7, reject) => {
           client2[kConnector]({
             host,
             hostname,
@@ -7851,7 +7851,7 @@ var require_client = __commonJS({
             if (err) {
               reject(err);
             } else {
-              resolve3(socket2);
+              resolve7(socket2);
             }
           });
         });
@@ -8187,8 +8187,8 @@ var require_pool_base = __commonJS({
         if (this[kQueue].isEmpty()) {
           await Promise.all(this[kClients].map((c) => c.close()));
         } else {
-          await new Promise((resolve3) => {
-            this[kClosedResolve] = resolve3;
+          await new Promise((resolve7) => {
+            this[kClosedResolve] = resolve7;
           });
         }
       }
@@ -9403,7 +9403,7 @@ var require_readable = __commonJS({
         if (this._readableState.closeEmitted) {
           return null;
         }
-        return await new Promise((resolve3, reject) => {
+        return await new Promise((resolve7, reject) => {
           if (this[kContentLength] > limit) {
             this.destroy(new AbortError3());
           }
@@ -9416,7 +9416,7 @@ var require_readable = __commonJS({
             if (signal?.aborted) {
               reject(signal.reason ?? new AbortError3());
             } else {
-              resolve3(null);
+              resolve7(null);
             }
           }).on("error", noop3).on("data", function(chunk) {
             limit -= chunk.length;
@@ -9435,7 +9435,7 @@ var require_readable = __commonJS({
     }
     async function consume(stream4, type) {
       assert(!stream4[kConsume]);
-      return new Promise((resolve3, reject) => {
+      return new Promise((resolve7, reject) => {
         if (isUnusable(stream4)) {
           const rState = stream4._readableState;
           if (rState.destroyed && rState.closeEmitted === false) {
@@ -9452,7 +9452,7 @@ var require_readable = __commonJS({
             stream4[kConsume] = {
               type,
               stream: stream4,
-              resolve: resolve3,
+              resolve: resolve7,
               reject,
               length: 0,
               body: []
@@ -9522,18 +9522,18 @@ var require_readable = __commonJS({
       return buffer2;
     }
     function consumeEnd(consume2) {
-      const { type, body: body2, resolve: resolve3, stream: stream4, length } = consume2;
+      const { type, body: body2, resolve: resolve7, stream: stream4, length } = consume2;
       try {
         if (type === "text") {
-          resolve3(chunksDecode(body2, length));
+          resolve7(chunksDecode(body2, length));
         } else if (type === "json") {
-          resolve3(JSON.parse(chunksDecode(body2, length)));
+          resolve7(JSON.parse(chunksDecode(body2, length)));
         } else if (type === "arrayBuffer") {
-          resolve3(chunksConcat(body2, length).buffer);
+          resolve7(chunksConcat(body2, length).buffer);
         } else if (type === "blob") {
-          resolve3(new Blob(body2, { type: stream4[kContentType] }));
+          resolve7(new Blob(body2, { type: stream4[kContentType] }));
         } else if (type === "bytes") {
-          resolve3(chunksConcat(body2, length));
+          resolve7(chunksConcat(body2, length));
         }
         consumeFinish(consume2);
       } catch (err) {
@@ -9790,9 +9790,9 @@ var require_api_request = __commonJS({
     };
     function request2(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve7, reject) => {
           request2.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve3(data);
+            return err ? reject(err) : resolve7(data);
           });
         });
       }
@@ -10015,9 +10015,9 @@ var require_api_stream = __commonJS({
     };
     function stream4(opts, factory, callback) {
       if (callback === void 0) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve7, reject) => {
           stream4.call(this, opts, factory, (err, data) => {
-            return err ? reject(err) : resolve3(data);
+            return err ? reject(err) : resolve7(data);
           });
         });
       }
@@ -10302,9 +10302,9 @@ var require_api_upgrade = __commonJS({
     };
     function upgrade(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve7, reject) => {
           upgrade.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve3(data);
+            return err ? reject(err) : resolve7(data);
           });
         });
       }
@@ -10396,9 +10396,9 @@ var require_api_connect = __commonJS({
     };
     function connect(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve7, reject) => {
           connect.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve3(data);
+            return err ? reject(err) : resolve7(data);
           });
         });
       }
@@ -14260,7 +14260,7 @@ var require_fetch = __commonJS({
       function dispatch({ body: body2 }) {
         const url2 = requestCurrentURL(request2);
         const agent = fetchParams.controller.dispatcher;
-        return new Promise((resolve3, reject) => agent.dispatch(
+        return new Promise((resolve7, reject) => agent.dispatch(
           {
             path: url2.pathname + url2.search,
             origin: url2.origin,
@@ -14336,7 +14336,7 @@ var require_fetch = __commonJS({
                 }
               }
               const onError = this.onError.bind(this);
-              resolve3({
+              resolve7({
                 status,
                 statusText,
                 headersList,
@@ -14382,7 +14382,7 @@ var require_fetch = __commonJS({
               for (let i = 0; i < rawHeaders.length; i += 2) {
                 headersList.append(bufferToLowerCasedHeaderName(rawHeaders[i]), rawHeaders[i + 1].toString("latin1"), true);
               }
-              resolve3({
+              resolve7({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -18074,8 +18074,8 @@ var require_util8 = __commonJS({
       return true;
     }
     function delay4(ms) {
-      return new Promise((resolve3) => {
-        setTimeout(resolve3, ms).unref();
+      return new Promise((resolve7) => {
+        setTimeout(resolve7, ms).unref();
       });
     }
     module.exports = {
@@ -22013,8 +22013,8 @@ var require_deferred = __commonJS({
        */
       constructor(preventUnhandledRejectionWarning = true) {
         this._state = DeferredState.PENDING;
-        this._promise = new Promise((resolve3, reject) => {
-          this._resolve = resolve3;
+        this._promise = new Promise((resolve7, reject) => {
+          this._resolve = resolve7;
           this._reject = reject;
         });
         if (preventUnhandledRejectionWarning) {
@@ -22229,11 +22229,11 @@ var require_unary_call = __commonJS({
     "use strict";
     var __awaiter15 = exports2 && exports2.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve3) {
-          resolve3(value);
+        return value instanceof P ? value : new P(function(resolve7) {
+          resolve7(value);
         });
       }
-      return new (P || (P = Promise))(function(resolve3, reject) {
+      return new (P || (P = Promise))(function(resolve7, reject) {
         function fulfilled(value) {
           try {
             step(generator.next(value));
@@ -22249,7 +22249,7 @@ var require_unary_call = __commonJS({
           }
         }
         function step(result) {
-          result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+          result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
         }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
@@ -22298,11 +22298,11 @@ var require_server_streaming_call = __commonJS({
     "use strict";
     var __awaiter15 = exports2 && exports2.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve3) {
-          resolve3(value);
+        return value instanceof P ? value : new P(function(resolve7) {
+          resolve7(value);
         });
       }
-      return new (P || (P = Promise))(function(resolve3, reject) {
+      return new (P || (P = Promise))(function(resolve7, reject) {
         function fulfilled(value) {
           try {
             step(generator.next(value));
@@ -22318,7 +22318,7 @@ var require_server_streaming_call = __commonJS({
           }
         }
         function step(result) {
-          result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+          result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
         }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
@@ -22368,11 +22368,11 @@ var require_client_streaming_call = __commonJS({
     "use strict";
     var __awaiter15 = exports2 && exports2.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve3) {
-          resolve3(value);
+        return value instanceof P ? value : new P(function(resolve7) {
+          resolve7(value);
         });
       }
-      return new (P || (P = Promise))(function(resolve3, reject) {
+      return new (P || (P = Promise))(function(resolve7, reject) {
         function fulfilled(value) {
           try {
             step(generator.next(value));
@@ -22388,7 +22388,7 @@ var require_client_streaming_call = __commonJS({
           }
         }
         function step(result) {
-          result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+          result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
         }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
@@ -22437,11 +22437,11 @@ var require_duplex_streaming_call = __commonJS({
     "use strict";
     var __awaiter15 = exports2 && exports2.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve3) {
-          resolve3(value);
+        return value instanceof P ? value : new P(function(resolve7) {
+          resolve7(value);
         });
       }
-      return new (P || (P = Promise))(function(resolve3, reject) {
+      return new (P || (P = Promise))(function(resolve7, reject) {
         function fulfilled(value) {
           try {
             step(generator.next(value));
@@ -22457,7 +22457,7 @@ var require_duplex_streaming_call = __commonJS({
           }
         }
         function step(result) {
-          result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+          result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
         }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
@@ -22505,11 +22505,11 @@ var require_test_transport = __commonJS({
     "use strict";
     var __awaiter15 = exports2 && exports2.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve3) {
-          resolve3(value);
+        return value instanceof P ? value : new P(function(resolve7) {
+          resolve7(value);
         });
       }
-      return new (P || (P = Promise))(function(resolve3, reject) {
+      return new (P || (P = Promise))(function(resolve7, reject) {
         function fulfilled(value) {
           try {
             step(generator.next(value));
@@ -22525,7 +22525,7 @@ var require_test_transport = __commonJS({
           }
         }
         function step(result) {
-          result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+          result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
         }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
@@ -22722,11 +22722,11 @@ var require_test_transport = __commonJS({
       responseTrailer: "test"
     };
     function delay4(ms, abort) {
-      return (v) => new Promise((resolve3, reject) => {
+      return (v) => new Promise((resolve7, reject) => {
         if (abort === null || abort === void 0 ? void 0 : abort.aborted) {
           reject(new rpc_error_1.RpcError("user cancel", "CANCELLED"));
         } else {
-          const id = setTimeout(() => resolve3(v), ms);
+          const id = setTimeout(() => resolve7(v), ms);
           if (abort) {
             abort.addEventListener("abort", (ev) => {
               clearTimeout(id);
@@ -23779,8 +23779,8 @@ var require_helpers = __commonJS({
     function req(url2, opts = {}) {
       const href = typeof url2 === "string" ? url2 : url2.href;
       const req2 = (href.startsWith("https:") ? https3 : http3).request(url2, opts);
-      const promise = new Promise((resolve3, reject) => {
-        req2.once("response", resolve3).once("error", reject).end();
+      const promise = new Promise((resolve7, reject) => {
+        req2.once("response", resolve7).once("error", reject).end();
       });
       req2.then = promise.then.bind(promise);
       return req2;
@@ -23957,7 +23957,7 @@ var require_parse_proxy_response = __commonJS({
     var debug_1 = __importDefault(require_src());
     var debug2 = (0, debug_1.default)("https-proxy-agent:parse-proxy-response");
     function parseProxyResponse(socket) {
-      return new Promise((resolve3, reject) => {
+      return new Promise((resolve7, reject) => {
         let buffersLength = 0;
         const buffers = [];
         function read2() {
@@ -24023,7 +24023,7 @@ var require_parse_proxy_response = __commonJS({
           }
           debug2("got proxy server response: %o %o", firstLine, headers);
           cleanup();
-          resolve3({
+          resolve7({
             connect: {
               statusCode,
               statusText,
@@ -25223,9 +25223,9 @@ var require_readdir_glob = __commonJS({
     var fs8 = __require("fs");
     var { EventEmitter: EventEmitter3 } = __require("events");
     var { Minimatch } = require_minimatch();
-    var { resolve: resolve3 } = __require("path");
+    var { resolve: resolve7 } = __require("path");
     function readdir2(dir, strict) {
-      return new Promise((resolve4, reject) => {
+      return new Promise((resolve8, reject) => {
         fs8.readdir(dir, { withFileTypes: true }, (err, files) => {
           if (err) {
             switch (err.code) {
@@ -25233,7 +25233,7 @@ var require_readdir_glob = __commonJS({
                 if (strict) {
                   reject(err);
                 } else {
-                  resolve4([]);
+                  resolve8([]);
                 }
                 break;
               case "ENOTSUP":
@@ -25243,7 +25243,7 @@ var require_readdir_glob = __commonJS({
               case "ENAMETOOLONG":
               // Filename too long
               case "UNKNOWN":
-                resolve4([]);
+                resolve8([]);
                 break;
               case "ELOOP":
               // Too many levels of symbolic links
@@ -25252,30 +25252,30 @@ var require_readdir_glob = __commonJS({
                 break;
             }
           } else {
-            resolve4(files);
+            resolve8(files);
           }
         });
       });
     }
     function stat2(file, followSymlinks) {
-      return new Promise((resolve4, reject) => {
+      return new Promise((resolve8, reject) => {
         const statFunc = followSymlinks ? fs8.stat : fs8.lstat;
         statFunc(file, (err, stats) => {
           if (err) {
             switch (err.code) {
               case "ENOENT":
                 if (followSymlinks) {
-                  resolve4(stat2(file, false));
+                  resolve8(stat2(file, false));
                 } else {
-                  resolve4(null);
+                  resolve8(null);
                 }
                 break;
               default:
-                resolve4(null);
+                resolve8(null);
                 break;
             }
           } else {
-            resolve4(stats);
+            resolve8(stats);
           }
         });
       });
@@ -25289,8 +25289,8 @@ var require_readdir_glob = __commonJS({
           useStat = true;
         }
         const filename = dir + "/" + name;
-        const relative = filename.slice(1);
-        const absolute = path4 + "/" + relative;
+        const relative2 = filename.slice(1);
+        const absolute = path4 + "/" + relative2;
         let stats = null;
         if (useStat || followSymlinks) {
           stats = await stat2(absolute, followSymlinks);
@@ -25302,12 +25302,12 @@ var require_readdir_glob = __commonJS({
           stats = { isDirectory: () => false };
         }
         if (stats.isDirectory()) {
-          if (!shouldSkip(relative)) {
-            yield { relative, absolute, stats };
+          if (!shouldSkip(relative2)) {
+            yield { relative: relative2, absolute, stats };
             yield* exploreWalkAsync(filename, path4, followSymlinks, useStat, shouldSkip, false);
           }
         } else {
-          yield { relative, absolute, stats };
+          yield { relative: relative2, absolute, stats };
         }
       }
     }
@@ -25365,7 +25365,7 @@ var require_readdir_glob = __commonJS({
             (skip) => new Minimatch(skip, { dot: true })
           );
         }
-        this.iterator = explore(resolve3(cwd || "."), this.options.follow, this.options.stat, this._shouldSkipDirectory.bind(this));
+        this.iterator = explore(resolve7(cwd || "."), this.options.follow, this.options.stat, this._shouldSkipDirectory.bind(this));
         this.paused = false;
         this.inactive = false;
         this.aborted = false;
@@ -25377,11 +25377,11 @@ var require_readdir_glob = __commonJS({
         }
         setTimeout(() => this._next(), 0);
       }
-      _shouldSkipDirectory(relative) {
-        return this.skipMatchers.some((m) => m.match(relative));
+      _shouldSkipDirectory(relative2) {
+        return this.skipMatchers.some((m) => m.match(relative2));
       }
-      _fileMatches(relative, isDirectory2) {
-        const file = relative + (isDirectory2 ? "/" : "");
+      _fileMatches(relative2, isDirectory2) {
+        const file = relative2 + (isDirectory2 ? "/" : "");
         return (this.matchers.length === 0 || this.matchers.some((m) => m.match(file))) && !this.ignoreMatchers.some((m) => m.match(file)) && (!this.options.nodir || !isDirectory2);
       }
       _next() {
@@ -25390,16 +25390,16 @@ var require_readdir_glob = __commonJS({
             if (!obj.done) {
               const isDirectory2 = obj.value.stats.isDirectory();
               if (this._fileMatches(obj.value.relative, isDirectory2)) {
-                let relative = obj.value.relative;
+                let relative2 = obj.value.relative;
                 let absolute = obj.value.absolute;
                 if (this.options.mark && isDirectory2) {
-                  relative += "/";
+                  relative2 += "/";
                   absolute += "/";
                 }
                 if (this.options.stat) {
-                  this.emit("match", { relative, absolute, stat: obj.value.stats });
+                  this.emit("match", { relative: relative2, absolute, stat: obj.value.stats });
                 } else {
-                  this.emit("match", { relative, absolute });
+                  this.emit("match", { relative: relative2, absolute });
                 }
               }
               this._next(this.iterator);
@@ -25532,10 +25532,10 @@ var require_async = __commonJS({
           if (typeof args[arity - 1] === "function") {
             return asyncFn.apply(this, args);
           }
-          return new Promise((resolve3, reject2) => {
+          return new Promise((resolve7, reject2) => {
             args[arity - 1] = (err, ...cbArgs) => {
               if (err) return reject2(err);
-              resolve3(cbArgs.length > 1 ? cbArgs : cbArgs[0]);
+              resolve7(cbArgs.length > 1 ? cbArgs : cbArgs[0]);
             };
             asyncFn.apply(this, args);
           });
@@ -25781,13 +25781,13 @@ var require_async = __commonJS({
       var applyEachSeries = applyEach$1(mapSeries$1);
       const PROMISE_SYMBOL = /* @__PURE__ */ Symbol("promiseCallback");
       function promiseCallback() {
-        let resolve3, reject2;
+        let resolve7, reject2;
         function callback(err, ...args) {
           if (err) return reject2(err);
-          resolve3(args.length > 1 ? args : args[0]);
+          resolve7(args.length > 1 ? args : args[0]);
         }
         callback[PROMISE_SYMBOL] = new Promise((res, rej) => {
-          resolve3 = res, reject2 = rej;
+          resolve7 = res, reject2 = rej;
         });
         return callback;
       }
@@ -26134,8 +26134,8 @@ var require_async = __commonJS({
             });
           }
           if (rejectOnError || !callback) {
-            return new Promise((resolve3, reject2) => {
-              res = resolve3;
+            return new Promise((resolve7, reject2) => {
+              res = resolve7;
               rej = reject2;
             });
           }
@@ -26174,10 +26174,10 @@ var require_async = __commonJS({
         }
         const eventMethod = (name) => (handler2) => {
           if (!handler2) {
-            return new Promise((resolve3, reject2) => {
+            return new Promise((resolve7, reject2) => {
               once2(name, (err, data) => {
                 if (err) return reject2(err);
-                resolve3(data);
+                resolve7(data);
               });
             });
           }
@@ -28369,7 +28369,7 @@ var require_BufferList = __commonJS({
         this.head = this.tail = null;
         this.length = 0;
       };
-      BufferList.prototype.join = function join3(s) {
+      BufferList.prototype.join = function join4(s) {
         if (this.length === 0) return "";
         var p = this.head;
         var ret = "" + p.data;
@@ -30904,8 +30904,8 @@ var require_primordials = __commonJS({
       ArrayPrototypeIndexOf(self2, el) {
         return self2.indexOf(el);
       },
-      ArrayPrototypeJoin(self2, sep3) {
-        return self2.join(sep3);
+      ArrayPrototypeJoin(self2, sep4) {
+        return self2.join(sep4);
       },
       ArrayPrototypeMap(self2, fn) {
         return self2.map(fn);
@@ -32076,25 +32076,25 @@ var require_util10 = __commonJS({
         };
       },
       createDeferredPromise: function() {
-        let resolve3;
+        let resolve7;
         let reject;
         const promise = new Promise((res, rej) => {
-          resolve3 = res;
+          resolve7 = res;
           reject = rej;
         });
         return {
           promise,
-          resolve: resolve3,
+          resolve: resolve7,
           reject
         };
       },
       promisify(fn) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve7, reject) => {
           fn((err, ...args) => {
             if (err) {
               return reject(err);
             }
-            return resolve3(...args);
+            return resolve7(...args);
           });
         });
       },
@@ -32885,7 +32885,7 @@ var require_end_of_stream = __commonJS({
         validateBoolean(opts.cleanup, "cleanup");
         autoCleanup = opts.cleanup;
       }
-      return new Promise2((resolve3, reject) => {
+      return new Promise2((resolve7, reject) => {
         const cleanup = eos(stream4, opts, (err) => {
           if (autoCleanup) {
             cleanup();
@@ -32893,7 +32893,7 @@ var require_end_of_stream = __commonJS({
           if (err) {
             reject(err);
           } else {
-            resolve3();
+            resolve7();
           }
         });
       });
@@ -34059,7 +34059,7 @@ var require_readable3 = __commonJS({
         error2 = this.readableEnded ? null : new AbortError3();
         this.destroy(error2);
       }
-      return new Promise2((resolve3, reject) => eos(this, (err) => err && err !== error2 ? reject(err) : resolve3(null)));
+      return new Promise2((resolve7, reject) => eos(this, (err) => err && err !== error2 ? reject(err) : resolve7(null)));
     };
     Readable7.prototype.push = function(chunk, encoding) {
       return readableAddChunk(this, chunk, encoding, false);
@@ -34603,12 +34603,12 @@ var require_readable3 = __commonJS({
     }
     async function* createAsyncIterator(stream4, options) {
       let callback = nop;
-      function next(resolve3) {
+      function next(resolve7) {
         if (this === stream4) {
           callback();
           callback = nop;
         } else {
-          callback = resolve3;
+          callback = resolve7;
         }
       }
       stream4.on("readable", next);
@@ -35660,7 +35660,7 @@ var require_duplexify = __commonJS({
       );
     };
     function fromAsyncGen(fn) {
-      let { promise, resolve: resolve3 } = createDeferredPromise();
+      let { promise, resolve: resolve7 } = createDeferredPromise();
       const ac = new AbortController2();
       const signal = ac.signal;
       const value = fn(
@@ -35675,7 +35675,7 @@ var require_duplexify = __commonJS({
               throw new AbortError3(void 0, {
                 cause: signal.reason
               });
-            ({ promise, resolve: resolve3 } = createDeferredPromise());
+            ({ promise, resolve: resolve7 } = createDeferredPromise());
             yield chunk;
           }
         })(),
@@ -35686,8 +35686,8 @@ var require_duplexify = __commonJS({
       return {
         value,
         write(chunk, encoding, cb) {
-          const _resolve = resolve3;
-          resolve3 = null;
+          const _resolve = resolve7;
+          resolve7 = null;
           _resolve({
             chunk,
             done: false,
@@ -35695,8 +35695,8 @@ var require_duplexify = __commonJS({
           });
         },
         final(cb) {
-          const _resolve = resolve3;
-          resolve3 = null;
+          const _resolve = resolve7;
+          resolve7 = null;
           _resolve({
             done: true,
             cb
@@ -36147,7 +36147,7 @@ var require_pipeline = __commonJS({
           callback();
         }
       };
-      const wait = () => new Promise2((resolve3, reject) => {
+      const wait = () => new Promise2((resolve7, reject) => {
         if (error2) {
           reject(error2);
         } else {
@@ -36155,7 +36155,7 @@ var require_pipeline = __commonJS({
             if (error2) {
               reject(error2);
             } else {
-              resolve3();
+              resolve7();
             }
           };
         }
@@ -36799,8 +36799,8 @@ var require_operators = __commonJS({
                 next = null;
               }
               if (!done && (queue.length >= highWaterMark || cnt >= concurrency)) {
-                await new Promise2((resolve3) => {
-                  resume = resolve3;
+                await new Promise2((resolve7) => {
+                  resume = resolve7;
                 });
               }
             }
@@ -36834,8 +36834,8 @@ var require_operators = __commonJS({
               queue.shift();
               maybeResume();
             }
-            await new Promise2((resolve3) => {
-              next = resolve3;
+            await new Promise2((resolve7) => {
+              next = resolve7;
             });
           }
         } finally {
@@ -37093,7 +37093,7 @@ var require_promises = __commonJS({
     var { finished } = require_end_of_stream();
     require_stream2();
     function pipeline(...streams) {
-      return new Promise2((resolve3, reject) => {
+      return new Promise2((resolve7, reject) => {
         let signal;
         let end;
         const lastArg = streams[streams.length - 1];
@@ -37108,7 +37108,7 @@ var require_promises = __commonJS({
             if (err) {
               reject(err);
             } else {
-              resolve3(value);
+              resolve7(value);
             }
           },
           {
@@ -41831,10 +41831,10 @@ var require_commonjs5 = __commonJS({
        * Return a void Promise that resolves once the stream ends.
        */
       async promise() {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve7, reject) => {
           this.on(DESTROYED, () => reject(new Error("stream destroyed")));
           this.on("error", (er) => reject(er));
-          this.on("end", () => resolve3());
+          this.on("end", () => resolve7());
         });
       }
       /**
@@ -41858,7 +41858,7 @@ var require_commonjs5 = __commonJS({
             return Promise.resolve({ done: false, value: res });
           if (this[EOF])
             return stop();
-          let resolve3;
+          let resolve7;
           let reject;
           const onerr = (er) => {
             this.off("data", ondata);
@@ -41872,19 +41872,19 @@ var require_commonjs5 = __commonJS({
             this.off("end", onend);
             this.off(DESTROYED, ondestroy);
             this.pause();
-            resolve3({ value, done: !!this[EOF] });
+            resolve7({ value, done: !!this[EOF] });
           };
           const onend = () => {
             this.off("error", onerr);
             this.off("data", ondata);
             this.off(DESTROYED, ondestroy);
             stop();
-            resolve3({ done: true, value: void 0 });
+            resolve7({ done: true, value: void 0 });
           };
           const ondestroy = () => onerr(new Error("stream destroyed"));
           return new Promise((res2, rej) => {
             reject = rej;
-            resolve3 = res2;
+            resolve7 = res2;
             this.once(DESTROYED, ondestroy);
             this.once("error", onerr);
             this.once("end", onend);
@@ -42900,9 +42900,9 @@ var require_commonjs6 = __commonJS({
         if (this.#asyncReaddirInFlight) {
           await this.#asyncReaddirInFlight;
         } else {
-          let resolve3 = () => {
+          let resolve7 = () => {
           };
-          this.#asyncReaddirInFlight = new Promise((res) => resolve3 = res);
+          this.#asyncReaddirInFlight = new Promise((res) => resolve7 = res);
           try {
             for (const e of await this.#fs.promises.readdir(fullpath, {
               withFileTypes: true
@@ -42915,7 +42915,7 @@ var require_commonjs6 = __commonJS({
             children.provisional = 0;
           }
           this.#asyncReaddirInFlight = void 0;
-          resolve3();
+          resolve7();
         }
         return children.slice(0, children.provisional);
       }
@@ -43148,7 +43148,7 @@ var require_commonjs6 = __commonJS({
        *
        * @internal
        */
-      constructor(cwd = process.cwd(), pathImpl, sep3, { nocase, childrenCacheSize = 16 * 1024, fs: fs8 = defaultFS } = {}) {
+      constructor(cwd = process.cwd(), pathImpl, sep4, { nocase, childrenCacheSize = 16 * 1024, fs: fs8 = defaultFS } = {}) {
         this.#fs = fsFromOption(fs8);
         if (cwd instanceof URL || cwd.startsWith("file://")) {
           cwd = (0, node_url_1.fileURLToPath)(cwd);
@@ -43159,7 +43159,7 @@ var require_commonjs6 = __commonJS({
         this.#resolveCache = new ResolveCache();
         this.#resolvePosixCache = new ResolveCache();
         this.#children = new ChildrenCache(childrenCacheSize);
-        const split = cwdPath.substring(this.rootPath.length).split(sep3);
+        const split = cwdPath.substring(this.rootPath.length).split(sep4);
         if (split.length === 1 && !split[0]) {
           split.pop();
         }
@@ -44002,10 +44002,10 @@ var require_ignore = __commonJS({
       ignored(p) {
         const fullpath = p.fullpath();
         const fullpaths = `${fullpath}/`;
-        const relative = p.relative() || ".";
-        const relatives = `${relative}/`;
+        const relative2 = p.relative() || ".";
+        const relatives = `${relative2}/`;
         for (const m of this.relative) {
-          if (m.match(relative) || m.match(relatives))
+          if (m.match(relative2) || m.match(relatives))
             return true;
         }
         for (const m of this.absolute) {
@@ -44016,9 +44016,9 @@ var require_ignore = __commonJS({
       }
       childrenIgnored(p) {
         const fullpath = p.fullpath() + "/";
-        const relative = (p.relative() || ".") + "/";
+        const relative2 = (p.relative() || ".") + "/";
         for (const m of this.relativeChildren) {
-          if (m.match(relative))
+          if (m.match(relative2))
             return true;
         }
         for (const m of this.absoluteChildren) {
@@ -45684,11 +45684,11 @@ var require_core = __commonJS({
         this._finalize();
       }
       var self2 = this;
-      return new Promise(function(resolve3, reject) {
+      return new Promise(function(resolve7, reject) {
         var errored;
         self2._module.on("end", function() {
           if (!errored) {
-            resolve3();
+            resolve7();
           }
         });
         self2._module.on("error", function(err) {
@@ -48196,8 +48196,8 @@ var require_streamx = __commonJS({
             return this;
           },
           next() {
-            return new Promise(function(resolve3, reject) {
-              promiseResolve = resolve3;
+            return new Promise(function(resolve7, reject) {
+              promiseResolve = resolve7;
               promiseReject = reject;
               const data = stream4.read();
               if (data !== null) ondata(data);
@@ -48230,11 +48230,11 @@ var require_streamx = __commonJS({
         }
         function destroy2(err) {
           stream4.destroy(err);
-          return new Promise((resolve3, reject) => {
-            if (stream4._duplexState & DESTROYED) return resolve3({ value: void 0, done: true });
+          return new Promise((resolve7, reject) => {
+            if (stream4._duplexState & DESTROYED) return resolve7({ value: void 0, done: true });
             stream4.once("close", function() {
               if (err) reject(err);
-              else resolve3({ value: void 0, done: true });
+              else resolve7({ value: void 0, done: true });
             });
           });
         }
@@ -48278,8 +48278,8 @@ var require_streamx = __commonJS({
         const writes = pending + (ws._duplexState & WRITE_WRITING ? 1 : 0);
         if (writes === 0) return Promise.resolve(true);
         if (state3.drains === null) state3.drains = [];
-        return new Promise((resolve3) => {
-          state3.drains.push({ writes, resolve: resolve3 });
+        return new Promise((resolve7) => {
+          state3.drains.push({ writes, resolve: resolve7 });
         });
       }
       write(data) {
@@ -48384,10 +48384,10 @@ var require_streamx = __commonJS({
       cb(null);
     }
     function pipelinePromise(...streams) {
-      return new Promise((resolve3, reject) => {
+      return new Promise((resolve7, reject) => {
         return pipeline(...streams, (err) => {
           if (err) return reject(err);
-          resolve3();
+          resolve7();
         });
       });
     }
@@ -48697,16 +48697,16 @@ var require_headers2 = __commonJS({
       }
       return 0;
     }
-    function indexOf(block, num, offset, end) {
+    function indexOf(block2, num, offset, end) {
       for (; offset < end; offset++) {
-        if (block[offset] === num) return offset;
+        if (block2[offset] === num) return offset;
       }
       return end;
     }
-    function cksum(block) {
+    function cksum(block2) {
       let sum = 8 * 32;
-      for (let i = 0; i < 148; i++) sum += block[i];
-      for (let j = 156; j < 512; j++) sum += block[j];
+      for (let i = 0; i < 148; i++) sum += block2[i];
+      for (let j = 156; j < 512; j++) sum += block2[j];
       return sum;
     }
     function encodeOct(val, n) {
@@ -49057,16 +49057,16 @@ var require_extract = __commonJS({
           entryCallback = null;
           cb(err);
         }
-        function onnext(resolve3, reject) {
+        function onnext(resolve7, reject) {
           if (error2) {
             return reject(error2);
           }
           if (entryStream) {
-            resolve3({ value: entryStream, done: false });
+            resolve7({ value: entryStream, done: false });
             entryStream = null;
             return;
           }
-          promiseResolve = resolve3;
+          promiseResolve = resolve7;
           promiseReject = reject;
           consumeCallback(null);
           if (extract._finished && promiseResolve) {
@@ -49094,11 +49094,11 @@ var require_extract = __commonJS({
         function destroy2(err) {
           extract.destroy(err);
           consumeCallback(err);
-          return new Promise((resolve3, reject) => {
-            if (extract.destroyed) return resolve3({ value: void 0, done: true });
+          return new Promise((resolve7, reject) => {
+            if (extract.destroyed) return resolve7({ value: void 0, done: true });
             extract.once("close", function() {
               if (err) reject(err);
-              else resolve3({ value: void 0, done: true });
+              else resolve7({ value: void 0, done: true });
             });
           });
         }
@@ -49985,11 +49985,11 @@ var require_lib2 = __commonJS({
     })();
     var __awaiter15 = exports2 && exports2.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve3) {
-          resolve3(value);
+        return value instanceof P ? value : new P(function(resolve7) {
+          resolve7(value);
         });
       }
-      return new (P || (P = Promise))(function(resolve3, reject) {
+      return new (P || (P = Promise))(function(resolve7, reject) {
         function fulfilled(value) {
           try {
             step(generator.next(value));
@@ -50005,7 +50005,7 @@ var require_lib2 = __commonJS({
           }
         }
         function step(result) {
-          result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+          result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
         }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
@@ -50092,26 +50092,26 @@ var require_lib2 = __commonJS({
       }
       readBody() {
         return __awaiter15(this, void 0, void 0, function* () {
-          return new Promise((resolve3) => __awaiter15(this, void 0, void 0, function* () {
+          return new Promise((resolve7) => __awaiter15(this, void 0, void 0, function* () {
             let output = Buffer.alloc(0);
             this.message.on("data", (chunk) => {
               output = Buffer.concat([output, chunk]);
             });
             this.message.on("end", () => {
-              resolve3(output.toString());
+              resolve7(output.toString());
             });
           }));
         });
       }
       readBodyBuffer() {
         return __awaiter15(this, void 0, void 0, function* () {
-          return new Promise((resolve3) => __awaiter15(this, void 0, void 0, function* () {
+          return new Promise((resolve7) => __awaiter15(this, void 0, void 0, function* () {
             const chunks = [];
             this.message.on("data", (chunk) => {
               chunks.push(chunk);
             });
             this.message.on("end", () => {
-              resolve3(Buffer.concat(chunks));
+              resolve7(Buffer.concat(chunks));
             });
           }));
         });
@@ -50319,14 +50319,14 @@ var require_lib2 = __commonJS({
        */
       requestRaw(info2, data) {
         return __awaiter15(this, void 0, void 0, function* () {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve7, reject) => {
             function callbackForResult(err, res) {
               if (err) {
                 reject(err);
               } else if (!res) {
                 reject(new Error("Unknown error"));
               } else {
-                resolve3(res);
+                resolve7(res);
               }
             }
             this.requestRawWithCallback(info2, data, callbackForResult);
@@ -50570,12 +50570,12 @@ var require_lib2 = __commonJS({
         return __awaiter15(this, void 0, void 0, function* () {
           retryNumber = Math.min(ExponentialBackoffCeiling2, retryNumber);
           const ms = ExponentialBackoffTimeSlice2 * Math.pow(2, retryNumber);
-          return new Promise((resolve3) => setTimeout(() => resolve3(), ms));
+          return new Promise((resolve7) => setTimeout(() => resolve7(), ms));
         });
       }
       _processResponse(res, options) {
         return __awaiter15(this, void 0, void 0, function* () {
-          return new Promise((resolve3, reject) => __awaiter15(this, void 0, void 0, function* () {
+          return new Promise((resolve7, reject) => __awaiter15(this, void 0, void 0, function* () {
             const statusCode = res.message.statusCode || 0;
             const response = {
               statusCode,
@@ -50583,7 +50583,7 @@ var require_lib2 = __commonJS({
               headers: {}
             };
             if (statusCode === HttpCodes2.NotFound) {
-              resolve3(response);
+              resolve7(response);
             }
             function dateTimeDeserializer(key, value) {
               if (typeof value === "string") {
@@ -50622,7 +50622,7 @@ var require_lib2 = __commonJS({
               err.result = response.result;
               reject(err);
             } else {
-              resolve3(response);
+              resolve7(response);
             }
           }));
         });
@@ -53092,8 +53092,8 @@ var require_light = __commonJS({
           return this.Promise.resolve();
         }
         yieldLoop(t = 0) {
-          return new this.Promise(function(resolve3, reject) {
-            return setTimeout(resolve3, t);
+          return new this.Promise(function(resolve7, reject) {
+            return setTimeout(resolve7, t);
           });
         }
         computePenalty() {
@@ -53304,15 +53304,15 @@ var require_light = __commonJS({
           return this._queue.length === 0;
         }
         async _tryToRun() {
-          var args, cb, error2, reject, resolve3, returned, task;
+          var args, cb, error2, reject, resolve7, returned, task;
           if (this._running < 1 && this._queue.length > 0) {
             this._running++;
-            ({ task, args, resolve: resolve3, reject } = this._queue.shift());
+            ({ task, args, resolve: resolve7, reject } = this._queue.shift());
             cb = await (async function() {
               try {
                 returned = await task(...args);
                 return function() {
-                  return resolve3(returned);
+                  return resolve7(returned);
                 };
               } catch (error1) {
                 error2 = error1;
@@ -53327,13 +53327,13 @@ var require_light = __commonJS({
           }
         }
         schedule(task, ...args) {
-          var promise, reject, resolve3;
-          resolve3 = reject = null;
+          var promise, reject, resolve7;
+          resolve7 = reject = null;
           promise = new this.Promise(function(_resolve, _reject) {
-            resolve3 = _resolve;
+            resolve7 = _resolve;
             return reject = _reject;
           });
-          this._queue.push({ task, args, resolve: resolve3, reject });
+          this._queue.push({ task, args, resolve: resolve7, reject });
           this._tryToRun();
           return promise;
         }
@@ -53734,14 +53734,14 @@ var require_light = __commonJS({
                 counts = this._states.counts;
                 return counts[0] + counts[1] + counts[2] + counts[3] === at;
               };
-              return new this.Promise((resolve3, reject) => {
+              return new this.Promise((resolve7, reject) => {
                 if (finished()) {
-                  return resolve3();
+                  return resolve7();
                 } else {
                   return this.on("done", () => {
                     if (finished()) {
                       this.removeAllListeners("done");
-                      return resolve3();
+                      return resolve7();
                     }
                   });
                 }
@@ -53834,9 +53834,9 @@ var require_light = __commonJS({
               options = parser$5.load(options, this.jobDefaults);
             }
             task = (...args2) => {
-              return new this.Promise(function(resolve3, reject) {
+              return new this.Promise(function(resolve7, reject) {
                 return fn(...args2, function(...args3) {
-                  return (args3[0] != null ? reject : resolve3)(args3);
+                  return (args3[0] != null ? reject : resolve7)(args3);
                 });
               });
             };
@@ -57919,10 +57919,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep: sep3, value } = collItem;
+        const { start, key, sep: sep4, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep3?.[0],
+          next: key ?? sep4?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -57936,7 +57936,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep3) {
+          if (!keyProps.anchor && !keyProps.tag && !sep4) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map.comment)
@@ -57960,7 +57960,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep3 ?? [], {
+        const valueProps = resolveProps.resolveProps(sep4 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -57976,7 +57976,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep3, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep4, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -58067,7 +58067,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep3 = "";
+        let sep4 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -58081,13 +58081,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep3 + cb;
-              sep3 = "";
+                comment += sep4 + cb;
+              sep4 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep3 += source;
+                sep4 += source;
               hasSpace = true;
               break;
             default:
@@ -58130,18 +58130,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
-        const { start, key, sep: sep3, value } = collItem;
+        const { start, key, sep: sep4, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep3?.[0],
+          next: key ?? sep4?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep3 && !value) {
+          if (!props.anchor && !props.tag && !sep4 && !value) {
             if (i === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i < fc.items.length - 1)
@@ -58195,8 +58195,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep3 && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep3, null, props, onError);
+        if (!isMap && !sep4 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep4, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -58208,7 +58208,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep3 ?? [], {
+          const valueProps = resolveProps.resolveProps(sep4 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -58219,8 +58219,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap && !props.found && ctx.options.strict) {
-              if (sep3)
-                for (const st of sep3) {
+              if (sep4)
+                for (const st of sep4) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -58237,7 +58237,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep3, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep4, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -58417,7 +58417,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i + 1;
       }
       let value = "";
-      let sep3 = "";
+      let sep4 = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
         value += lines[i][0].slice(trimIndent) + "\n";
@@ -58434,24 +58434,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep3 + indent.slice(trimIndent) + content;
-          sep3 = "\n";
+          value += sep4 + indent.slice(trimIndent) + content;
+          sep4 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep3 === " ")
-            sep3 = "\n";
-          else if (!prevMoreIndented && sep3 === "\n")
-            sep3 = "\n\n";
-          value += sep3 + indent.slice(trimIndent) + content;
-          sep3 = "\n";
+          if (sep4 === " ")
+            sep4 = "\n";
+          else if (!prevMoreIndented && sep4 === "\n")
+            sep4 = "\n\n";
+          value += sep4 + indent.slice(trimIndent) + content;
+          sep4 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep3 === "\n")
+          if (sep4 === "\n")
             value += "\n";
           else
-            sep3 = "\n";
+            sep4 = "\n";
         } else {
-          value += sep3 + content;
-          sep3 = " ";
+          value += sep4 + content;
+          sep4 = " ";
           prevMoreIndented = false;
         }
       }
@@ -58633,25 +58633,25 @@ var require_resolve_flow_scalar = __commonJS({
       if (!match)
         return source;
       let res = match[1];
-      let sep3 = " ";
+      let sep4 = " ";
       let pos = first.lastIndex;
       line.lastIndex = pos;
       while (match = line.exec(source)) {
         if (match[1] === "") {
-          if (sep3 === "\n")
-            res += sep3;
+          if (sep4 === "\n")
+            res += sep4;
           else
-            sep3 = "\n";
+            sep4 = "\n";
         } else {
-          res += sep3 + match[1];
-          sep3 = " ";
+          res += sep4 + match[1];
+          sep4 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep3 + (match?.[1] ?? "");
+      return res + sep4 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -59461,14 +59461,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep: sep3, value }) {
+    function stringifyItem({ start, key, sep: sep4, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep3)
-        for (const st of sep3)
+      if (sep4)
+        for (const st of sep4)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -60635,18 +60635,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep3;
+          let sep4;
           if (scalar.end) {
-            sep3 = scalar.end;
-            sep3.push(this.sourceToken);
+            sep4 = scalar.end;
+            sep4.push(this.sourceToken);
             delete scalar.end;
           } else
-            sep3 = [this.sourceToken];
+            sep4 = [this.sourceToken];
           const map = {
             type: "block-map",
             offset: scalar.offset,
             indent: scalar.indent,
-            items: [{ start, key: scalar, sep: sep3 }]
+            items: [{ start, key: scalar, sep: sep4 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map;
@@ -60799,15 +60799,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep3 = it.sep;
-                  sep3.push(this.sourceToken);
+                  const sep4 = it.sep;
+                  sep4.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep: sep3 }]
+                    items: [{ start: start2, key, sep: sep4 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -61001,13 +61001,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep3 = fc.end.splice(1, fc.end.length);
-            sep3.push(this.sourceToken);
+            const sep4 = fc.end.splice(1, fc.end.length);
+            sep4.push(this.sourceToken);
             const map = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep: sep3 }]
+              items: [{ start, key: fc, sep: sep4 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map;
@@ -61469,11 +61469,11 @@ var tunnel = __toESM(require_tunnel2(), 1);
 var import_undici = __toESM(require_undici(), 1);
 var __awaiter = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -61489,7 +61489,7 @@ var __awaiter = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -61562,26 +61562,26 @@ var HttpClientResponse = class {
   }
   readBody() {
     return __awaiter(this, void 0, void 0, function* () {
-      return new Promise((resolve3) => __awaiter(this, void 0, void 0, function* () {
+      return new Promise((resolve7) => __awaiter(this, void 0, void 0, function* () {
         let output = Buffer.alloc(0);
         this.message.on("data", (chunk) => {
           output = Buffer.concat([output, chunk]);
         });
         this.message.on("end", () => {
-          resolve3(output.toString());
+          resolve7(output.toString());
         });
       }));
     });
   }
   readBodyBuffer() {
     return __awaiter(this, void 0, void 0, function* () {
-      return new Promise((resolve3) => __awaiter(this, void 0, void 0, function* () {
+      return new Promise((resolve7) => __awaiter(this, void 0, void 0, function* () {
         const chunks = [];
         this.message.on("data", (chunk) => {
           chunks.push(chunk);
         });
         this.message.on("end", () => {
-          resolve3(Buffer.concat(chunks));
+          resolve7(Buffer.concat(chunks));
         });
       }));
     });
@@ -61784,14 +61784,14 @@ var HttpClient = class {
    */
   requestRaw(info2, data) {
     return __awaiter(this, void 0, void 0, function* () {
-      return new Promise((resolve3, reject) => {
+      return new Promise((resolve7, reject) => {
         function callbackForResult(err, res) {
           if (err) {
             reject(err);
           } else if (!res) {
             reject(new Error("Unknown error"));
           } else {
-            resolve3(res);
+            resolve7(res);
           }
         }
         this.requestRawWithCallback(info2, data, callbackForResult);
@@ -62035,12 +62035,12 @@ var HttpClient = class {
     return __awaiter(this, void 0, void 0, function* () {
       retryNumber = Math.min(ExponentialBackoffCeiling, retryNumber);
       const ms = ExponentialBackoffTimeSlice * Math.pow(2, retryNumber);
-      return new Promise((resolve3) => setTimeout(() => resolve3(), ms));
+      return new Promise((resolve7) => setTimeout(() => resolve7(), ms));
     });
   }
   _processResponse(res, options) {
     return __awaiter(this, void 0, void 0, function* () {
-      return new Promise((resolve3, reject) => __awaiter(this, void 0, void 0, function* () {
+      return new Promise((resolve7, reject) => __awaiter(this, void 0, void 0, function* () {
         const statusCode = res.message.statusCode || 0;
         const response = {
           statusCode,
@@ -62048,7 +62048,7 @@ var HttpClient = class {
           headers: {}
         };
         if (statusCode === HttpCodes.NotFound) {
-          resolve3(response);
+          resolve7(response);
         }
         function dateTimeDeserializer(key, value) {
           if (typeof value === "string") {
@@ -62087,7 +62087,7 @@ var HttpClient = class {
           err.result = response.result;
           reject(err);
         } else {
-          resolve3(response);
+          resolve7(response);
         }
       }));
     });
@@ -62098,11 +62098,11 @@ var lowercaseKeys = (obj) => Object.keys(obj).reduce((c, k) => (c[k.toLowerCase(
 // node_modules/@actions/http-client/lib/auth.js
 var __awaiter2 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -62118,7 +62118,7 @@ var __awaiter2 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -62151,11 +62151,11 @@ import { EOL as EOL3 } from "os";
 import { constants, promises } from "fs";
 var __awaiter3 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -62171,7 +62171,7 @@ var __awaiter3 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -64448,11 +64448,11 @@ function maskSecretUrls(body2) {
 // node_modules/@actions/artifact/lib/internal/shared/artifact-twirp-client.js
 var __awaiter4 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -64468,7 +64468,7 @@ var __awaiter4 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -64585,7 +64585,7 @@ var ArtifactHttpClient = class {
   }
   sleep(milliseconds) {
     return __awaiter4(this, void 0, void 0, function* () {
-      return new Promise((resolve3) => setTimeout(resolve3, milliseconds));
+      return new Promise((resolve7) => setTimeout(resolve7, milliseconds));
     });
   }
   getExponentialRetryTimeMilliseconds(attempt) {
@@ -65491,9 +65491,9 @@ function isStreamComplete(stream4) {
   if (stream4.readable === false) {
     return Promise.resolve();
   }
-  return new Promise((resolve3) => {
+  return new Promise((resolve7) => {
     const handler2 = () => {
-      resolve3();
+      resolve7();
       stream4.removeListener("close", handler2);
       stream4.removeListener("end", handler2);
       stream4.removeListener("error", handler2);
@@ -65648,8 +65648,8 @@ var NodeHttpClient = class {
       headers: request2.headers.toJSON({ preserveCase: true }),
       ...request2.requestOverrides
     };
-    return new Promise((resolve3, reject) => {
-      const req = isInsecure ? http2.request(options, resolve3) : https2.request(options, resolve3);
+    return new Promise((resolve7, reject) => {
+      const req = isInsecure ? http2.request(options, resolve7) : https2.request(options, resolve7);
       req.once("error", (err) => {
         reject(new RestError(err.message, { code: err.code ?? RestError.REQUEST_SEND_ERROR, request: request2 }));
       });
@@ -65733,7 +65733,7 @@ function getDecodedResponseStream(stream4, headers) {
   return stream4;
 }
 function streamToText(stream4) {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve7, reject) => {
     const buffer2 = [];
     stream4.on("data", (chunk) => {
       if (Buffer.isBuffer(chunk)) {
@@ -65743,7 +65743,7 @@ function streamToText(stream4) {
       }
     });
     stream4.on("end", () => {
-      resolve3(Buffer.concat(buffer2).toString("utf8"));
+      resolve7(Buffer.concat(buffer2).toString("utf8"));
     });
     stream4.on("error", (e) => {
       if (e && e?.name === "AbortError") {
@@ -65838,7 +65838,7 @@ function calculateRetryDelay(retryAttempt, config) {
 // node_modules/@typespec/ts-http-runtime/dist/esm/util/helpers.js
 var StandardAbortMessage = "The operation was aborted.";
 function delay(delayInMs, value, options) {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve7, reject) => {
     let timer = void 0;
     let onAborted = void 0;
     const rejectOnAbort = () => {
@@ -65861,7 +65861,7 @@ function delay(delayInMs, value, options) {
     }
     timer = setTimeout(() => {
       removeListeners();
-      resolve3(value);
+      resolve7(value);
     }, delayInMs);
     if (options?.abortSignal) {
       options.abortSignal.addEventListener("abort", onAborted);
@@ -66664,7 +66664,7 @@ var AbortError2 = class extends Error {
 // node_modules/@azure/core-util/dist/esm/createAbortablePromise.js
 function createAbortablePromise(buildPromise, options) {
   const { cleanupBeforeAbort, abortSignal, abortErrorMsg } = options ?? {};
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve7, reject) => {
     function rejectOnAbort() {
       reject(new AbortError2(abortErrorMsg ?? "The operation was aborted."));
     }
@@ -66682,7 +66682,7 @@ function createAbortablePromise(buildPromise, options) {
     try {
       buildPromise((x) => {
         removeListeners();
-        resolve3(x);
+        resolve7(x);
       }, (x) => {
         removeListeners();
         reject(x);
@@ -66699,8 +66699,8 @@ var StandardAbortMessage2 = "The delay was aborted.";
 function delay2(timeInMs, options) {
   let token;
   const { abortSignal, abortErrorMsg } = options ?? {};
-  return createAbortablePromise((resolve3) => {
-    token = setTimeout(resolve3, timeInMs);
+  return createAbortablePromise((resolve7) => {
+    token = setTimeout(resolve7, timeInMs);
   }, {
     cleanupBeforeAbort: () => clearTimeout(token),
     abortSignal,
@@ -72890,21 +72890,21 @@ var Matcher = class {
    * @returns {string}
    */
   toString(separator, includeNamespace = true) {
-    const sep3 = separator || this.separator;
-    const isDefault = sep3 === this.separator && includeNamespace === true;
+    const sep4 = separator || this.separator;
+    const isDefault = sep4 === this.separator && includeNamespace === true;
     if (isDefault) {
       if (this._pathStringCache !== null) {
         return this._pathStringCache;
       }
       const result = this.path.map(
         (n) => n.namespace ? `${n.namespace}:${n.tag}` : n.tag
-      ).join(sep3);
+      ).join(sep4);
       this._pathStringCache = result;
       return result;
     }
     return this.path.map(
       (n) => includeNamespace && n.namespace ? `${n.namespace}:${n.tag}` : n.tag
-    ).join(sep3);
+    ).join(sep4);
   }
   /**
    * Get path as array of tag names.
@@ -75628,7 +75628,7 @@ var BufferScheduler = class {
    *
    */
   async do() {
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve7, reject) => {
       this.readable.on("data", (data) => {
         data = typeof data === "string" ? Buffer.from(data, this.encoding) : data;
         this.appendUnresolvedData(data);
@@ -75656,11 +75656,11 @@ var BufferScheduler = class {
         if (this.isStreamEnd && this.executingOutgoingHandlers === 0) {
           if (this.unresolvedLength > 0 && this.unresolvedLength < this.bufferSize) {
             const buffer2 = this.shiftBufferFromUnresolvedDataArray();
-            this.outgoingHandler(() => buffer2.getReadableStream(), buffer2.size, this.offset).then(resolve3).catch(reject);
+            this.outgoingHandler(() => buffer2.getReadableStream(), buffer2.size, this.offset).then(resolve7).catch(reject);
           } else if (this.unresolvedLength >= this.bufferSize) {
             return;
           } else {
-            resolve3();
+            resolve7();
           }
         }
       });
@@ -75788,8 +75788,8 @@ var NativeCRC64 = (() => {
     NativeCRC642 = NativeCRC642 || {};
     var Module = typeof NativeCRC642 != "undefined" ? NativeCRC642 : {};
     var readyPromiseResolve, readyPromiseReject;
-    Module["ready"] = new Promise(function(resolve3, reject) {
-      readyPromiseResolve = resolve3;
+    Module["ready"] = new Promise(function(resolve7, reject) {
+      readyPromiseResolve = resolve7;
       readyPromiseReject = reject;
     });
     ["_malloc", "_free", "_emscripten_bind_VoidPtr___destroy___0", "_emscripten_bind_Crc64Hash_Crc64Hash_0", "_emscripten_bind_Crc64Hash_OnAppend_2", "_emscripten_bind_Crc64Hash_OnFinal_3", "_emscripten_bind_Crc64Hash___destroy___0", "_fflush", "onRuntimeInitialized"].forEach((prop) => {
@@ -78846,7 +78846,7 @@ function getURLQueries(url2) {
   return queries;
 }
 async function delay3(timeInMs, aborter, abortError) {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve7, reject) => {
     let timeout;
     const abortHandler = () => {
       if (timeout !== void 0) {
@@ -78858,7 +78858,7 @@ async function delay3(timeInMs, aborter, abortError) {
       if (aborter !== void 0) {
         aborter.removeEventListener("abort", abortHandler);
       }
-      resolve3();
+      resolve7();
     };
     timeout = setTimeout(resolveHandler, timeInMs);
     if (aborter !== void 0) {
@@ -96952,7 +96952,7 @@ var AvroReadableFromStream = class extends AvroReadable {
       this._position += chunk.length;
       return this.toUint8Array(chunk);
     } else {
-      return new Promise((resolve3, reject) => {
+      return new Promise((resolve7, reject) => {
         const cleanUp = () => {
           this._readable.removeListener("readable", readableCallback);
           this._readable.removeListener("error", rejectCallback);
@@ -96967,7 +96967,7 @@ var AvroReadableFromStream = class extends AvroReadable {
           if (callbackChunk) {
             this._position += callbackChunk.length;
             cleanUp();
-            resolve3(this.toUint8Array(callbackChunk));
+            resolve7(this.toUint8Array(callbackChunk));
           }
         };
         const rejectCallback = () => {
@@ -97613,8 +97613,8 @@ var Poller = class {
     this.stopped = true;
     this.pollProgressCallbacks = [];
     this.operation = operation;
-    this.promise = new Promise((resolve3, reject) => {
-      this.resolve = resolve3;
+    this.promise = new Promise((resolve7, reject) => {
+      this.resolve = resolve7;
       this.reject = reject;
     });
     this.promise.catch(() => {
@@ -98019,8 +98019,8 @@ var Batch = class {
       return Promise.resolve();
     }
     this.parallelExecute();
-    return new Promise((resolve3, reject) => {
-      this.emitter.on("finish", resolve3);
+    return new Promise((resolve7, reject) => {
+      this.emitter.on("finish", resolve7);
       this.emitter.on("error", (error2) => {
         this.state = BatchStates.Error;
         reject(error2);
@@ -98067,12 +98067,12 @@ import util2 from "node:util";
 async function streamToBuffer(stream4, buffer2, offset, end, encoding) {
   let pos = 0;
   const count = end - offset;
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve7, reject) => {
     const timeout = setTimeout(() => reject(new Error(`The operation cannot be completed in timeout.`)), REQUEST_TIMEOUT);
     stream4.on("readable", () => {
       if (pos >= count) {
         clearTimeout(timeout);
-        resolve3();
+        resolve7();
         return;
       }
       let chunk;
@@ -98085,7 +98085,7 @@ async function streamToBuffer(stream4, buffer2, offset, end, encoding) {
         pos += chunkLength;
         if (pos >= count) {
           clearTimeout(timeout);
-          resolve3();
+          resolve7();
           return;
         }
       }
@@ -98095,7 +98095,7 @@ async function streamToBuffer(stream4, buffer2, offset, end, encoding) {
       if (pos < count) {
         reject(new Error(`Stream drains before getting enough data needed. Data read: ${pos}, data need: ${count}`));
       }
-      resolve3();
+      resolve7();
     });
     stream4.on("error", (msg) => {
       clearTimeout(timeout);
@@ -98104,7 +98104,7 @@ async function streamToBuffer(stream4, buffer2, offset, end, encoding) {
   });
 }
 async function readStreamToLocalFile(rs, file) {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve7, reject) => {
     const ws = fs4.createWriteStream(file);
     rs.on("error", (err) => {
       reject(err);
@@ -98112,7 +98112,7 @@ async function readStreamToLocalFile(rs, file) {
     ws.on("error", (err) => {
       reject(err);
     });
-    ws.on("close", resolve3);
+    ws.on("close", resolve7);
     rs.pipe(ws);
   });
 }
@@ -99056,7 +99056,7 @@ var BlobClient = class _BlobClient extends StorageClient2 {
    * @returns The SAS URI consisting of the URI to the resource represented by this client, followed by the generated SAS token.
    */
   generateSasUrl(options) {
-    return new Promise((resolve3) => {
+    return new Promise((resolve7) => {
       if (!(this.credential instanceof StorageSharedKeyCredential)) {
         throw new RangeError("Can only generate the SAS when the client is initialized with a shared key credential");
       }
@@ -99067,7 +99067,7 @@ var BlobClient = class _BlobClient extends StorageClient2 {
         versionId: this._versionId,
         ...options
       }, this.credential).toString();
-      resolve3(appendToURLQuery(this.url, sas));
+      resolve7(appendToURLQuery(this.url, sas));
     });
   }
   /**
@@ -99106,7 +99106,7 @@ var BlobClient = class _BlobClient extends StorageClient2 {
    * @returns The SAS URI consisting of the URI to the resource represented by this client, followed by the generated SAS token.
    */
   generateUserDelegationSasUrl(options, userDelegationKey) {
-    return new Promise((resolve3) => {
+    return new Promise((resolve7) => {
       const sas = generateBlobSASQueryParameters({
         containerName: this._containerName,
         blobName: this._name,
@@ -99114,7 +99114,7 @@ var BlobClient = class _BlobClient extends StorageClient2 {
         versionId: this._versionId,
         ...options
       }, userDelegationKey, this.accountName).toString();
-      resolve3(appendToURLQuery(this.url, sas));
+      resolve7(appendToURLQuery(this.url, sas));
     });
   }
   /**
@@ -100858,11 +100858,11 @@ import * as crypto3 from "crypto";
 import * as stream from "stream";
 var __awaiter5 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -100878,7 +100878,7 @@ var __awaiter5 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -100889,7 +100889,7 @@ function uploadToBlobStorage(authenticatedUploadURL, uploadStream, contentType2)
     let lastProgressTime = Date.now();
     const abortController = new AbortController();
     const chunkTimer = (interval) => __awaiter5(this, void 0, void 0, function* () {
-      return new Promise((resolve3, reject) => {
+      return new Promise((resolve7, reject) => {
         const timer = setInterval(() => {
           if (Date.now() - lastProgressTime > interval) {
             reject(new Error("Upload progress stalled."));
@@ -100897,7 +100897,7 @@ function uploadToBlobStorage(authenticatedUploadURL, uploadStream, contentType2)
         }, interval);
         abortController.signal.addEventListener("abort", () => {
           clearInterval(timer);
-          resolve3();
+          resolve7();
         });
       });
     });
@@ -100959,11 +100959,11 @@ import * as fs5 from "fs";
 import { realpath } from "fs/promises";
 var __awaiter6 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -100979,7 +100979,7 @@ var __awaiter6 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -101021,11 +101021,11 @@ function createRawFileUploadStream(filePath) {
 // node_modules/@actions/artifact/lib/internal/upload/zip.js
 var __awaiter7 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -101041,7 +101041,7 @@ var __awaiter7 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -101170,11 +101170,11 @@ function getMimeType(filePath) {
 // node_modules/@actions/artifact/lib/internal/upload/upload-artifact.js
 var __awaiter8 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -101190,7 +101190,7 @@ var __awaiter8 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -101335,11 +101335,11 @@ var httpClient = __toESM(require_lib2(), 1);
 var import_undici2 = __toESM(require_undici(), 1);
 var __awaiter9 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -101355,7 +101355,7 @@ var __awaiter9 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -105028,11 +105028,11 @@ function getOctokit(token, options, ...additionalPlugins) {
 var import_unzip_stream = __toESM(require_unzip(), 1);
 var __awaiter10 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -105048,7 +105048,7 @@ var __awaiter10 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -105081,7 +105081,7 @@ function streamExtract(url2, directory, skipDecompress) {
       } catch (error2) {
         retryCount++;
         debug(`Failed to download artifact after ${retryCount} retries due to ${error2.message}. Retrying in 5 seconds...`);
-        yield new Promise((resolve3) => setTimeout(resolve3, 5e3));
+        yield new Promise((resolve7) => setTimeout(resolve7, 5e3));
       }
     }
     throw new Error(`Artifact download failed after ${retryCount} retries.`);
@@ -105111,7 +105111,7 @@ function streamExtractExternal(url_1, directory_1) {
     debug(`Content-Type: ${contentType2}, mimeType: ${mimeType}, urlEndsWithZip: ${urlEndsWithZip}, isZip: ${isZip}, skipDecompress: ${skipDecompress}`);
     debug(`Content-Disposition: ${contentDisposition}, fileName: ${fileName}`);
     let sha256Digest = void 0;
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve7, reject) => {
       const timerFn = () => {
         const timeoutError = new Error(`Blob storage chunk did not respond in ${timeout}ms`);
         response.message.destroy(timeoutError);
@@ -105136,7 +105136,7 @@ function streamExtractExternal(url_1, directory_1) {
           sha256Digest = hashStream.read();
           info(`SHA256 digest of downloaded artifact is ${sha256Digest}`);
         }
-        resolve3({ sha256Digest: `sha256:${sha256Digest}` });
+        resolve7({ sha256Digest: `sha256:${sha256Digest}` });
       };
       if (isZip && !skipDecompress) {
         passThrough.pipe(import_unzip_stream.default.Extract({ path: directory })).on("close", onClose).on("error", onError);
@@ -105367,11 +105367,11 @@ retry.VERSION = VERSION8;
 // node_modules/@actions/artifact/lib/internal/find/get-artifact.js
 var __awaiter11 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -105387,7 +105387,7 @@ var __awaiter11 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -105470,11 +105470,11 @@ function getArtifactInternal(artifactName) {
 // node_modules/@actions/artifact/lib/internal/delete/delete-artifact.js
 var __awaiter12 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -105490,7 +105490,7 @@ var __awaiter12 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -105555,11 +105555,11 @@ function deleteArtifactInternal(artifactName) {
 // node_modules/@actions/artifact/lib/internal/find/list-artifacts.js
 var __awaiter13 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -105575,7 +105575,7 @@ var __awaiter13 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -105692,11 +105692,11 @@ function filterLatest(artifacts) {
 // node_modules/@actions/artifact/lib/internal/client.js
 var __awaiter14 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve7) {
+      resolve7(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve7, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -105712,7 +105712,7 @@ var __awaiter14 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve7(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -105835,9 +105835,6 @@ If the error persists, please check whether Actions and API requests are operati
 // node_modules/@actions/artifact/lib/artifact.js
 var client = new DefaultArtifactClient();
 
-// src/index.ts
-import { readFileSync as readFileSync4 } from "node:fs";
-
 // src/agent-context.ts
 import { createHash as createHash3 } from "node:crypto";
 import { existsSync as existsSync5, mkdirSync, readFileSync as readFileSync3, writeFileSync as writeFileSync2 } from "node:fs";
@@ -105853,13 +105850,24 @@ function asRecord(value) {
 function stringValue(value) {
   return String(value || "").trim();
 }
-function numberValue(value, fallback) {
+function numberValue(value, fallback, label) {
   if (value === void 0 || value === null || value === "") return fallback;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`tdd.timeoutSeconds must be a positive number, got: ${String(value)}`);
+    throw new Error(`${label} must be a positive number, got: ${String(value)}`);
   }
   return parsed;
+}
+function stringArrayValue(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => stringValue(entry)).filter(Boolean);
+}
+function validateRepairProvider(value) {
+  const normalized = stringValue(value || "openai-responses");
+  if (normalized === "openai-responses") {
+    return normalized;
+  }
+  throw new Error(`Unsupported repair-provider "${value}". Expected openai-responses`);
 }
 function loadOnboardingConfig(options) {
   const configPath = options.configPath;
@@ -105880,6 +105888,7 @@ function loadOnboardingConfig(options) {
   const spec = asRecord(root.spec);
   const tdd = asRecord(root.tdd);
   const workspace = asRecord(tdd.workspace);
+  const repairConfig = asRecord(tdd.repair);
   const projectName = stringValue(options.projectNameOverride || service.name);
   const specPath = stringValue(options.specPathOverride || spec.path);
   const workspaceName = stringValue(workspace.name);
@@ -105899,12 +105908,26 @@ function loadOnboardingConfig(options) {
     healthUrl: stringValue(tdd.healthUrl),
     startCommand: stringValue(tdd.startCommand),
     stopCommand: stringValue(tdd.stopCommand) || void 0,
-    timeoutSeconds: numberValue(tdd.timeoutSeconds, 90)
+    timeoutSeconds: numberValue(tdd.timeoutSeconds, 90, "tdd.timeoutSeconds")
+  };
+  const repairEnabled = repairConfig.enabled === true || stringValue(repairConfig.enabled).toLowerCase() === "true";
+  const repairAllowedWritePaths = stringArrayValue(repairConfig.allowedWritePaths);
+  const repairAllowedReadPaths = stringArrayValue(repairConfig.allowedReadPaths);
+  const repair = {
+    allowedReadPaths: repairAllowedReadPaths.length > 0 ? repairAllowedReadPaths : repairAllowedWritePaths,
+    allowedWritePaths: repairAllowedWritePaths,
+    enabled: repairEnabled,
+    localTestCommand: stringValue(repairConfig.localTestCommand) || void 0,
+    maxAttempts: numberValue(repairConfig.maxAttempts, 3, "tdd.repair.maxAttempts"),
+    provider: validateRepairProvider(stringValue(repairConfig.provider) || "openai-responses")
   };
   if (enabled2) {
     if (!runtime.baseUrl) throw new Error("tdd.baseUrl is required when tdd.enabled=true");
     if (!runtime.healthUrl) throw new Error("tdd.healthUrl is required when tdd.enabled=true");
     if (!runtime.startCommand) throw new Error("tdd.startCommand is required when tdd.enabled=true");
+  }
+  if (repair.enabled && repair.allowedWritePaths.length === 0) {
+    throw new Error("tdd.repair.allowedWritePaths is required when tdd.repair.enabled=true");
   }
   return {
     configPath,
@@ -105915,7 +105938,8 @@ function loadOnboardingConfig(options) {
       ...workspaceId ? { id: workspaceId } : {},
       name: workspaceName
     },
-    runtime
+    runtime,
+    repair
   };
 }
 function patchWorkspaceId(configPath, workspaceId) {
@@ -106167,6 +106191,506 @@ for (const item of expected) {
 console.log(\`Immutable spec guard passed for \${expected.length} path(s).\`);
 `;
 }
+
+// src/failure-normalizer.ts
+var MAX_FAILURES = 10;
+var MAX_MESSAGE_LENGTH = 400;
+var HTTP_METHOD = "(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD|TRACE)";
+var TDD_ASSERTION_PATTERN = new RegExp(
+  `\\[Postman TDD\\]\\s+(?:(?<operationId>[^\\s:]+)\\s+)?(?<method>${HTTP_METHOD})\\s+(?<path>\\S+)\\s+::\\s+(?<assertion>.+)$`,
+  "i"
+);
+function extractCollectionFailures(logExcerpt) {
+  const lines = compactLines(logExcerpt);
+  const tagged = extractTaggedFailures(lines);
+  if (tagged.length > 0) {
+    return tagged;
+  }
+  const interesting = dedupeFailures(lines.filter((line) => !line.includes("[Postman TDD]") && isInterestingFailureLine(line)).map((line) => ({
+    assertion: inferAssertion(line),
+    message: normalizeFailureMessage(line)
+  }))).slice(0, MAX_FAILURES);
+  if (interesting.length > 0) {
+    return interesting;
+  }
+  return [{
+    assertion: "collection run",
+    message: "Postman TDD collection failed, but no compact assertion details were detected in runner output."
+  }];
+}
+function extractTaggedFailures(lines) {
+  const failures = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const parsed = parseTaggedAssertion(lines[index] || "");
+    if (!parsed) continue;
+    const message = findNearbyFailureMessage(lines, index);
+    if (!message) continue;
+    failures.push({
+      ...parsed,
+      message
+    });
+    if (failures.length >= MAX_FAILURES) {
+      break;
+    }
+  }
+  return dedupeFailures(failures);
+}
+function parseTaggedAssertion(line) {
+  const markerIndex = line.indexOf("[Postman TDD]");
+  if (markerIndex === -1) return void 0;
+  const candidate = line.slice(markerIndex);
+  const match = TDD_ASSERTION_PATTERN.exec(candidate);
+  if (!match?.groups) return void 0;
+  const method = match.groups.method?.toUpperCase();
+  const path4 = normalizePath(match.groups.path || "");
+  const assertion = normalizeAssertion(match.groups.assertion || "");
+  if (!method || !path4 || !assertion) return void 0;
+  return {
+    assertion,
+    method,
+    operationId: match.groups.operationId,
+    path: path4
+  };
+}
+function findNearbyFailureMessage(lines, assertionIndex) {
+  const sameLineDetail = detailAfterAssertion(lines[assertionIndex] || "");
+  if (sameLineDetail && isExplicitFailureLine(sameLineDetail)) {
+    return normalizeFailureMessage(sameLineDetail);
+  }
+  for (const line of lines.slice(assertionIndex + 1, assertionIndex + 20)) {
+    if (line.includes("[Postman TDD]")) break;
+    if (isNoiseLine(line)) continue;
+    if (isExplicitFailureLine(line)) {
+      return normalizeFailureMessage(line);
+    }
+  }
+  return void 0;
+}
+function detailAfterAssertion(line) {
+  const split = line.split(/\s+-\s+|:\s+AssertionError:?|\s+AssertionError:?\s+/i);
+  const candidate = split.length > 1 ? split[split.length - 1] || "" : "";
+  return candidate.includes("[Postman TDD]") ? "" : candidate.trim();
+}
+function compactLines(value) {
+  return value.split(/\r?\n/).map(stripAnsi).map((line) => line.replace(/^[\u2502\u2503|>\s]*\d+[.)]\s*/, "").replace(/^[\u2502\u2503|>\s]*(error|fail(?:ed|ure)?|assertionerror)[:\s-]*/i, "").replace(/^[\u2502\u2503|>\s]+/, "").trim()).filter(Boolean);
+}
+function normalizeFailureMessage(value) {
+  const cleaned = stripAnsi(value).replace(/^[\u2502\u2503|>\s]*/, "").replace(/^AssertionError(?: \[[^\]]+\])?:?\s*/i, "").replace(/^Error:?\s*/i, "").replace(/\s+/g, " ").trim();
+  const required = cleaned.match(/^\$\.?([A-Za-z0-9_.[\]-]+)\s+is required\.?$/);
+  if (required?.[1]) {
+    return truncate(`Missing required property: ${required[1].split(".").pop()}`);
+  }
+  return truncate(cleaned || "Assertion failed.");
+}
+function normalizeAssertion(value) {
+  return value.replace(/\s+/g, " ").replace(/\s+(?:failed|error)$/i, "").trim().toLowerCase();
+}
+function normalizePath(value) {
+  try {
+    const url2 = new URL(value);
+    return url2.pathname || value;
+  } catch {
+    return value.replace(/[,:;]+$/, "");
+  }
+}
+function inferAssertion(line) {
+  const normalized = line.toLowerCase();
+  if (normalized.includes("content-type")) return "content-type matches OpenAPI response content";
+  if (normalized.includes("status")) return "status code is defined by OpenAPI";
+  if (normalized.includes("schema") || normalized.includes("required property") || normalized.includes(" is required")) {
+    return "response body matches schema";
+  }
+  if (normalized.includes("body")) return "response body matches body contract";
+  return "collection assertion";
+}
+function isInterestingFailureLine(line) {
+  return !isNoiseLine(line) && /fail|error|assert|expected|actual|required|missing|schema|status|content-type/i.test(line);
+}
+function isExplicitFailureLine(line) {
+  return !isNoiseLine(line) && /assertionerror|expected|actual|required|missing|did not|was not|must match|no openapi|not valid|to equal|to exist|fail/i.test(line);
+}
+function isNoiseLine(line) {
+  return line.length === 0 || /^[\u250c\u2510\u2514\u2518\u251c\u2524\u2500\u2501\u256d\u256e\u2570\u256f]+$/.test(line) || /^[-=_]{3,}$/.test(line) || /^sub-folder\b/i.test(line) || /^(postman|collection|iteration|request|response|total|duration|data|folder|executed|running)\b/i.test(line) || /^\d+\s+(passed|failed|skipped)\b/i.test(line);
+}
+function dedupeFailures(failures) {
+  const seen = /* @__PURE__ */ new Set();
+  return failures.filter((failure) => {
+    const key = [
+      failure.operationId || "",
+      failure.method || "",
+      failure.path || "",
+      failure.assertion || "",
+      failure.message
+    ].join("\0");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+function stripAnsi(value) {
+  return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+function truncate(value) {
+  return value.length > MAX_MESSAGE_LENGTH ? `${value.slice(0, MAX_MESSAGE_LENGTH - 3)}...` : value;
+}
+
+// src/repair/summary.ts
+import { mkdirSync as mkdirSync2, writeFileSync as writeFileSync3 } from "node:fs";
+import { join as join3 } from "node:path";
+var REPAIR_MARKER_START = "<!-- postman-tdd-repair";
+var REPAIR_MARKER_END = "-->";
+var SUMMARY_DIR = ".postman-tdd";
+var SUMMARY_PATH = join3(SUMMARY_DIR, "repair-summary.json");
+function writeRepairSummary(summary2) {
+  mkdirSync2(SUMMARY_DIR, { recursive: true });
+  writeFileSync3(SUMMARY_PATH, `${JSON.stringify(summary2, null, 2)}
+`, "utf8");
+  return SUMMARY_PATH;
+}
+function renderRepairComment(summary2) {
+  const marker2 = `${REPAIR_MARKER_START}
+${JSON.stringify({ prNumber: summary2.prNumber, schemaVersion: 1 })}
+${REPAIR_MARKER_END}`;
+  const statusLabel = summary2.status.toUpperCase();
+  const lines = [
+    marker2,
+    `# Postman TDD Repair (${statusLabel})`,
+    "",
+    `**Attempts:** ${summary2.attempts}`,
+    summary2.commitSha ? `**Commit:** \`${summary2.commitSha}\`` : "",
+    summary2.blockedReason ? `**Blocked reason:** \`${summary2.blockedReason}\`` : "",
+    "",
+    summary2.message,
+    "",
+    "_Generated by Postman Onboarding TDD Repair._"
+  ].filter((line) => line !== "");
+  return lines.join("\n");
+}
+function isRepairComment(body2) {
+  return Boolean(body2?.includes(REPAIR_MARKER_START));
+}
+
+// src/github/pr-comment.ts
+var MARKER_START = "<!-- postman-tdd-preview";
+var MARKER_END = "-->";
+var GitHubPrClient = class {
+  octokit;
+  owner;
+  repo;
+  constructor(token, repository) {
+    this.octokit = getOctokit(token);
+    const [owner, repo] = repository.split("/");
+    if (!owner || !repo) {
+      throw new Error(`GITHUB_REPOSITORY must be owner/repo, got: ${repository}`);
+    }
+    this.owner = owner;
+    this.repo = repo;
+  }
+  async findStickyComment(prNumber) {
+    const comments = await this.octokit.paginate(this.octokit.rest.issues.listComments, {
+      issue_number: prNumber,
+      owner: this.owner,
+      per_page: 100,
+      repo: this.repo
+    });
+    const found = comments.find((comment) => comment.body?.includes(MARKER_START));
+    if (!found?.body) {
+      return void 0;
+    }
+    return {
+      assetState: parseAssetState(found.body),
+      body: found.body,
+      id: found.id
+    };
+  }
+  async getPullRequest(prNumber) {
+    const response = await this.octokit.rest.pulls.get({
+      owner: this.owner,
+      pull_number: prNumber,
+      repo: this.repo
+    });
+    const data = response.data;
+    const headRepository = data.head.repo?.full_name || "";
+    const baseRepository = data.base.repo?.full_name || `${this.owner}/${this.repo}`;
+    return {
+      baseRepository,
+      headBranch: data.head.ref,
+      headRepository,
+      headSha: data.head.sha,
+      isFork: headRepository !== baseRepository,
+      number: data.number
+    };
+  }
+  async upsertRepairComment(prNumber, summary2) {
+    const comments = await this.octokit.paginate(this.octokit.rest.issues.listComments, {
+      issue_number: prNumber,
+      owner: this.owner,
+      per_page: 100,
+      repo: this.repo
+    });
+    const body2 = renderRepairComment(summary2);
+    const existing = comments.find((comment) => isRepairComment(comment.body));
+    if (existing) {
+      await this.octokit.rest.issues.updateComment({
+        comment_id: existing.id,
+        owner: this.owner,
+        repo: this.repo,
+        body: body2
+      });
+      return existing.id;
+    }
+    const created = await this.octokit.rest.issues.createComment({
+      issue_number: prNumber,
+      owner: this.owner,
+      repo: this.repo,
+      body: body2
+    });
+    return created.data.id;
+  }
+  async upsertStickyComment(prNumber, state3, summary2, existingCommentId) {
+    const body2 = renderStickyComment(state3, summary2);
+    if (existingCommentId) {
+      await this.octokit.rest.issues.updateComment({
+        comment_id: existingCommentId,
+        owner: this.owner,
+        repo: this.repo,
+        body: body2
+      });
+      return existingCommentId;
+    }
+    const existing = await this.findStickyComment(prNumber);
+    if (existing) {
+      await this.octokit.rest.issues.updateComment({
+        comment_id: existing.id,
+        owner: this.owner,
+        repo: this.repo,
+        body: body2
+      });
+      return existing.id;
+    }
+    const created = await this.octokit.rest.issues.createComment({
+      issue_number: prNumber,
+      owner: this.owner,
+      repo: this.repo,
+      body: body2
+    });
+    return created.data.id;
+  }
+};
+function parseAssetState(body2) {
+  const start = body2.indexOf(MARKER_START);
+  if (start === -1) return void 0;
+  const jsonStart = body2.indexOf("\n", start);
+  const end = body2.indexOf(MARKER_END, jsonStart);
+  if (jsonStart === -1 || end === -1) return void 0;
+  const raw = body2.slice(jsonStart, end).trim();
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed.schemaVersion === 1 && Number.isInteger(parsed.prNumber) ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function parseFailureDocument(body2) {
+  const summary2 = "<summary>Agent failure JSON</summary>";
+  const summaryIndex = body2.indexOf(summary2);
+  if (summaryIndex === -1) return void 0;
+  const fenceStart = body2.indexOf("```json", summaryIndex);
+  if (fenceStart === -1) return void 0;
+  const jsonStart = body2.indexOf("\n", fenceStart);
+  if (jsonStart === -1) return void 0;
+  const fenceEnd = body2.indexOf("```", jsonStart);
+  if (fenceEnd === -1) return void 0;
+  const raw = body2.slice(jsonStart, fenceEnd).trim();
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed.schemaVersion === 1 && parsed.status === "failed" && Array.isArray(parsed.failures) ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function renderStickyComment(state3, summary2) {
+  const marker2 = `${MARKER_START}
+${JSON.stringify(state3)}
+${MARKER_END}`;
+  const statusLabel = summary2.status === "passed" ? "PASSED" : summary2.status === "cleaned-up" ? "CLEANED UP" : summary2.status === "skipped" ? "SKIPPED" : "FAILED";
+  const lines = [
+    marker2,
+    `# Postman TDD Preview (${statusLabel})`,
+    "",
+    `**Workspace:** ${summary2.workspaceId || state3.workspaceId || "(unresolved)"}`,
+    `**Spec:** ${summary2.specId || state3.specId || "(unresolved)"}`,
+    `**Collection:** ${summary2.collectionId || state3.collectionId || "(unresolved)"}`,
+    ""
+  ];
+  const commit = summary2.failureDocument?.commit || summary2.commit;
+  if (commit) {
+    lines.push(`**Generated for commit:** \`${commit}\``);
+    lines.push("");
+  }
+  if (summary2.status === "passed") {
+    lines.push("The generated TDD contract collection passed against the current PR implementation.");
+    lines.push("");
+    lines.push("Success: `Postman TDD Preview` passed for the latest PR head commit.");
+  } else if (summary2.status === "cleaned-up") {
+    lines.push("PR-scoped TDD preview assets were cleaned up.");
+  } else if (summary2.status === "skipped") {
+    lines.push("TDD preview is disabled for this repository.");
+  } else {
+    lines.push(`**Failure phase:** ${summary2.failurePhase || summary2.failureDocument?.phase || "unknown"}`);
+    const immutablePaths = summary2.failureDocument?.immutablePaths || [];
+    if (immutablePaths.length > 0) {
+      lines.push(`**Immutable paths:** ${immutablePaths.map((path4) => `\`${path4}\``).join(", ")}`);
+    }
+    const criteria = summary2.failureDocument?.successCriteria;
+    if (criteria) {
+      lines.push(`**Success:** \`${criteria.requiredCheck}\` passes on the latest PR head commit.`);
+      lines.push("Before acting, compare `commit` in the Agent failure JSON to the current PR head SHA. If they differ, wait for the next TDD run.");
+    }
+    lines.push("");
+    if (summary2.agentContextArtifactName) {
+      const artifactDetails = [
+        summary2.agentContextArtifactId ? `id: ${summary2.agentContextArtifactId}` : "",
+        summary2.agentContextArtifactDigest ? `digest: ${summary2.agentContextArtifactDigest}` : ""
+      ].filter(Boolean).join(", ");
+      lines.push(`Agent context artifact: \`${summary2.agentContextArtifactName}\`${artifactDetails ? ` (${artifactDetails})` : ""}.`);
+      lines.push("Artifact contents: `.postman-tdd/agent-task.md`, `.postman-tdd/failures.json`, and `.postman-tdd/immutable-spec-guard.mjs`.");
+    } else {
+      lines.push("Agent context files generated during the run: `.postman-tdd/agent-task.md`, `.postman-tdd/failures.json`, and `.postman-tdd/immutable-spec-guard.mjs`.");
+    }
+    if (summary2.agentTaskPath) {
+      lines.push(`Agent entrypoint: \`${summary2.agentTaskPath}\``);
+    }
+    const failures = summary2.failureDocument?.failures || [];
+    if (failures.length > 0) {
+      lines.push("");
+      lines.push("## Current Failures");
+      for (const failure of failures.slice(0, 10)) {
+        const target = [failure.method, failure.path].filter(Boolean).join(" ");
+        const operation = failure.operationId ? `${failure.operationId}: ` : "";
+        const assertion = failure.assertion ? ` [${failure.assertion}]` : "";
+        lines.push(`- ${operation}${target || "collection"}${assertion}: ${failure.message}`);
+      }
+      if (failures.length > 10) {
+        lines.push(`- ...and ${failures.length - 10} more failure(s).`);
+      }
+    }
+    if (summary2.failureDocument) {
+      lines.push("");
+      lines.push("<details>");
+      lines.push("<summary>Agent failure JSON</summary>");
+      lines.push("");
+      lines.push("```json");
+      lines.push(JSON.stringify(summary2.failureDocument, null, 2));
+      lines.push("```");
+      lines.push("");
+      lines.push("</details>");
+    }
+  }
+  lines.push("");
+  lines.push("_Generated by Postman Onboarding TDD._");
+  return lines.join("\n");
+}
+function resolvePrMetadata(inputPrNumber) {
+  const repository = process.env.GITHUB_REPOSITORY || (context4.repo.owner && context4.repo.repo ? `${context4.repo.owner}/${context4.repo.repo}` : "");
+  const event = context4.payload;
+  const pr = event.pull_request;
+  const workflowRun = event.workflow_run;
+  const workflowRunPr = workflowRun?.pull_requests?.[0];
+  const number = inputPrNumber || Number(pr?.number || workflowRunPr?.number || event.number || 0);
+  if (!number || !Number.isInteger(number)) {
+    throw new Error("A pull request number is required. Set pr-number or run on a pull_request event.");
+  }
+  if (!repository) {
+    throw new Error("GITHUB_REPOSITORY is required");
+  }
+  return {
+    branch: pr?.head?.ref || workflowRun?.head_branch || process.env.GITHUB_HEAD_REF || void 0,
+    number,
+    repository,
+    sha: pr?.head?.sha || workflowRun?.head_sha || process.env.GITHUB_SHA || void 0
+  };
+}
+
+// src/immutable-state.ts
+import { createHmac as createHmac4, timingSafeEqual } from "node:crypto";
+var IMMUTABLE_STATE_TAMPERED_MESSAGE = "The signed immutable spec baseline could not be verified. Treat the sticky comment as tampered and do not continue implementation repair.";
+function createImmutableStatePayload(context5) {
+  return {
+    ...context5.commit ? { commit: context5.commit } : {},
+    immutablePathHashes: sortHashes(context5.immutablePathHashes),
+    prNumber: context5.prNumber,
+    repository: context5.repository,
+    schemaVersion: 1,
+    ...context5.specPath ? { specPath: context5.specPath } : {}
+  };
+}
+function signImmutableState(payload, signingKey) {
+  return {
+    algorithm: "hmac-sha256",
+    payload,
+    schemaVersion: 1,
+    signature: `hmac-sha256:${createSignature(payload, signingKey)}`
+  };
+}
+function verifyImmutableState(signedState, signingKey, expectation) {
+  if (!signedState || signedState.schemaVersion !== 1 || signedState.algorithm !== "hmac-sha256") {
+    return false;
+  }
+  if (signedState.payload.schemaVersion !== 1 || signedState.payload.prNumber !== expectation.prNumber || signedState.payload.repository !== expectation.repository || signedState.payload.specPath !== expectation.specPath) {
+    return false;
+  }
+  if (!signedState.signature.startsWith("hmac-sha256:")) {
+    return false;
+  }
+  const actual = Buffer.from(signedState.signature.slice("hmac-sha256:".length), "hex");
+  const expected = Buffer.from(createSignature(signedState.payload, signingKey), "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+function resolveTrustedImmutableBaseline(document2, signingKey, expectation, signedStateOverride) {
+  const signedState = signedStateOverride || document2?.immutableState;
+  const hashes = signedState?.payload.immutablePathHashes || document2?.immutablePathHashes || [];
+  if (hashes.length === 0) {
+    return { hashes: [], ok: true };
+  }
+  if (!signingKey) {
+    return { hashes, ok: true };
+  }
+  if (!verifyImmutableState(signedState, signingKey, expectation)) {
+    return {
+      hashes,
+      message: IMMUTABLE_STATE_TAMPERED_MESSAGE,
+      ok: false
+    };
+  }
+  return {
+    hashes: signedState.payload.immutablePathHashes,
+    ok: true,
+    signedState
+  };
+}
+function canonicalize(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalize).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value).filter(([, child]) => child !== void 0).sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${canonicalize(child)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function createSignature(payload, signingKey) {
+  return createHmac4("sha256", signingKey).update(canonicalize(payload)).digest("hex");
+}
+function sortHashes(hashes) {
+  return hashes.map((hash) => ({ path: hash.path, sha256: hash.sha256 })).sort((left, right) => left.path.localeCompare(right.path));
+}
+
+// src/repair/orchestrator.ts
+import { resolve as resolve6 } from "node:path";
+
+// src/preview-assets.ts
+import { readFileSync as readFileSync4 } from "node:fs";
 
 // src/contract.ts
 var import_yaml2 = __toESM(require_dist6(), 1);
@@ -106444,9 +106968,9 @@ function requestPath(request2) {
   if (!urlRecord) return "/";
   if (typeof urlRecord.raw === "string") return pathFromRaw(urlRecord.raw);
   if (Array.isArray(urlRecord.path)) {
-    return normalizePath(`/${urlRecord.path.map(stringifyPathSegment).filter(Boolean).join("/")}`);
+    return normalizePath2(`/${urlRecord.path.map(stringifyPathSegment).filter(Boolean).join("/")}`);
   }
-  if (typeof urlRecord.path === "string") return normalizePath(urlRecord.path);
+  if (typeof urlRecord.path === "string") return normalizePath2(urlRecord.path);
   return "/";
 }
 function stringifyPathSegment(segment) {
@@ -106458,21 +106982,21 @@ function pathFromRaw(raw) {
   let value = String(raw || "").trim();
   value = value.replace(/^\{\{[^}]+}}/, "");
   try {
-    return normalizePath(new URL(value).pathname);
+    return normalizePath2(new URL(value).pathname);
   } catch {
     value = value.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "");
-    return normalizePath(value || "/");
+    return normalizePath2(value || "/");
   }
 }
-function normalizePath(path4) {
+function normalizePath2(path4) {
   const raw = String(path4 || "").split(/[?#]/, 1)[0] || "/";
   const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
   const collapsed = withSlash.replace(/\/+/g, "/");
   return collapsed.length > 1 ? collapsed.replace(/\/+$/g, "") : collapsed;
 }
 function pathScore(candidate, request2) {
-  const candidateParts = normalizePath(candidate).split("/").filter(Boolean);
-  const requestParts = normalizePath(request2).split("/").filter(Boolean);
+  const candidateParts = normalizePath2(candidate).split("/").filter(Boolean);
+  const requestParts = normalizePath2(request2).split("/").filter(Boolean);
   if (candidateParts.length !== requestParts.length) return -1;
   let score = 0;
   for (let index = 0; index < candidateParts.length; index += 1) {
@@ -106486,418 +107010,6 @@ function pathScore(candidate, request2) {
     score += 10;
   }
   return score;
-}
-
-// src/failure-normalizer.ts
-var MAX_FAILURES = 10;
-var MAX_MESSAGE_LENGTH = 400;
-var HTTP_METHOD = "(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD|TRACE)";
-var TDD_ASSERTION_PATTERN = new RegExp(
-  `\\[Postman TDD\\]\\s+(?:(?<operationId>[^\\s:]+)\\s+)?(?<method>${HTTP_METHOD})\\s+(?<path>\\S+)\\s+::\\s+(?<assertion>.+)$`,
-  "i"
-);
-function extractCollectionFailures(logExcerpt) {
-  const lines = compactLines(logExcerpt);
-  const tagged = extractTaggedFailures(lines);
-  if (tagged.length > 0) {
-    return tagged;
-  }
-  const interesting = dedupeFailures(lines.filter((line) => !line.includes("[Postman TDD]") && isInterestingFailureLine(line)).map((line) => ({
-    assertion: inferAssertion(line),
-    message: normalizeFailureMessage(line)
-  }))).slice(0, MAX_FAILURES);
-  if (interesting.length > 0) {
-    return interesting;
-  }
-  return [{
-    assertion: "collection run",
-    message: "Postman TDD collection failed, but no compact assertion details were detected in runner output."
-  }];
-}
-function extractTaggedFailures(lines) {
-  const failures = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const parsed = parseTaggedAssertion(lines[index] || "");
-    if (!parsed) continue;
-    const message = findNearbyFailureMessage(lines, index);
-    if (!message) continue;
-    failures.push({
-      ...parsed,
-      message
-    });
-    if (failures.length >= MAX_FAILURES) {
-      break;
-    }
-  }
-  return dedupeFailures(failures);
-}
-function parseTaggedAssertion(line) {
-  const markerIndex = line.indexOf("[Postman TDD]");
-  if (markerIndex === -1) return void 0;
-  const candidate = line.slice(markerIndex);
-  const match = TDD_ASSERTION_PATTERN.exec(candidate);
-  if (!match?.groups) return void 0;
-  const method = match.groups.method?.toUpperCase();
-  const path4 = normalizePath2(match.groups.path || "");
-  const assertion = normalizeAssertion(match.groups.assertion || "");
-  if (!method || !path4 || !assertion) return void 0;
-  return {
-    assertion,
-    method,
-    operationId: match.groups.operationId,
-    path: path4
-  };
-}
-function findNearbyFailureMessage(lines, assertionIndex) {
-  const sameLineDetail = detailAfterAssertion(lines[assertionIndex] || "");
-  if (sameLineDetail && isExplicitFailureLine(sameLineDetail)) {
-    return normalizeFailureMessage(sameLineDetail);
-  }
-  for (const line of lines.slice(assertionIndex + 1, assertionIndex + 20)) {
-    if (line.includes("[Postman TDD]")) break;
-    if (isNoiseLine(line)) continue;
-    if (isExplicitFailureLine(line)) {
-      return normalizeFailureMessage(line);
-    }
-  }
-  return void 0;
-}
-function detailAfterAssertion(line) {
-  const split = line.split(/\s+-\s+|:\s+AssertionError:?|\s+AssertionError:?\s+/i);
-  const candidate = split.length > 1 ? split[split.length - 1] || "" : "";
-  return candidate.includes("[Postman TDD]") ? "" : candidate.trim();
-}
-function compactLines(value) {
-  return value.split(/\r?\n/).map(stripAnsi).map((line) => line.replace(/^[\u2502\u2503|>\s]*\d+[.)]\s*/, "").replace(/^[\u2502\u2503|>\s]*(error|fail(?:ed|ure)?|assertionerror)[:\s-]*/i, "").replace(/^[\u2502\u2503|>\s]+/, "").trim()).filter(Boolean);
-}
-function normalizeFailureMessage(value) {
-  const cleaned = stripAnsi(value).replace(/^[\u2502\u2503|>\s]*/, "").replace(/^AssertionError(?: \[[^\]]+\])?:?\s*/i, "").replace(/^Error:?\s*/i, "").replace(/\s+/g, " ").trim();
-  const required = cleaned.match(/^\$\.?([A-Za-z0-9_.[\]-]+)\s+is required\.?$/);
-  if (required?.[1]) {
-    return truncate(`Missing required property: ${required[1].split(".").pop()}`);
-  }
-  return truncate(cleaned || "Assertion failed.");
-}
-function normalizeAssertion(value) {
-  return value.replace(/\s+/g, " ").replace(/\s+(?:failed|error)$/i, "").trim().toLowerCase();
-}
-function normalizePath2(value) {
-  try {
-    const url2 = new URL(value);
-    return url2.pathname || value;
-  } catch {
-    return value.replace(/[,:;]+$/, "");
-  }
-}
-function inferAssertion(line) {
-  const normalized = line.toLowerCase();
-  if (normalized.includes("content-type")) return "content-type matches OpenAPI response content";
-  if (normalized.includes("status")) return "status code is defined by OpenAPI";
-  if (normalized.includes("schema") || normalized.includes("required property") || normalized.includes(" is required")) {
-    return "response body matches schema";
-  }
-  if (normalized.includes("body")) return "response body matches body contract";
-  return "collection assertion";
-}
-function isInterestingFailureLine(line) {
-  return !isNoiseLine(line) && /fail|error|assert|expected|actual|required|missing|schema|status|content-type/i.test(line);
-}
-function isExplicitFailureLine(line) {
-  return !isNoiseLine(line) && /assertionerror|expected|actual|required|missing|did not|was not|must match|no openapi|not valid|to equal|to exist|fail/i.test(line);
-}
-function isNoiseLine(line) {
-  return line.length === 0 || /^[\u250c\u2510\u2514\u2518\u251c\u2524\u2500\u2501\u256d\u256e\u2570\u256f]+$/.test(line) || /^[-=_]{3,}$/.test(line) || /^sub-folder\b/i.test(line) || /^(postman|collection|iteration|request|response|total|duration|data|folder|executed|running)\b/i.test(line) || /^\d+\s+(passed|failed|skipped)\b/i.test(line);
-}
-function dedupeFailures(failures) {
-  const seen = /* @__PURE__ */ new Set();
-  return failures.filter((failure) => {
-    const key = [
-      failure.operationId || "",
-      failure.method || "",
-      failure.path || "",
-      failure.assertion || "",
-      failure.message
-    ].join("\0");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-function stripAnsi(value) {
-  return value.replace(/\u001b\[[0-9;]*m/g, "");
-}
-function truncate(value) {
-  return value.length > MAX_MESSAGE_LENGTH ? `${value.slice(0, MAX_MESSAGE_LENGTH - 3)}...` : value;
-}
-
-// src/github/pr-comment.ts
-var MARKER_START = "<!-- postman-tdd-preview";
-var MARKER_END = "-->";
-var GitHubPrClient = class {
-  octokit;
-  owner;
-  repo;
-  constructor(token, repository) {
-    this.octokit = getOctokit(token);
-    const [owner, repo] = repository.split("/");
-    if (!owner || !repo) {
-      throw new Error(`GITHUB_REPOSITORY must be owner/repo, got: ${repository}`);
-    }
-    this.owner = owner;
-    this.repo = repo;
-  }
-  async findStickyComment(prNumber) {
-    const comments = await this.octokit.paginate(this.octokit.rest.issues.listComments, {
-      issue_number: prNumber,
-      owner: this.owner,
-      per_page: 100,
-      repo: this.repo
-    });
-    const found = comments.find((comment) => comment.body?.includes(MARKER_START));
-    if (!found?.body) {
-      return void 0;
-    }
-    return {
-      assetState: parseAssetState(found.body),
-      body: found.body,
-      id: found.id
-    };
-  }
-  async upsertStickyComment(prNumber, state3, summary2, existingCommentId) {
-    const body2 = renderStickyComment(state3, summary2);
-    if (existingCommentId) {
-      await this.octokit.rest.issues.updateComment({
-        comment_id: existingCommentId,
-        owner: this.owner,
-        repo: this.repo,
-        body: body2
-      });
-      return existingCommentId;
-    }
-    const existing = await this.findStickyComment(prNumber);
-    if (existing) {
-      await this.octokit.rest.issues.updateComment({
-        comment_id: existing.id,
-        owner: this.owner,
-        repo: this.repo,
-        body: body2
-      });
-      return existing.id;
-    }
-    const created = await this.octokit.rest.issues.createComment({
-      issue_number: prNumber,
-      owner: this.owner,
-      repo: this.repo,
-      body: body2
-    });
-    return created.data.id;
-  }
-};
-function parseAssetState(body2) {
-  const start = body2.indexOf(MARKER_START);
-  if (start === -1) return void 0;
-  const jsonStart = body2.indexOf("\n", start);
-  const end = body2.indexOf(MARKER_END, jsonStart);
-  if (jsonStart === -1 || end === -1) return void 0;
-  const raw = body2.slice(jsonStart, end).trim();
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed.schemaVersion === 1 && Number.isInteger(parsed.prNumber) ? parsed : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function parseFailureDocument(body2) {
-  const summary2 = "<summary>Agent failure JSON</summary>";
-  const summaryIndex = body2.indexOf(summary2);
-  if (summaryIndex === -1) return void 0;
-  const fenceStart = body2.indexOf("```json", summaryIndex);
-  if (fenceStart === -1) return void 0;
-  const jsonStart = body2.indexOf("\n", fenceStart);
-  if (jsonStart === -1) return void 0;
-  const fenceEnd = body2.indexOf("```", jsonStart);
-  if (fenceEnd === -1) return void 0;
-  const raw = body2.slice(jsonStart, fenceEnd).trim();
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed.schemaVersion === 1 && parsed.status === "failed" && Array.isArray(parsed.failures) ? parsed : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function renderStickyComment(state3, summary2) {
-  const marker2 = `${MARKER_START}
-${JSON.stringify(state3)}
-${MARKER_END}`;
-  const statusLabel = summary2.status === "passed" ? "PASSED" : summary2.status === "cleaned-up" ? "CLEANED UP" : summary2.status === "skipped" ? "SKIPPED" : "FAILED";
-  const lines = [
-    marker2,
-    `# Postman TDD Preview (${statusLabel})`,
-    "",
-    `**Workspace:** ${summary2.workspaceId || state3.workspaceId || "(unresolved)"}`,
-    `**Spec:** ${summary2.specId || state3.specId || "(unresolved)"}`,
-    `**Collection:** ${summary2.collectionId || state3.collectionId || "(unresolved)"}`,
-    ""
-  ];
-  const commit = summary2.failureDocument?.commit || summary2.commit;
-  if (commit) {
-    lines.push(`**Generated for commit:** \`${commit}\``);
-    lines.push("");
-  }
-  if (summary2.status === "passed") {
-    lines.push("The generated TDD contract collection passed against the current PR implementation.");
-    lines.push("");
-    lines.push("Success: `Postman TDD Preview` passed for the latest PR head commit.");
-  } else if (summary2.status === "cleaned-up") {
-    lines.push("PR-scoped TDD preview assets were cleaned up.");
-  } else if (summary2.status === "skipped") {
-    lines.push("TDD preview is disabled for this repository.");
-  } else {
-    lines.push(`**Failure phase:** ${summary2.failurePhase || summary2.failureDocument?.phase || "unknown"}`);
-    const immutablePaths = summary2.failureDocument?.immutablePaths || [];
-    if (immutablePaths.length > 0) {
-      lines.push(`**Immutable paths:** ${immutablePaths.map((path4) => `\`${path4}\``).join(", ")}`);
-    }
-    const criteria = summary2.failureDocument?.successCriteria;
-    if (criteria) {
-      lines.push(`**Success:** \`${criteria.requiredCheck}\` passes on the latest PR head commit.`);
-      lines.push("Before acting, compare `commit` in the Agent failure JSON to the current PR head SHA. If they differ, wait for the next TDD run.");
-    }
-    lines.push("");
-    if (summary2.agentContextArtifactName) {
-      const artifactDetails = [
-        summary2.agentContextArtifactId ? `id: ${summary2.agentContextArtifactId}` : "",
-        summary2.agentContextArtifactDigest ? `digest: ${summary2.agentContextArtifactDigest}` : ""
-      ].filter(Boolean).join(", ");
-      lines.push(`Agent context artifact: \`${summary2.agentContextArtifactName}\`${artifactDetails ? ` (${artifactDetails})` : ""}.`);
-      lines.push("Artifact contents: `.postman-tdd/agent-task.md`, `.postman-tdd/failures.json`, and `.postman-tdd/immutable-spec-guard.mjs`.");
-    } else {
-      lines.push("Agent context files generated during the run: `.postman-tdd/agent-task.md`, `.postman-tdd/failures.json`, and `.postman-tdd/immutable-spec-guard.mjs`.");
-    }
-    if (summary2.agentTaskPath) {
-      lines.push(`Agent entrypoint: \`${summary2.agentTaskPath}\``);
-    }
-    const failures = summary2.failureDocument?.failures || [];
-    if (failures.length > 0) {
-      lines.push("");
-      lines.push("## Current Failures");
-      for (const failure of failures.slice(0, 10)) {
-        const target = [failure.method, failure.path].filter(Boolean).join(" ");
-        const operation = failure.operationId ? `${failure.operationId}: ` : "";
-        const assertion = failure.assertion ? ` [${failure.assertion}]` : "";
-        lines.push(`- ${operation}${target || "collection"}${assertion}: ${failure.message}`);
-      }
-      if (failures.length > 10) {
-        lines.push(`- ...and ${failures.length - 10} more failure(s).`);
-      }
-    }
-    if (summary2.failureDocument) {
-      lines.push("");
-      lines.push("<details>");
-      lines.push("<summary>Agent failure JSON</summary>");
-      lines.push("");
-      lines.push("```json");
-      lines.push(JSON.stringify(summary2.failureDocument, null, 2));
-      lines.push("```");
-      lines.push("");
-      lines.push("</details>");
-    }
-  }
-  lines.push("");
-  lines.push("_Generated by Postman Onboarding TDD._");
-  return lines.join("\n");
-}
-function resolvePrMetadata(inputPrNumber) {
-  const repository = process.env.GITHUB_REPOSITORY || (context4.repo.owner && context4.repo.repo ? `${context4.repo.owner}/${context4.repo.repo}` : "");
-  const event = context4.payload;
-  const pr = event.pull_request;
-  const number = inputPrNumber || Number(pr?.number || event.number || 0);
-  if (!number || !Number.isInteger(number)) {
-    throw new Error("A pull request number is required. Set pr-number or run on a pull_request event.");
-  }
-  if (!repository) {
-    throw new Error("GITHUB_REPOSITORY is required");
-  }
-  return {
-    branch: pr?.head?.ref || process.env.GITHUB_HEAD_REF || void 0,
-    number,
-    repository,
-    sha: pr?.head?.sha || process.env.GITHUB_SHA || void 0
-  };
-}
-
-// src/immutable-state.ts
-import { createHmac as createHmac4, timingSafeEqual } from "node:crypto";
-var IMMUTABLE_STATE_TAMPERED_MESSAGE = "The signed immutable spec baseline could not be verified. Treat the sticky comment as tampered and do not continue implementation repair.";
-function createImmutableStatePayload(context5) {
-  return {
-    ...context5.commit ? { commit: context5.commit } : {},
-    immutablePathHashes: sortHashes(context5.immutablePathHashes),
-    prNumber: context5.prNumber,
-    repository: context5.repository,
-    schemaVersion: 1,
-    ...context5.specPath ? { specPath: context5.specPath } : {}
-  };
-}
-function signImmutableState(payload, signingKey) {
-  return {
-    algorithm: "hmac-sha256",
-    payload,
-    schemaVersion: 1,
-    signature: `hmac-sha256:${createSignature(payload, signingKey)}`
-  };
-}
-function verifyImmutableState(signedState, signingKey, expectation) {
-  if (!signedState || signedState.schemaVersion !== 1 || signedState.algorithm !== "hmac-sha256") {
-    return false;
-  }
-  if (signedState.payload.schemaVersion !== 1 || signedState.payload.prNumber !== expectation.prNumber || signedState.payload.repository !== expectation.repository || signedState.payload.specPath !== expectation.specPath) {
-    return false;
-  }
-  if (!signedState.signature.startsWith("hmac-sha256:")) {
-    return false;
-  }
-  const actual = Buffer.from(signedState.signature.slice("hmac-sha256:".length), "hex");
-  const expected = Buffer.from(createSignature(signedState.payload, signingKey), "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-function resolveTrustedImmutableBaseline(document2, signingKey, expectation, signedStateOverride) {
-  const signedState = signedStateOverride || document2?.immutableState;
-  const hashes = signedState?.payload.immutablePathHashes || document2?.immutablePathHashes || [];
-  if (hashes.length === 0) {
-    return { hashes: [], ok: true };
-  }
-  if (!signingKey) {
-    return { hashes, ok: true };
-  }
-  if (!verifyImmutableState(signedState, signingKey, expectation)) {
-    return {
-      hashes,
-      message: IMMUTABLE_STATE_TAMPERED_MESSAGE,
-      ok: false
-    };
-  }
-  return {
-    hashes: signedState.payload.immutablePathHashes,
-    ok: true,
-    signedState
-  };
-}
-function canonicalize(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalize).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value).filter(([, child]) => child !== void 0).sort(([left], [right]) => left.localeCompare(right));
-    return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${canonicalize(child)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-function createSignature(payload, signingKey) {
-  return createHmac4("sha256", signingKey).update(canonicalize(payload)).digest("hex");
-}
-function sortHashes(hashes) {
-  return hashes.map((hash) => ({ path: hash.path, sha256: hash.sha256 })).sort((left, right) => left.path.localeCompare(right.path));
 }
 
 // src/github/repo-mutation.ts
@@ -106925,14 +107037,14 @@ function sanitizeLogExcerpt(value, mask, maxLength = 4e3) {
 
 // src/github/repo-mutation.ts
 function execFile(command, args) {
-  return new Promise((resolve3) => {
+  return new Promise((resolve7) => {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
     child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
     child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
     child.on("close", (code) => {
-      resolve3({
+      resolve7({
         exitCode: code || 0,
         stdout: Buffer.concat(stdout).toString("utf8"),
         stderr: Buffer.concat(stderr).toString("utf8")
@@ -106988,6 +107100,1003 @@ async function commitConfigWriteback(options) {
     await execFile("git", ["remote", "set-url", "origin", originalRemote]);
   }
   return { commitSha, pushed: true };
+}
+
+// src/preview-assets.ts
+function createAssetNames(prNumber, projectName) {
+  return {
+    collectionName: `[TDD PR-${prNumber}] [Contract] ${projectName}`,
+    specName: `[TDD PR-${prNumber}] ${projectName}`
+  };
+}
+async function resolveTddWorkspace(options) {
+  const configuredId = options.config.workspace.id;
+  if (configuredId) {
+    info(`Using configured TDD workspace: ${configuredId}`);
+    return { workspaceId: configuredId };
+  }
+  const matches = await options.postman.findWorkspacesByName(options.config.workspace.name);
+  if (matches.length > 1) {
+    throw new Error(
+      `Multiple Postman workspaces named "${options.config.workspace.name}" exist. Set tdd.workspace.id explicitly.`
+    );
+  }
+  const workspaceId = matches[0]?.id || (await options.postman.createWorkspace(
+    options.config.workspace.name,
+    `Shared TDD preview workspace for ${options.config.projectName}`,
+    parseWorkspaceTeamId(options.inputs.workspaceTeamId)
+  )).id;
+  if (options.inputs.configWriteMode === "none") {
+    warning(`Resolved TDD workspace ${workspaceId}, but config-write-mode=none so tdd.workspace.id was not persisted.`);
+    return { workspaceId };
+  }
+  const patch = patchWorkspaceId(options.config.configPath, workspaceId);
+  if (!patch.changed) {
+    return { workspaceId };
+  }
+  const result = await commitConfigWriteback({
+    committerEmail: options.inputs.committerEmail,
+    committerName: options.inputs.committerName,
+    configPath: options.config.configPath,
+    githubToken: options.inputs.githubToken,
+    mode: options.inputs.configWriteMode,
+    repository: options.repository
+  });
+  return { configCommitSha: result.commitSha, workspaceId };
+}
+async function upsertPreviewAssets(options) {
+  const specContent = readFileSync4(resolveWorkspacePath(options.config.specPath), "utf8");
+  const document2 = parseOpenApiDocument(specContent);
+  const contractIndex = buildContractIndex(document2);
+  const specId = await upsertSpec({
+    content: specContent,
+    name: options.assetNames.specName,
+    openapiVersion: contractIndex.openapiVersion,
+    postman: options.postman,
+    specId: options.state.specId,
+    workspaceId: options.state.workspaceId || ""
+  });
+  const tempCollectionId = await options.postman.generateCollection(
+    specId,
+    options.config.projectName,
+    `[TDD PR-${options.state.prNumber}] [Contract]`
+  );
+  const tempCollection = await options.postman.getCollection(tempCollectionId);
+  if (!tempCollection || typeof tempCollection !== "object") {
+    throw new Error(`Generated TDD collection ${tempCollectionId} could not be fetched`);
+  }
+  const planned = instrumentContractCollection(tempCollection, contractIndex);
+  for (const warning2 of planned.warnings) {
+    warning(warning2);
+  }
+  let collectionId = options.state.collectionId || "";
+  if (collectionId) {
+    try {
+      await options.postman.updateCollection(collectionId, planned.collection);
+      await options.postman.deleteCollection(tempCollectionId);
+    } catch {
+      warning(`Existing PR TDD collection ${collectionId} could not be updated; adopting generated collection ${tempCollectionId}`);
+      collectionId = tempCollectionId;
+      await options.postman.updateCollection(collectionId, planned.collection);
+    }
+  } else {
+    collectionId = tempCollectionId;
+    await options.postman.updateCollection(collectionId, planned.collection);
+  }
+  return { collectionId, specId };
+}
+function parseWorkspaceTeamId(value) {
+  if (!value) return void 0;
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    throw new Error(`workspace-team-id must be numeric, got: ${value}`);
+  }
+  return parsed;
+}
+async function upsertSpec(options) {
+  if (options.specId) {
+    try {
+      await options.postman.updateSpec(options.specId, options.content);
+      return options.specId;
+    } catch {
+      warning(`Existing PR TDD spec ${options.specId} could not be updated; creating a new spec.`);
+    }
+  }
+  return options.postman.uploadSpec(options.workspaceId, options.name, options.content, options.openapiVersion);
+}
+
+// src/runner.ts
+import { spawn as spawn2 } from "node:child_process";
+var RingLog = class {
+  constructor(maxLength = 12e3) {
+    this.maxLength = maxLength;
+  }
+  maxLength;
+  value = "";
+  append(chunk) {
+    this.value += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk || "");
+    if (this.value.length > this.maxLength) {
+      this.value = this.value.slice(this.value.length - this.maxLength);
+    }
+  }
+  text() {
+    return this.value;
+  }
+};
+function startBackgroundCommand(command, options) {
+  const logs = new RingLog();
+  const child = spawn2(command, {
+    detached: process.platform !== "win32",
+    env: { ...process.env, ...options.env || {} },
+    shell: true,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  child.stdout?.on("data", (chunk) => logs.append(chunk));
+  child.stderr?.on("data", (chunk) => logs.append(chunk));
+  const exit = new Promise((resolve7) => {
+    child.on("exit", (code, signal) => resolve7({ code, signal }));
+  });
+  return {
+    exit,
+    kill() {
+      if (child.exitCode !== null) return;
+      try {
+        if (process.platform !== "win32" && child.pid) {
+          process.kill(-child.pid, "SIGTERM");
+        } else {
+          child.kill("SIGTERM");
+        }
+      } catch {
+      }
+    },
+    logs: () => sanitizeLogExcerpt(logs.text(), options.mask),
+    process: child
+  };
+}
+function runCommand(command, options) {
+  return new Promise((resolve7) => {
+    const child = spawn2(command, {
+      env: { ...process.env, ...options.env || {} },
+      shell: true,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const stdout = [];
+    const stderr = [];
+    child.stdout?.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
+    child.stderr?.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+    child.on("close", (code) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      resolve7({
+        exitCode: code || 0,
+        logExcerpt: sanitizeLogExcerpt(`${out}
+${err}`, options.mask),
+        stdout: options.mask(out),
+        stderr: options.mask(err)
+      });
+    });
+  });
+}
+async function ensurePostmanCli(apiKey, options) {
+  const which2 = await runCommand("command -v postman", { mask: options.mask });
+  if (which2.exitCode !== 0) {
+    const install = await runCommand('curl -fsSL "$POSTMAN_CLI_INSTALL_URL" | sh', {
+      env: { POSTMAN_CLI_INSTALL_URL: options.cliInstallUrl },
+      mask: options.mask
+    });
+    if (install.exitCode !== 0) {
+      throw new Error(`Failed to install Postman CLI: ${install.logExcerpt}`);
+    }
+  }
+  const regionArg = options.postmanRegion === "eu" ? " --region eu" : "";
+  const login = await runCommand(`postman login --with-api-key "$POSTMAN_API_KEY"${regionArg}`, {
+    env: { POSTMAN_API_KEY: apiKey },
+    mask: options.mask
+  });
+  if (login.exitCode !== 0) {
+    throw new Error(`Postman CLI login failed: ${login.logExcerpt}`);
+  }
+}
+async function waitForHealth(healthUrl, running, timeoutSeconds, mask) {
+  const deadline = Date.now() + timeoutSeconds * 1e3;
+  let lastError = "";
+  while (Date.now() < deadline) {
+    const earlyExit = await Promise.race([
+      running.exit.then((result) => result),
+      new Promise((resolve7) => setTimeout(() => resolve7(void 0), 1e3))
+    ]);
+    if (earlyExit) {
+      return {
+        ok: false,
+        phase: "service_startup",
+        message: `The service start command exited before the health check passed (code=${earlyExit.code ?? "null"}, signal=${earlyExit.signal ?? "none"}).`,
+        logExcerpt: running.logs()
+      };
+    }
+    try {
+      const response = await fetch(healthUrl, { signal: AbortSignal.timeout(5e3) });
+      if (response.ok) {
+        return { ok: true };
+      }
+      lastError = `HTTP ${response.status} ${response.statusText}`;
+    } catch (error2) {
+      lastError = error2 instanceof Error ? error2.message : String(error2);
+    }
+  }
+  return {
+    ok: false,
+    phase: "health_check",
+    message: `The service did not become healthy at ${healthUrl} within ${timeoutSeconds} seconds. Last error: ${mask(lastError)}`,
+    logExcerpt: running.logs()
+  };
+}
+async function runTddCollection(collectionId, baseUrl2, mask) {
+  return runCommand(
+    'postman collection run "$POSTMAN_TDD_COLLECTION_ID" --env-var "baseUrl=$POSTMAN_TDD_BASE_URL"',
+    {
+      env: {
+        POSTMAN_TDD_BASE_URL: baseUrl2,
+        POSTMAN_TDD_COLLECTION_ID: collectionId
+      },
+      mask
+    }
+  );
+}
+
+// src/repair/git.ts
+import { createHash as createHash4 } from "node:crypto";
+import { execFileSync as execFileSync2 } from "node:child_process";
+import { readFileSync as readFileSync5 } from "node:fs";
+import { resolve as resolve4 } from "node:path";
+
+// src/repair/patch.ts
+import { execFileSync } from "node:child_process";
+import { relative, resolve as resolve3, sep as sep3 } from "node:path";
+var ALWAYS_DENY_PATTERNS = [
+  ".env",
+  ".env.*",
+  ".postman-template/**",
+  ".postman-tdd/**",
+  ".github/workflows/**",
+  ".postman/**",
+  "postman/**",
+  "**/.env",
+  "**/.env.*",
+  "**/*.pem",
+  "**/*.key",
+  "**/*secret*",
+  "**/*token*"
+];
+function extractPatchPaths(patch) {
+  const paths = /* @__PURE__ */ new Set();
+  const patterns = [
+    /^diff --git a\/(.+?) b\/(.+)$/gm,
+    /^--- (?:a\/)?(.+)$/gm,
+    /^\+\+\+ (?:b\/)?(.+)$/gm,
+    /^rename from (.+)$/gm,
+    /^rename to (.+)$/gm,
+    /^new file mode .+\n--- \/dev\/null\n\+\+\+ b\/(.+)$/gm,
+    /^deleted file mode .+\n--- a\/(.+)\n\+\+\+ \/dev\/null$/gm
+  ];
+  for (const pattern of patterns) {
+    for (const match of patch.matchAll(pattern)) {
+      for (const captured of match.slice(1)) {
+        if (captured && captured !== "/dev/null") {
+          paths.add(normalizeRepoPath(captured));
+        }
+      }
+    }
+  }
+  return [...paths].filter(Boolean).sort();
+}
+function validatePatch(patch, policy) {
+  const trimmed = patch.trim();
+  if (!trimmed || !trimmed.includes("diff --git")) {
+    throw new Error("Repair patch must be a non-empty unified git diff.");
+  }
+  const touchedPaths = extractPatchPaths(patch);
+  if (touchedPaths.length === 0) {
+    throw new Error("Repair patch did not include any touched paths.");
+  }
+  for (const path4 of touchedPaths) {
+    if (isPathDenied(path4, policy)) {
+      throw new Error(`Patch touches non-writable path: ${path4}`);
+    }
+    if (!matchesAny(path4, policy.allowedWritePaths)) {
+      throw new Error(`Patch path is outside tdd.repair.allowedWritePaths: ${path4}`);
+    }
+  }
+  gitApply(["--check", "--whitespace=nowarn"], patch, policy.repoRoot);
+  return { touchedPaths };
+}
+function applyValidatedPatch(patch, policy) {
+  const result = validatePatch(patch, policy);
+  gitApply(["--whitespace=nowarn"], patch, policy.repoRoot);
+  return result;
+}
+function matchesAny(path4, patterns) {
+  return patterns.some((pattern) => globMatch(normalizeRepoPath(path4), normalizeRepoPath(pattern)));
+}
+function isPathDenied(path4, policy) {
+  const normalized = normalizeRepoPath(path4);
+  return matchesAny(normalized, [
+    ...policy.immutablePaths,
+    ...ALWAYS_DENY_PATTERNS
+  ]);
+}
+function normalizeRepoPath(value) {
+  return String(value || "").trim().replace(/^["']|["']$/g, "").replace(/\\/g, "/").replace(/^[ab]\//, "").replace(/^\.\//, "").replace(/\/+$/g, "");
+}
+function repoRelativePath(repoRoot, path4) {
+  const absolute = resolve3(repoRoot, path4);
+  const relativePath = relative(repoRoot, absolute).split(sep3).join("/");
+  if (relativePath.startsWith("..") || relativePath === "") {
+    throw new Error(`Path is outside repository: ${path4}`);
+  }
+  return normalizeRepoPath(relativePath);
+}
+function gitApply(args, patch, cwd) {
+  try {
+    execFileSync("git", ["apply", ...args, "-"], {
+      cwd,
+      input: patch,
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+  } catch (error2) {
+    const stderr = Buffer.isBuffer(error2.stderr) ? error2.stderr.toString("utf8") : error2 instanceof Error ? error2.message : String(error2);
+    throw new Error(`git apply failed: ${stderr.trim() || "unknown error"}`);
+  }
+}
+function globMatch(path4, pattern) {
+  const regex = new RegExp(`^${escapeGlob(pattern)}$`);
+  return regex.test(path4);
+}
+function escapeGlob(pattern) {
+  let output = "";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    const next = pattern[index + 1];
+    if (char === "*" && next === "*") {
+      output += ".*";
+      index += 1;
+    } else if (char === "*") {
+      output += "[^/]*";
+    } else if (char === "?") {
+      output += "[^/]";
+    } else {
+      output += String(char).replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+  return output;
+}
+
+// src/repair/git.ts
+function hashPaths(repoRoot, paths) {
+  return paths.map((path4) => {
+    const normalized = repoRelativePath(repoRoot, path4);
+    return {
+      path: normalized,
+      sha256: createHash4("sha256").update(readFileSync5(resolve4(repoRoot, normalized))).digest("hex")
+    };
+  });
+}
+function verifyPathHashes(repoRoot, hashes) {
+  for (const expected of hashes) {
+    const normalized = repoRelativePath(repoRoot, expected.path);
+    const actual = createHash4("sha256").update(readFileSync5(resolve4(repoRoot, normalized))).digest("hex");
+    if (actual !== expected.sha256) {
+      throw new Error(`Immutable path changed during repair: ${normalized}`);
+    }
+  }
+}
+function changedPaths(repoRoot) {
+  const output = execGit(repoRoot, ["diff", "--name-only"]);
+  const untracked = execGit(repoRoot, ["ls-files", "--others", "--exclude-standard"]);
+  return [...new Set([
+    ...output.split(/\r?\n/),
+    ...untracked.split(/\r?\n/)
+  ].map(normalizeRepoPath).filter(Boolean))].sort();
+}
+function verifyChangedPaths(repoRoot, policy) {
+  const paths = changedPaths(repoRoot);
+  for (const path4 of paths) {
+    if (isPathDenied(path4, policy)) {
+      throw new Error(`Repair diff contains non-writable path: ${path4}`);
+    }
+    if (!matchesAny(path4, policy.allowedWritePaths)) {
+      throw new Error(`Repair diff contains path outside tdd.repair.allowedWritePaths: ${path4}`);
+    }
+  }
+  return paths;
+}
+function commitAndPushRepair(options) {
+  const paths = verifyChangedPaths(options.repoRoot, options.patchPolicy);
+  if (paths.length === 0) {
+    throw new Error("No implementation changes to commit.");
+  }
+  execGit(options.repoRoot, ["config", "user.name", options.committerName]);
+  execGit(options.repoRoot, ["config", "user.email", options.committerEmail]);
+  execGit(options.repoRoot, ["add", "--", ...paths]);
+  execGit(options.repoRoot, ["commit", "-m", options.commitMessage, "--", ...paths]);
+  const commitSha = execGit(options.repoRoot, ["rev-parse", "HEAD"]).trim();
+  const remote = `https://x-access-token:${encodeURIComponent(options.githubToken)}@github.com/${options.repository}.git`;
+  execGit(options.repoRoot, ["push", remote, `HEAD:${options.branch}`]);
+  return commitSha;
+}
+function execGit(cwd, args) {
+  try {
+    return execFileSync2("git", args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  } catch (error2) {
+    const stderr = Buffer.isBuffer(error2.stderr) ? error2.stderr.toString("utf8") : error2 instanceof Error ? error2.message : String(error2);
+    throw new Error(`git ${redactGitArgs(args).join(" ")} failed: ${redactSecret(stderr.trim()) || "unknown error"}`);
+  }
+}
+function redactGitArgs(args) {
+  return args.map(redactSecret);
+}
+function redactSecret(value) {
+  return value.replace(/x-access-token:[^@]+@/g, "x-access-token:***@");
+}
+
+// src/repair/tools.ts
+import { execFileSync as execFileSync3 } from "node:child_process";
+import { existsSync as existsSync6, readFileSync as readFileSync6, statSync as statSync2 } from "node:fs";
+import { resolve as resolve5 } from "node:path";
+var MAX_FILE_BYTES = 12e4;
+var MAX_SEARCH_RESULTS = 25;
+function createRepairTools(context5) {
+  void context5;
+  return [
+    {
+      type: "function",
+      name: "list_files",
+      description: "List repository files that are readable to the implementation repair agent.",
+      strict: true,
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          prefix: { type: "string" }
+        },
+        required: ["prefix"]
+      }
+    },
+    {
+      type: "function",
+      name: "read_file",
+      description: "Read one allowed implementation file.",
+      strict: true,
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string" }
+        },
+        required: ["path"]
+      }
+    },
+    {
+      type: "function",
+      name: "search_files",
+      description: "Search allowed implementation files for a fixed string query.",
+      strict: true,
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          query: { type: "string" }
+        },
+        required: ["query"]
+      }
+    },
+    {
+      type: "function",
+      name: "propose_patch",
+      description: "Propose and apply a unified git diff that changes implementation files only.",
+      strict: true,
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          patch: { type: "string" },
+          summary: { type: "string" }
+        },
+        required: ["patch", "summary"]
+      }
+    },
+    {
+      type: "function",
+      name: "finish",
+      description: "Report that the repair is blocked or ready without proposing more changes.",
+      strict: true,
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          message: { type: "string" },
+          status: { enum: ["blocked", "ready"], type: "string" }
+        },
+        required: ["status", "message"]
+      }
+    }
+  ];
+}
+function executeRepairTool(name, args, context5) {
+  try {
+    if (name === "list_files") {
+      const prefix2 = String(args.prefix || "");
+      return { paths: listAllowedFiles(context5, prefix2).slice(0, 200) };
+    }
+    if (name === "read_file") {
+      const path4 = assertReadablePath(context5, String(args.path || ""));
+      const absolutePath = resolve5(context5.repoRoot, path4);
+      const stats = statSync2(absolutePath);
+      if (stats.size > MAX_FILE_BYTES) {
+        throw new Error(`File is too large to read through repair tool: ${path4}`);
+      }
+      return { content: readFileSync6(absolutePath, "utf8") };
+    }
+    if (name === "search_files") {
+      const query = String(args.query || "");
+      if (!query) throw new Error("search_files query is required");
+      return { matches: searchAllowedFiles(context5, query) };
+    }
+    if (name === "propose_patch") {
+      const patch = String(args.patch || "");
+      const result = applyValidatedPatch(patch, context5.patchPolicy);
+      return {
+        appliedPatch: true,
+        summary: String(args.summary || "").trim(),
+        touchedPaths: result.touchedPaths
+      };
+    }
+    if (name === "finish") {
+      return {
+        summary: `${String(args.status || "")}: ${String(args.message || "")}`.trim()
+      };
+    }
+    return { error: `Unknown repair tool: ${name}` };
+  } catch (error2) {
+    return { error: error2 instanceof Error ? error2.message : String(error2) };
+  }
+}
+function listAllowedFiles(context5, prefix2 = "") {
+  const output = execFileSync3("git", ["ls-files"], {
+    cwd: context5.repoRoot,
+    encoding: "utf8"
+  });
+  const normalizedPrefix = prefix2.trim().replace(/^\.\//, "");
+  return output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter((path4) => !normalizedPrefix || path4.startsWith(normalizedPrefix)).filter((path4) => matchesAny(path4, context5.allowedReadPaths)).filter((path4) => !isPathDenied(path4, context5.patchPolicy)).sort();
+}
+function searchAllowedFiles(context5, query) {
+  const results = [];
+  for (const path4 of listAllowedFiles(context5)) {
+    const absolutePath = resolve5(context5.repoRoot, path4);
+    if (!existsSync6(absolutePath) || statSync2(absolutePath).size > MAX_FILE_BYTES) continue;
+    const lines = readFileSync6(absolutePath, "utf8").split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+      const text = lines[index] || "";
+      if (text.includes(query)) {
+        results.push({ line: index + 1, path: path4, text: text.trim().slice(0, 300) });
+        if (results.length >= MAX_SEARCH_RESULTS) return results;
+      }
+    }
+  }
+  return results;
+}
+function assertReadablePath(context5, value) {
+  const path4 = repoRelativePath(context5.repoRoot, value);
+  if (!matchesAny(path4, context5.allowedReadPaths)) {
+    throw new Error(`Path is outside tdd.repair.allowedReadPaths: ${path4}`);
+  }
+  if (isPathDenied(path4, context5.patchPolicy)) {
+    throw new Error(`Path is not readable by the repair agent: ${path4}`);
+  }
+  if (!existsSync6(resolve5(context5.repoRoot, path4))) {
+    throw new Error(`Path does not exist: ${path4}`);
+  }
+  return path4;
+}
+
+// src/repair/openai-responses-provider.ts
+async function runOpenAiRepairTurn(options) {
+  const input = [{
+    content: [{
+      text: buildRepairPrompt(options.failure, options.repairContext),
+      type: "input_text"
+    }],
+    role: "user"
+  }];
+  const tools = createRepairTools(options.repairContext);
+  for (let round = 0; round < (options.maxToolRounds || 12); round += 1) {
+    const response = await createResponse({
+      apiKey: options.apiKey,
+      fetchImpl: options.fetchImpl,
+      input,
+      model: options.model,
+      secretMasker: options.secretMasker,
+      tools
+    });
+    const calls = (Array.isArray(response.output) ? response.output : []).filter((item) => isFunctionCall(item));
+    if (calls.length === 0) {
+      return {
+        status: "no_change",
+        message: extractText(response) || "The repair agent did not call a patch or finish tool."
+      };
+    }
+    for (const call of calls) {
+      const name = String(call.name || "");
+      const args = parseArguments(call.arguments);
+      const result = executeRepairTool(name, args, options.repairContext);
+      input.push(call);
+      input.push({
+        call_id: call.call_id,
+        output: JSON.stringify(result),
+        type: "function_call_output"
+      });
+      if (name === "propose_patch" && result.appliedPatch) {
+        return {
+          status: "changed",
+          summary: result.summary || "Applied implementation repair patch.",
+          touchedPaths: result.touchedPaths || []
+        };
+      }
+      if (name === "finish") {
+        const status = String(args.status || "");
+        const message = String(args.message || result.summary || "").trim();
+        if (status === "blocked") {
+          return { status: "blocked", message: message || "Repair agent reported blocked." };
+        }
+        return { status: "no_change", message: message || "Repair agent reported ready without changes." };
+      }
+    }
+  }
+  return {
+    status: "no_change",
+    message: "Repair agent exhausted tool-call rounds without proposing a patch."
+  };
+}
+async function createResponse(options) {
+  const fetchImpl = options.fetchImpl || fetch;
+  const response = await fetchImpl("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${options.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      input: options.input,
+      model: options.model,
+      tool_choice: "auto",
+      tools: options.tools
+    })
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`OpenAI Responses API failed (${response.status}): ${options.secretMasker(text).slice(0, 1e3)}`);
+  }
+  return JSON.parse(text);
+}
+function buildRepairPrompt(failure, context5) {
+  return [
+    "You are repairing an API implementation so it passes a Postman TDD contract collection.",
+    "Fix implementation code only.",
+    "Do not modify, regenerate, or weaken the OpenAPI spec or generated assertions.",
+    `Allowed write paths: ${context5.patchPolicy.allowedWritePaths.join(", ")}`,
+    `Allowed read paths: ${context5.allowedReadPaths.join(", ")}`,
+    `Immutable paths: ${context5.patchPolicy.immutablePaths.join(", ") || "(none)"}`,
+    "Use read_file, list_files, and search_files to inspect implementation files.",
+    "Use propose_patch with a unified git diff when you have a code-only fix.",
+    "Use finish with status=blocked if API intent is unclear, infrastructure is missing, or no implementation-only fix is reasonable.",
+    "",
+    "Failure context:",
+    JSON.stringify({
+      baseUrl: failure.baseUrl,
+      collectionName: failure.collectionName,
+      failures: failure.failures,
+      phase: failure.phase,
+      successCriteria: failure.successCriteria
+    }, null, 2)
+  ].join("\n");
+}
+function isFunctionCall(item) {
+  return Boolean(item && typeof item === "object" && item.type === "function_call");
+}
+function parseArguments(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  try {
+    return JSON.parse(String(value || "{}"));
+  } catch {
+    return {};
+  }
+}
+function extractText(response) {
+  const output = Array.isArray(response.output) ? response.output : [];
+  const chunks = [];
+  for (const item of output) {
+    const record = item && typeof item === "object" ? item : void 0;
+    const content = Array.isArray(record?.content) ? record.content : [];
+    for (const entry of content) {
+      const entryRecord = entry && typeof entry === "object" ? entry : void 0;
+      if (typeof entryRecord?.text === "string") chunks.push(entryRecord.text);
+    }
+  }
+  return chunks.join("\n").trim();
+}
+
+// src/repair/orchestrator.ts
+var REPAIRABLE_PHASES = /* @__PURE__ */ new Set(["collection_run", "service_startup", "health_check"]);
+async function runRepairMode(options) {
+  const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+  const config = loadOnboardingConfig({
+    configPath: options.inputs.onboardingConfigPath,
+    projectNameOverride: options.inputs.projectName,
+    specPathOverride: options.inputs.specPath
+  });
+  if (!config.tddEnabled || !config.repair.enabled) {
+    await publishRepair(options.github, options.pr.number, {
+      attempts: 0,
+      blockedReason: !config.tddEnabled ? "tdd_disabled" : "repair_disabled",
+      message: !config.tddEnabled ? "TDD preview is disabled." : "TDD repair is disabled.",
+      prNumber: options.pr.number,
+      schemaVersion: 1,
+      status: "skipped"
+    });
+    setRepairOutputs({ attempts: 0, status: "skipped" });
+    return;
+  }
+  if (!options.inputs.openaiApiKey) {
+    throw new Error("openai-api-key is required when mode=repair");
+  }
+  if (options.inputs.repairProvider !== "openai-responses" || config.repair.provider !== "openai-responses") {
+    throw new Error("mode=repair v1 only supports repair-provider=openai-responses");
+  }
+  const prDetails = await options.github.getPullRequest(options.pr.number);
+  if (prDetails.isFork) {
+    await block(options, "fork_pr", "Postman TDD repair is disabled for fork pull requests in v1.", 0);
+    return;
+  }
+  const sticky = await options.github.findStickyComment(options.pr.number);
+  const failure = sticky?.body ? parseFailureDocument(sticky.body) : void 0;
+  if (!failure) {
+    await block(options, "missing_failure_context", "No Postman TDD Preview failure JSON was found on the sticky PR comment.", 0);
+    return;
+  }
+  if (failure.commit && failure.commit !== prDetails.headSha) {
+    await block(options, "stale_failure", `Latest failure JSON commit ${failure.commit} does not match PR head ${prDetails.headSha}.`, 0);
+    return;
+  }
+  if (!REPAIRABLE_PHASES.has(failure.phase)) {
+    await block(options, "unsupported_failure_phase", `Repair mode does not attempt phase ${failure.phase}.`, 0);
+    return;
+  }
+  const assetNames = createAssetNames(options.pr.number, config.projectName);
+  let state3 = {
+    prNumber: options.pr.number,
+    schemaVersion: 1,
+    ...sticky?.assetState?.prNumber === options.pr.number ? sticky.assetState : {}
+  };
+  const workspace = await resolveTddWorkspace({
+    config,
+    inputs: options.inputs,
+    postman: options.postman,
+    repository: options.pr.repository
+  });
+  state3.workspaceId = workspace.workspaceId;
+  const assets = await upsertPreviewAssets({
+    assetNames,
+    config,
+    postman: options.postman,
+    state: state3
+  });
+  state3 = {
+    ...state3,
+    collectionId: assets.collectionId,
+    specId: assets.specId,
+    workspaceId: workspace.workspaceId
+  };
+  await ensurePostmanCli(options.inputs.postmanApiKey, {
+    cliInstallUrl: options.endpointProfile.cliInstallUrl,
+    mask: options.mask,
+    postmanRegion: options.inputs.postmanRegion
+  });
+  const immutablePaths = [...new Set([
+    config.specPath,
+    ...failure.immutablePaths
+  ].filter(Boolean))];
+  const immutableHashes = hashPaths(repoRoot, immutablePaths);
+  const patchPolicy = {
+    allowedWritePaths: config.repair.allowedWritePaths,
+    immutablePaths,
+    repoRoot
+  };
+  let currentFailure = failure;
+  let attempts = 0;
+  const maxAttempts = Math.min(options.inputs.repairMaxAttempts, config.repair.maxAttempts);
+  while (attempts < maxAttempts) {
+    const repair = await runOpenAiRepairTurn({
+      apiKey: options.inputs.openaiApiKey,
+      failure: currentFailure,
+      model: options.inputs.repairModel,
+      repairContext: {
+        allowedReadPaths: config.repair.allowedReadPaths,
+        patchPolicy,
+        repoRoot
+      },
+      secretMasker: options.mask
+    });
+    if (repair.status === "blocked") {
+      await block(options, "agent_blocked", repair.message, attempts);
+      return;
+    }
+    if (repair.status === "no_change") {
+      await block(options, "agent_no_change", repair.message, attempts);
+      return;
+    }
+    attempts += 1;
+    info(`Repair attempt ${attempts}: ${repair.summary}`);
+    if (config.repair.localTestCommand) {
+      const localTest = await runCommand(config.repair.localTestCommand, { mask: options.mask });
+      if (localTest.exitCode !== 0) {
+        currentFailure = createFailureDocument({
+          baseUrl: config.runtime.baseUrl,
+          collectionName: assetNames.collectionName,
+          commit: prDetails.headSha,
+          failures: [{
+            assertion: "local test command",
+            logExcerpt: localTest.logExcerpt,
+            message: `Local test command failed with exit code ${localTest.exitCode}`
+          }],
+          immutablePathHashes: immutableHashes,
+          immutablePaths,
+          message: `Local test command failed with exit code ${localTest.exitCode}`,
+          phase: "collection_run",
+          specPath: config.specPath
+        });
+        continue;
+      }
+    }
+    const result = await runOracle({
+      collectionId: state3.collectionId || "",
+      config,
+      immutableHashes,
+      immutablePaths,
+      mask: options.mask,
+      prHeadSha: prDetails.headSha,
+      assetNames
+    });
+    if (result.ok) {
+      verifyPathHashes(repoRoot, immutableHashes);
+      verifyChangedPaths(repoRoot, patchPolicy);
+      const token = options.inputs.repairGithubToken || options.inputs.githubToken;
+      if (!options.inputs.repairGithubToken) {
+        warning("repair-github-token was not set. Commits pushed with GITHUB_TOKEN may not trigger follow-up workflows.");
+      }
+      const commitSha = commitAndPushRepair({
+        branch: prDetails.headBranch,
+        commitMessage: options.inputs.repairCommitMessage,
+        committerEmail: options.inputs.committerEmail,
+        committerName: options.inputs.committerName,
+        githubToken: token,
+        patchPolicy,
+        repoRoot,
+        repository: options.pr.repository
+      });
+      const summary2 = await publishRepair(options.github, options.pr.number, {
+        attempts,
+        commitSha,
+        message: "Postman TDD repair produced an implementation-only commit after the collection passed in the worker.",
+        prNumber: options.pr.number,
+        schemaVersion: 1,
+        status: "repaired"
+      });
+      setRepairOutputs({
+        attempts,
+        commitSha,
+        status: "repaired",
+        summaryPath: summary2
+      });
+      return;
+    }
+    currentFailure = result.failure;
+  }
+  await block(options, "budget_exhausted", `Repair budget exhausted after ${attempts} attempt(s).`, attempts);
+}
+async function runOracle(options) {
+  const running = startBackgroundCommand(options.config.runtime.startCommand, { mask: options.mask });
+  try {
+    const health = await waitForHealth(
+      options.config.runtime.healthUrl,
+      running,
+      options.config.runtime.timeoutSeconds,
+      options.mask
+    );
+    if (!health.ok) {
+      return {
+        ok: false,
+        failure: createFailureDocument({
+          baseUrl: options.config.runtime.baseUrl,
+          collectionName: options.assetNames.collectionName,
+          commit: options.prHeadSha,
+          failures: [{
+            logExcerpt: health.logExcerpt,
+            message: health.message
+          }],
+          healthUrl: options.config.runtime.healthUrl,
+          immutablePathHashes: options.immutableHashes,
+          immutablePaths: options.immutablePaths,
+          message: health.message,
+          phase: health.phase,
+          specPath: options.config.specPath,
+          startCommand: options.config.runtime.startCommand,
+          timeoutSeconds: options.config.runtime.timeoutSeconds
+        })
+      };
+    }
+    const collectionRun = await runTddCollection(options.collectionId, options.config.runtime.baseUrl, options.mask);
+    if (collectionRun.exitCode === 0) {
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      failure: createFailureDocument({
+        baseUrl: options.config.runtime.baseUrl,
+        collectionName: options.assetNames.collectionName,
+        commit: options.prHeadSha,
+        failures: extractCollectionFailures(collectionRun.logExcerpt),
+        immutablePathHashes: options.immutableHashes,
+        immutablePaths: options.immutablePaths,
+        message: `Postman TDD collection failed with exit code ${collectionRun.exitCode}`,
+        phase: "collection_run",
+        specPath: options.config.specPath
+      })
+    };
+  } finally {
+    if (options.config.runtime.stopCommand) {
+      const stop = await runCommand(options.config.runtime.stopCommand, { mask: options.mask });
+      if (stop.exitCode !== 0) {
+        warning(`tdd.stopCommand failed: ${stop.logExcerpt}`);
+      }
+    } else {
+      running.kill();
+    }
+  }
+}
+async function block(options, reason, message, attempts) {
+  const summaryPath = await publishRepair(options.github, options.pr.number, {
+    attempts,
+    blockedReason: reason,
+    message,
+    prNumber: options.pr.number,
+    schemaVersion: 1,
+    status: "blocked"
+  });
+  setRepairOutputs({
+    attempts,
+    blockedReason: reason,
+    status: "blocked",
+    summaryPath
+  });
+}
+async function publishRepair(github, prNumber, summary2) {
+  const summaryPath = writeRepairSummary(summary2);
+  await github.upsertRepairComment(prNumber, summary2);
+  return resolve6(summaryPath);
+}
+function setRepairOutputs(options) {
+  setOutput("repair-status", options.status);
+  setOutput("repair-attempts", String(options.attempts));
+  setOutput("repair-blocked-reason", options.blockedReason || "");
+  setOutput("repair-commit-sha", options.commitSha || "");
+  setOutput("repair-summary-path", options.summaryPath || "");
+  setOutput("status", options.status === "repaired" ? "passed" : options.status === "skipped" ? "skipped" : "failed");
+  setOutput("failure-phase", "none");
 }
 
 // src/postman/base-urls.ts
@@ -107198,8 +108307,8 @@ var PostmanClient = class {
       throw new Error(`Collection generation did not return a collection ID or task URL for ${name}`);
     }
     for (let attempt = 0; attempt < 45; attempt += 1) {
-      await new Promise((resolve3) => {
-        setTimeout(resolve3, 2e3);
+      await new Promise((resolve7) => {
+        setTimeout(resolve7, 2e3);
       });
       const task = await this.request(taskUrl);
       const status = String(task?.status || asRecord3(task?.task)?.status || "").toLowerCase();
@@ -107245,152 +108354,18 @@ function extractCollectionId(data) {
   ).trim() || void 0;
 }
 
-// src/runner.ts
-import { spawn as spawn2 } from "node:child_process";
-var RingLog = class {
-  constructor(maxLength = 12e3) {
-    this.maxLength = maxLength;
-  }
-  maxLength;
-  value = "";
-  append(chunk) {
-    this.value += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk || "");
-    if (this.value.length > this.maxLength) {
-      this.value = this.value.slice(this.value.length - this.maxLength);
-    }
-  }
-  text() {
-    return this.value;
-  }
-};
-function startBackgroundCommand(command, options) {
-  const logs = new RingLog();
-  const child = spawn2(command, {
-    detached: process.platform !== "win32",
-    env: { ...process.env, ...options.env || {} },
-    shell: true,
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  child.stdout?.on("data", (chunk) => logs.append(chunk));
-  child.stderr?.on("data", (chunk) => logs.append(chunk));
-  const exit = new Promise((resolve3) => {
-    child.on("exit", (code, signal) => resolve3({ code, signal }));
-  });
-  return {
-    exit,
-    kill() {
-      if (child.exitCode !== null) return;
-      try {
-        if (process.platform !== "win32" && child.pid) {
-          process.kill(-child.pid, "SIGTERM");
-        } else {
-          child.kill("SIGTERM");
-        }
-      } catch {
-      }
-    },
-    logs: () => sanitizeLogExcerpt(logs.text(), options.mask),
-    process: child
-  };
-}
-function runCommand(command, options) {
-  return new Promise((resolve3) => {
-    const child = spawn2(command, {
-      env: { ...process.env, ...options.env || {} },
-      shell: true,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    const stdout = [];
-    const stderr = [];
-    child.stdout?.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
-    child.stderr?.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
-    child.on("close", (code) => {
-      const out = Buffer.concat(stdout).toString("utf8");
-      const err = Buffer.concat(stderr).toString("utf8");
-      resolve3({
-        exitCode: code || 0,
-        logExcerpt: sanitizeLogExcerpt(`${out}
-${err}`, options.mask),
-        stdout: options.mask(out),
-        stderr: options.mask(err)
-      });
-    });
-  });
-}
-async function ensurePostmanCli(apiKey, options) {
-  const which2 = await runCommand("command -v postman", { mask: options.mask });
-  if (which2.exitCode !== 0) {
-    const install = await runCommand('curl -fsSL "$POSTMAN_CLI_INSTALL_URL" | sh', {
-      env: { POSTMAN_CLI_INSTALL_URL: options.cliInstallUrl },
-      mask: options.mask
-    });
-    if (install.exitCode !== 0) {
-      throw new Error(`Failed to install Postman CLI: ${install.logExcerpt}`);
-    }
-  }
-  const regionArg = options.postmanRegion === "eu" ? " --region eu" : "";
-  const login = await runCommand(`postman login --with-api-key "$POSTMAN_API_KEY"${regionArg}`, {
-    env: { POSTMAN_API_KEY: apiKey },
-    mask: options.mask
-  });
-  if (login.exitCode !== 0) {
-    throw new Error(`Postman CLI login failed: ${login.logExcerpt}`);
-  }
-}
-async function waitForHealth(healthUrl, running, timeoutSeconds, mask) {
-  const deadline = Date.now() + timeoutSeconds * 1e3;
-  let lastError = "";
-  while (Date.now() < deadline) {
-    const earlyExit = await Promise.race([
-      running.exit.then((result) => result),
-      new Promise((resolve3) => setTimeout(() => resolve3(void 0), 1e3))
-    ]);
-    if (earlyExit) {
-      return {
-        ok: false,
-        phase: "service_startup",
-        message: `The service start command exited before the health check passed (code=${earlyExit.code ?? "null"}, signal=${earlyExit.signal ?? "none"}).`,
-        logExcerpt: running.logs()
-      };
-    }
-    try {
-      const response = await fetch(healthUrl, { signal: AbortSignal.timeout(5e3) });
-      if (response.ok) {
-        return { ok: true };
-      }
-      lastError = `HTTP ${response.status} ${response.statusText}`;
-    } catch (error2) {
-      lastError = error2 instanceof Error ? error2.message : String(error2);
-    }
-  }
-  return {
-    ok: false,
-    phase: "health_check",
-    message: `The service did not become healthy at ${healthUrl} within ${timeoutSeconds} seconds. Last error: ${mask(lastError)}`,
-    logExcerpt: running.logs()
-  };
-}
-async function runTddCollection(collectionId, baseUrl2, mask) {
-  return runCommand(
-    'postman collection run "$POSTMAN_TDD_COLLECTION_ID" --env-var "baseUrl=$POSTMAN_TDD_BASE_URL"',
-    {
-      env: {
-        POSTMAN_TDD_BASE_URL: baseUrl2,
-        POSTMAN_TDD_COLLECTION_ID: collectionId
-      },
-      mask
-    }
-  );
-}
-
 // src/index.ts
 var AGENT_CONTEXT_DIR = ".postman-tdd";
 var AGENT_CONTEXT_ARTIFACT_NAME = "postman-tdd-agent-context";
 function readActionInputs() {
   const prNumberInput = getInput("pr-number");
   const modeRaw = getInput("mode") || "run";
-  if (modeRaw !== "run" && modeRaw !== "cleanup") {
-    throw new Error(`Unsupported mode "${modeRaw}". Expected run or cleanup`);
+  if (modeRaw !== "run" && modeRaw !== "cleanup" && modeRaw !== "repair") {
+    throw new Error(`Unsupported mode "${modeRaw}". Expected run, cleanup, or repair`);
+  }
+  const repairMaxAttempts = Number(getInput("repair-max-attempts") || "3");
+  if (!Number.isFinite(repairMaxAttempts) || repairMaxAttempts <= 0) {
+    throw new Error(`repair-max-attempts must be a positive number, got: ${getInput("repair-max-attempts")}`);
   }
   return {
     committerEmail: getInput("committer-email") || "support@postman.com",
@@ -107400,12 +108375,18 @@ function readActionInputs() {
     immutableStateSigningKey: getInput("immutable-state-signing-key") || void 0,
     mode: modeRaw,
     onboardingConfigPath: getInput("onboarding-config-path") || ".postman-template/onboarding.yml",
+    openaiApiKey: getInput("openai-api-key") || void 0,
     postmanAccessToken: getInput("postman-access-token") || void 0,
     postmanApiKey: getInput("postman-api-key", { required: true }),
     postmanRegion: parsePostmanRegion(getInput("postman-region") || "us"),
     postmanStack: parsePostmanStack(getInput("postman-stack") || "prod"),
     prNumber: prNumberInput ? Number(prNumberInput) : void 0,
     projectName: getInput("project-name") || void 0,
+    repairCommitMessage: getInput("repair-commit-message") || "Postman TDD repair",
+    repairGithubToken: getInput("repair-github-token") || void 0,
+    repairMaxAttempts,
+    repairModel: getInput("repair-model") || "gpt-5.5",
+    repairProvider: validateRepairProvider(getInput("repair-provider") || "openai-responses"),
     specPath: getInput("spec-path") || void 0,
     workspaceTeamId: getInput("workspace-team-id") || void 0
   };
@@ -107416,11 +108397,15 @@ async function runAction(options = {}) {
   setSecret(inputs.githubToken);
   if (inputs.postmanAccessToken) setSecret(inputs.postmanAccessToken);
   if (inputs.immutableStateSigningKey) setSecret(inputs.immutableStateSigningKey);
+  if (inputs.openaiApiKey) setSecret(inputs.openaiApiKey);
+  if (inputs.repairGithubToken) setSecret(inputs.repairGithubToken);
   const mask = createSecretMasker([
     inputs.postmanApiKey,
     inputs.githubToken,
     inputs.postmanAccessToken,
-    inputs.immutableStateSigningKey
+    inputs.immutableStateSigningKey,
+    inputs.openaiApiKey,
+    inputs.repairGithubToken
   ]);
   const endpointProfile = resolvePostmanEndpointProfile(inputs.postmanStack, inputs.postmanRegion);
   const postman = options.postmanClient ?? new PostmanClient({
@@ -107431,6 +108416,17 @@ async function runAction(options = {}) {
   const pr = resolvePrMetadata(inputs.prNumber);
   const github = options.githubClient ?? new GitHubPrClient(inputs.githubToken, pr.repository);
   const artifactClient = options.artifactClient ?? new DefaultArtifactClient();
+  if (inputs.mode === "repair") {
+    await runRepairMode({
+      endpointProfile,
+      github,
+      inputs,
+      mask,
+      postman,
+      pr
+    });
+    return;
+  }
   let prCommentId = "";
   let currentPhase = "config";
   let failurePublished = false;
@@ -107710,107 +108706,6 @@ function setStandardOutputs(paths) {
   setOutput("agent-context-dir", AGENT_CONTEXT_DIR);
   setOutput("agent-task-path", paths.agentTaskPath);
   setOutput("failures-json-path", paths.failuresJsonPath);
-}
-async function resolveTddWorkspace(options) {
-  const configuredId = options.config.workspace.id;
-  if (configuredId) {
-    info(`Using configured TDD workspace: ${configuredId}`);
-    return { workspaceId: configuredId };
-  }
-  const matches = await options.postman.findWorkspacesByName(options.config.workspace.name);
-  if (matches.length > 1) {
-    throw new Error(
-      `Multiple Postman workspaces named "${options.config.workspace.name}" exist. Set tdd.workspace.id explicitly.`
-    );
-  }
-  const workspaceId = matches[0]?.id || (await options.postman.createWorkspace(
-    options.config.workspace.name,
-    `Shared TDD preview workspace for ${options.config.projectName}`,
-    parseWorkspaceTeamId(options.inputs.workspaceTeamId)
-  )).id;
-  if (options.inputs.configWriteMode === "none") {
-    warning(`Resolved TDD workspace ${workspaceId}, but config-write-mode=none so tdd.workspace.id was not persisted.`);
-    return { workspaceId };
-  }
-  const patch = patchWorkspaceId(options.config.configPath, workspaceId);
-  if (!patch.changed) {
-    return { workspaceId };
-  }
-  const result = await commitConfigWriteback({
-    committerEmail: options.inputs.committerEmail,
-    committerName: options.inputs.committerName,
-    configPath: options.config.configPath,
-    githubToken: options.inputs.githubToken,
-    mode: options.inputs.configWriteMode,
-    repository: options.repository
-  });
-  return { configCommitSha: result.commitSha, workspaceId };
-}
-function parseWorkspaceTeamId(value) {
-  if (!value) return void 0;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) {
-    throw new Error(`workspace-team-id must be numeric, got: ${value}`);
-  }
-  return parsed;
-}
-function createAssetNames(prNumber, projectName) {
-  return {
-    collectionName: `[TDD PR-${prNumber}] [Contract] ${projectName}`,
-    specName: `[TDD PR-${prNumber}] ${projectName}`
-  };
-}
-async function upsertPreviewAssets(options) {
-  const specContent = readFileSync4(resolveWorkspacePath(options.config.specPath), "utf8");
-  const document2 = parseOpenApiDocument(specContent);
-  const contractIndex = buildContractIndex(document2);
-  const specId = await upsertSpec({
-    content: specContent,
-    name: options.assetNames.specName,
-    openapiVersion: contractIndex.openapiVersion,
-    postman: options.postman,
-    specId: options.state.specId,
-    workspaceId: options.state.workspaceId || ""
-  });
-  const tempCollectionId = await options.postman.generateCollection(
-    specId,
-    options.config.projectName,
-    `[TDD PR-${options.state.prNumber}] [Contract]`
-  );
-  const tempCollection = await options.postman.getCollection(tempCollectionId);
-  if (!tempCollection || typeof tempCollection !== "object") {
-    throw new Error(`Generated TDD collection ${tempCollectionId} could not be fetched`);
-  }
-  const planned = instrumentContractCollection(tempCollection, contractIndex);
-  for (const warning2 of planned.warnings) {
-    warning(warning2);
-  }
-  let collectionId = options.state.collectionId || "";
-  if (collectionId) {
-    try {
-      await options.postman.updateCollection(collectionId, planned.collection);
-      await options.postman.deleteCollection(tempCollectionId);
-    } catch {
-      warning(`Existing PR TDD collection ${collectionId} could not be updated; adopting generated collection ${tempCollectionId}`);
-      collectionId = tempCollectionId;
-      await options.postman.updateCollection(collectionId, planned.collection);
-    }
-  } else {
-    collectionId = tempCollectionId;
-    await options.postman.updateCollection(collectionId, planned.collection);
-  }
-  return { collectionId, specId };
-}
-async function upsertSpec(options) {
-  if (options.specId) {
-    try {
-      await options.postman.updateSpec(options.specId, options.content);
-      return options.specId;
-    } catch {
-      warning(`Existing PR TDD spec ${options.specId} could not be updated; creating a new spec.`);
-    }
-  }
-  return options.postman.uploadSpec(options.workspaceId, options.name, options.content, options.openapiVersion);
 }
 async function cleanupPreviewAssets(options) {
   void options.github;

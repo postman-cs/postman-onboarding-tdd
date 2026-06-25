@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { parseAssetState, parseFailureDocument, renderStickyComment } from '../src/github/pr-comment.js';
 import { createImmutableStatePayload, signImmutableState } from '../src/immutable-state.js';
+import { isRepairComment, renderRepairComment } from '../src/repair/summary.js';
 
 describe('PR sticky comment marker', () => {
   it('round-trips asset state through the hidden marker', () => {
@@ -78,5 +79,23 @@ describe('PR sticky comment marker', () => {
       phase: 'collection_run',
       status: 'failed'
     });
+  });
+
+  it('renders repair comments with a separate sticky marker', () => {
+    const body = renderRepairComment({
+      attempts: 2,
+      blockedReason: 'budget_exhausted',
+      message: 'Repair budget exhausted after 2 attempt(s).',
+      prNumber: 123,
+      schemaVersion: 1,
+      status: 'blocked'
+    });
+
+    expect(isRepairComment(body)).toBe(true);
+    expect(body).toContain('postman-tdd-repair');
+    expect(body).toContain('Postman TDD Repair (BLOCKED)');
+    expect(body).toContain('**Attempts:** 2');
+    expect(body).toContain('`budget_exhausted`');
+    expect(body).not.toContain('postman-tdd-preview');
   });
 });
