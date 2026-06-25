@@ -1,0 +1,150 @@
+import { execFileSync } from 'node:child_process';
+import { relative, resolve, sep } from 'node:path';
+
+export interface PatchPolicy {
+  allowedWritePaths: string[];
+  immutablePaths: string[];
+  repoRoot: string;
+}
+
+export interface PatchValidationResult {
+  touchedPaths: string[];
+}
+
+const ALWAYS_DENY_PATTERNS = [
+  '.env',
+  '.env.*',
+  '.postman-template/**',
+  '.postman-tdd/**',
+  '.github/workflows/**',
+  '.postman/**',
+  'postman/**',
+  '**/.env',
+  '**/.env.*',
+  '**/*.pem',
+  '**/*.key',
+  '**/*secret*',
+  '**/*token*'
+];
+
+export function extractPatchPaths(patch: string): string[] {
+  const paths = new Set<string>();
+  const patterns = [
+    /^diff --git a\/(.+?) b\/(.+)$/gm,
+    /^--- (?:a\/)?(.+)$/gm,
+    /^\+\+\+ (?:b\/)?(.+)$/gm,
+    /^rename from (.+)$/gm,
+    /^rename to (.+)$/gm,
+    /^new file mode .+\n--- \/dev\/null\n\+\+\+ b\/(.+)$/gm,
+    /^deleted file mode .+\n--- a\/(.+)\n\+\+\+ \/dev\/null$/gm
+  ];
+  for (const pattern of patterns) {
+    for (const match of patch.matchAll(pattern)) {
+      for (const captured of match.slice(1)) {
+        if (captured && captured !== '/dev/null') {
+          paths.add(normalizeRepoPath(captured));
+        }
+      }
+    }
+  }
+  return [...paths].filter(Boolean).sort();
+}
+
+export function validatePatch(patch: string, policy: PatchPolicy): PatchValidationResult {
+  const trimmed = patch.trim();
+  if (!trimmed || !trimmed.includes('diff --git')) {
+    throw new Error('Repair patch must be a non-empty unified git diff.');
+  }
+  const touchedPaths = extractPatchPaths(patch);
+  if (touchedPaths.length === 0) {
+    throw new Error('Repair patch did not include any touched paths.');
+  }
+
+  for (const path of touchedPaths) {
+    if (isPathDenied(path, policy)) {
+      throw new Error(`Patch touches non-writable path: ${path}`);
+    }
+    if (!matchesAny(path, policy.allowedWritePaths)) {
+      throw new Error(`Patch path is outside tdd.repair.allowedWritePaths: ${path}`);
+    }
+  }
+
+  gitApply(['--check', '--whitespace=nowarn'], patch, policy.repoRoot);
+  return { touchedPaths };
+}
+
+export function applyValidatedPatch(patch: string, policy: PatchPolicy): PatchValidationResult {
+  const result = validatePatch(patch, policy);
+  gitApply(['--whitespace=nowarn'], patch, policy.repoRoot);
+  return result;
+}
+
+export function matchesAny(path: string, patterns: string[]): boolean {
+  return patterns.some((pattern) => globMatch(normalizeRepoPath(path), normalizeRepoPath(pattern)));
+}
+
+export function isPathDenied(path: string, policy: PatchPolicy): boolean {
+  const normalized = normalizeRepoPath(path);
+  return matchesAny(normalized, [
+    ...policy.immutablePaths,
+    ...ALWAYS_DENY_PATTERNS
+  ]);
+}
+
+export function normalizeRepoPath(value: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\\/g, '/')
+    .replace(/^[ab]\//, '')
+    .replace(/^\.\//, '')
+    .replace(/\/+$/g, '');
+}
+
+export function repoRelativePath(repoRoot: string, path: string): string {
+  const absolute = resolve(repoRoot, path);
+  const relativePath = relative(repoRoot, absolute).split(sep).join('/');
+  if (relativePath.startsWith('..') || relativePath === '') {
+    throw new Error(`Path is outside repository: ${path}`);
+  }
+  return normalizeRepoPath(relativePath);
+}
+
+function gitApply(args: string[], patch: string, cwd: string): void {
+  try {
+    execFileSync('git', ['apply', ...args, '-'], {
+      cwd,
+      input: patch,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+  } catch (error) {
+    const stderr = Buffer.isBuffer((error as { stderr?: unknown }).stderr)
+      ? ((error as { stderr: Buffer }).stderr).toString('utf8')
+      : error instanceof Error ? error.message : String(error);
+    throw new Error(`git apply failed: ${stderr.trim() || 'unknown error'}`);
+  }
+}
+
+function globMatch(path: string, pattern: string): boolean {
+  const regex = new RegExp(`^${escapeGlob(pattern)}$`);
+  return regex.test(path);
+}
+
+function escapeGlob(pattern: string): string {
+  let output = '';
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    const next = pattern[index + 1];
+    if (char === '*' && next === '*') {
+      output += '.*';
+      index += 1;
+    } else if (char === '*') {
+      output += '[^/]*';
+    } else if (char === '?') {
+      output += '[^/]';
+    } else {
+      output += String(char).replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return output;
+}

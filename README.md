@@ -1,20 +1,30 @@
-# Postman Onboarding TDD Preview
+# Postman Onboarding TDD
 
-`postman-onboarding-tdd` is a GitHub Action for PR-scoped, spec-driven TDD.
+`postman-onboarding-tdd` is a GitHub Action that turns an OpenAPI change in a pull request into a runnable Postman TDD check.
 
-It generates a temporary Postman contract collection from the pull request version of an OpenAPI spec, runs that collection against the PR implementation on localhost in CI, and reports failures back to the PR for humans or agents to iterate on.
+For each PR, the action:
 
-## Model
+1. Reads the PR version of your OpenAPI spec.
+2. Creates or updates one PR-scoped Spec Hub spec and one generated TDD contract collection in a shared Postman workspace.
+3. Starts your service in CI using the command you provide.
+4. Runs the generated collection against your local CI service URL.
+5. Posts a sticky PR comment with a human-readable summary and compact JSON that coding agents can use.
 
-- One shared Postman TDD preview workspace.
-- One Spec Hub spec and one TDD contract collection per PR.
-- PR number is the asset namespace.
-- Every new commit to the PR overwrites the same PR-scoped assets.
-- The canonical onboarding workflow remains responsible for durable main-branch Postman assets.
+The optional repair worker can also call OpenAI, make implementation-only changes, run the same Postman collection locally, and push one repair commit only after the local TDD run passes.
+
+## What Customers Configure
+
+You add three things to the service repository:
+
+1. `.postman-template/onboarding.yml`
+2. One script that starts the service for CI TDD
+3. One or two GitHub workflows
+
+For most teams, start with the preview workflow first. Add the automated repair workflow after the preview check is stable.
 
 ## Repository Config
 
-Add TDD settings to `.postman-template/onboarding.yml`:
+Create or update `.postman-template/onboarding.yml`:
 
 ```yaml
 spec:
@@ -26,7 +36,10 @@ service:
 tdd:
   enabled: true
   workspace:
-    name: Banner Health - API TDD Preview
+    name: Reference Service - TDD Preview
+    # id is optional on the first run.
+    # The action can create/find the workspace and write the id back.
+    # id: 00000000-0000-0000-0000-000000000000
   baseUrl: http://127.0.0.1:4010
   healthUrl: http://127.0.0.1:4010/v1/health
   startCommand: ./scripts/postman-tdd-start.sh
@@ -34,91 +47,38 @@ tdd:
   timeoutSeconds: 90
 ```
 
-On the first run, if `tdd.workspace.id` is missing, the action finds or creates `tdd.workspace.name` and writes the ID back to the config according to `config-write-mode`.
+`startCommand` is customer-owned. It must make the PR implementation reachable at `baseUrl`. It can run the app directly, start Docker Compose, launch mocks, seed data, or do whatever the service needs in CI.
 
-The customer-owned `startCommand` is responsible for making the PR implementation reachable at `baseUrl`. It can run a local process, Docker Compose, dependent mocks, seed data, or anything else the service needs.
+This is how the action stays language- and framework-neutral. Java, Node.js, C#, Python, Docker Compose, and multi-service repos all use the same contract: provide one command that starts the PR implementation locally.
 
-## Agent Instructions
+If `tdd.workspace.id` is missing, the action:
 
-Copy this repository's [`.postman-template/tdd-agent.md`](.postman-template/tdd-agent.md) into the customer service repository at the same path:
+1. Looks for exactly one Postman workspace with `tdd.workspace.name`.
+2. Creates the workspace if none exists.
+3. Fails if multiple exact-name workspaces exist.
+4. Writes the workspace ID back to `onboarding.yml` unless `config-write-mode` is `none`.
 
-```text
-.postman-template/tdd-agent.md
-```
+If the repository does not allow workflow commits back to PR branches, set `config-write-mode: none` and add `tdd.workspace.id` manually after the first workspace is created.
 
-Also copy the optional policy and Codex hook templates if implementation-repair agents will run in a Codex-compatible harness that executes lifecycle hooks:
+## GitHub Secrets
 
-```text
-.postman-template/agent-policy.json
-.postman-template/hooks/codex-pre-tool-use.mjs
-.postman-template/codex/hooks.json
-```
+Create these secrets in the customer service repository:
 
-Commit these files to the customer repository's default branch, usually `main`, so all future PR branches inherit the same generic agent instructions and policy. The hook templates are optional guardrails; the GitHub Action immutable-spec guard remains the required enforcement layer.
-
-The file is intentionally static and branch-safe. It tells any coding agent to read the latest `Postman TDD Preview` sticky PR comment, use the inline failure JSON as the source of truth, fix implementation code only, push changes, and wait for the next TDD workflow result on the latest PR head commit after each push.
-
-Do not commit generated run-specific files from `.postman-tdd/`. Those files are created during CI and can become stale after every commit.
-
-The generic prompt for an agent can stay small:
-
-```text
-Follow .postman-template/tdd-agent.md for this PR.
-```
-
-### Optional Codex Pre-Tool Hook
-
-For Codex-compatible repair automation that executes lifecycle hooks, the v1 policy is artifact-free. It reads committed repo files:
-
-```text
-.postman-template/agent-policy.json
-.postman-template/onboarding.yml
-```
-
-The policy resolves `spec.path` from onboarding config and is intended to deny tool calls that try to create, edit, write, delete, move, or rename that path.
-
-To enable the sample hook in a customer repo, copy or merge the template into the project hook layer used by your Codex runtime:
-
-```bash
-mkdir -p .codex
-cp .postman-template/codex/hooks.json .codex/hooks.json
-```
-
-The hook command delegates to:
-
-```bash
-node .postman-template/hooks/codex-pre-tool-use.mjs
-```
-
-Hook support varies by Codex surface and launch mode. Before relying on this guardrail, verify that your runtime actually executes the hook by attempting a harmless test edit to the configured `spec.path`; the expected result is that the tool call is blocked with:
-
-```text
-The OpenAPI spec is immutable during implementation repair. Revert spec changes and fix code only.
-```
-
-Codex project-local hooks require the project `.codex/` layer to be trusted. Non-managed command hooks may also need to be reviewed and trusted before they run. In vetted automation that already controls the hook source and runtime, the agent launcher can use Codex's `--dangerously-bypass-hook-trust` option for that invocation.
-
-This hook is prevention, not the final enforcement layer. Treat it as optional local or harness-level ergonomics. The signed workflow-level immutable spec guard remains mandatory and still fails the PR if the spec changes after a TDD failure.
-
-## Required Secrets
-
-Create these GitHub secrets in the customer service repository before enabling the workflow:
-
-| Secret | Required | Used for |
+| Secret | Required | Purpose |
 | --- | --- | --- |
-| `POSTMAN_API_KEY` | yes | Postman API access for workspace, spec, collection, and collection-run operations. |
-| `POSTMAN_ACCESS_TOKEN` | no | Compatibility with broader onboarding pipelines. |
-| `POSTMAN_TDD_SIGNING_KEY` | recommended | HMAC key for signed immutable spec baselines. Implementation agents must not be able to read this secret. |
+| `POSTMAN_API_KEY` | yes | Creates/updates Postman workspace, spec, collection, and runs the collection. |
+| `POSTMAN_ACCESS_TOKEN` | no | Compatibility with broader Postman onboarding pipelines. |
+| `POSTMAN_TDD_SIGNING_KEY` | recommended | Signs the immutable-spec baseline so agents cannot tamper with sticky comment state. |
+| `OPENAI_API_KEY` | repair only | Used by the optional OpenAI repair worker. |
+| `POSTMAN_TDD_REPAIR_TOKEN` | repair recommended | PAT or GitHub App token used to push repair commits and trigger the next preview run. |
 
-`POSTMAN_TDD_SIGNING_KEY` should be a long random value. Pass it to the action input named `immutable-state-signing-key`:
+Use a long random value for `POSTMAN_TDD_SIGNING_KEY`. Implementation agents should not be able to read it.
 
-```yaml
-immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
-```
+`POSTMAN_TDD_REPAIR_TOKEN` should be a token that can push to PR branches. A normal `GITHUB_TOKEN` push may not trigger the follow-up workflow run, so production repair should use a PAT or GitHub App token.
 
-The GitHub secret is named `POSTMAN_TDD_SIGNING_KEY`; the action input is named `immutable-state-signing-key`.
+## Preview Workflow
 
-## Example Workflow
+Add `.github/workflows/postman-tdd-preview.yml`:
 
 ```yaml
 name: Postman TDD Preview
@@ -148,7 +108,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.action == 'closed' && github.base_ref || github.head_ref }}
           fetch-depth: 0
 
       - uses: postman-cs/postman-onboarding-tdd@main
@@ -161,28 +121,27 @@ jobs:
           workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
 ```
 
-## Agent Handoff
+Adjust the `paths` list to match the customer repository. At minimum, include the OpenAPI spec, implementation code, startup script, and onboarding config.
 
-When the TDD collection fails, the action writes local agent context files during the run and uploads them as the `postman-tdd-agent-context` workflow artifact:
+On normal PR commits, `mode: run` creates/updates the PR-scoped Postman assets and runs the collection. On PR close, `mode: cleanup` deletes the PR-scoped spec and collection.
 
-```text
-.postman-tdd/
-  agent-task.md
-  failures.json
-  immutable-spec-guard.mjs
-```
+## PR Feedback
 
-The sticky PR comment is the primary agent interface. It names the artifact when one is available, summarizes the failure, shows the commit that produced the failure context, and includes compact machine-readable failure JSON for quick agent handoff. Artifacts are optional convenience; agents that cannot access artifacts should use the inline JSON from the sticky comment.
+The preview workflow updates one sticky PR comment titled `Postman TDD Preview`.
 
-The success criterion is always:
+On success, it records the passing PR head commit.
 
-```text
-The latest PR head commit has a passing GitHub check named Postman TDD Preview.
-```
+On failure, it includes:
 
-Agents must compare the failure JSON `commit` with the current PR head SHA before acting. If they differ, the sticky comment is stale and the agent should wait for the next `Postman TDD Preview` run to finish.
+- failure phase, such as `collection_run`, `service_startup`, or `health_check`,
+- the PR commit that produced the failure,
+- immutable paths, usually the OpenAPI spec path,
+- compact failure JSON for humans and agents,
+- a pointer to the optional `postman-tdd-agent-context` artifact.
 
-Collection-run failures are normalized into compact records instead of raw runner logs:
+Agents should use the sticky comment first. Artifacts are helpful but not required.
+
+Example compact failure:
 
 ```json
 {
@@ -194,35 +153,249 @@ Collection-run failures are normalized into compact records instead of raw runne
 }
 ```
 
-Raw sanitized log excerpts are reserved for `service_startup` and `health_check` failures, where startup output is needed to diagnose why the service did not become reachable.
+The success criterion is always:
 
-The failure JSON also includes `immutablePaths`, defaulting to the configured OpenAPI `spec.path`, plus `immutablePathHashes`. Humans can submit spec changes in the PR, but implementation-fix agents must treat those paths as read-only once a TDD failure exists. Agents can run `node .postman-tdd/immutable-spec-guard.mjs snapshot` at start and `node .postman-tdd/immutable-spec-guard.mjs verify` before commit/push.
+```text
+The latest PR head commit has a passing GitHub check named Postman TDD Preview.
+```
 
-On subsequent workflow runs, the action compares the current immutable path hashes against the previous sticky comment baseline before regenerating Postman assets. If an implementation-fix commit changed the spec, the action publishes an `immutable_spec` failure to the sticky PR comment and fails the check.
+## Agent Instructions
 
-For tamper detection, create the GitHub secret `POSTMAN_TDD_SIGNING_KEY` and pass it through the action input `immutable-state-signing-key`. When configured, the action signs the immutable baseline with HMAC-SHA256 and refuses to trust a missing or invalid signature, publishing `immutable_state_tampered` instead. Without this input, the action keeps the unsigned sticky-comment baseline behavior for backward compatibility.
+Copy this file from this repository into the customer service repository:
 
-## Inputs
+```text
+.postman-template/tdd-agent.md
+```
+
+Commit it to the default branch, usually `main`, so every future PR inherits the same generic instructions.
+
+A human or agent can then use a very small prompt:
+
+```text
+Follow .postman-template/tdd-agent.md for this PR.
+```
+
+The instructions tell agents to:
+
+- read the latest `Postman TDD Preview` sticky comment,
+- compare the failure JSON `commit` to the current PR head SHA,
+- fix implementation code only,
+- treat `immutablePaths` as read-only,
+- push changes,
+- wait for the next preview run,
+- stop when the latest PR head commit passes or the failure is genuinely blocked.
+
+Do not commit generated `.postman-tdd/` files. Those are run-specific CI artifacts and can become stale after every commit.
+
+## Immutable Spec Guard
+
+Humans can submit OpenAPI spec changes in a PR. Once the TDD failure exists, implementation repair must treat the PR spec as the contract to satisfy.
+
+The action enforces this at workflow level:
+
+1. The preview run records a hash of `spec.path`.
+2. The next preview run compares the current spec hash with the previous failure baseline.
+3. If an implementation repair changed the spec, the action fails with `immutable_spec`.
+4. If `immutable-state-signing-key` is set, the baseline is signed with HMAC-SHA256. A missing or invalid signature fails with `immutable_state_tampered`.
+
+This message is used when the spec changes during implementation repair:
+
+```text
+The OpenAPI spec is immutable during implementation repair. Revert spec changes and fix code only.
+```
+
+The action also emits an optional CI artifact:
+
+```text
+.postman-tdd/
+  agent-task.md
+  failures.json
+  immutable-spec-guard.mjs
+```
+
+Agents that can access the artifact may run:
+
+```bash
+node .postman-tdd/immutable-spec-guard.mjs snapshot
+node .postman-tdd/immutable-spec-guard.mjs verify
+```
+
+If artifacts are unavailable, agents should use the inline failure JSON from the sticky comment.
+
+## Optional Local Agent Policy
+
+This repository includes optional templates for agent runtimes that support pre-tool-use hooks:
+
+```text
+.postman-template/agent-policy.json
+.postman-template/hooks/codex-pre-tool-use.mjs
+.postman-template/codex/hooks.json
+```
+
+These files are optional. They are local or harness-level prevention, not the final enforcement layer. The GitHub Action immutable-spec guard remains the required enforcement layer.
+
+For Codex-compatible runtimes that execute project hooks, copy the hook config into the customer repository:
+
+```bash
+mkdir -p .codex
+cp .postman-template/codex/hooks.json .codex/hooks.json
+```
+
+Then verify the runtime actually executes hooks before relying on them.
+
+## Optional Automated Repair Worker
+
+The repair worker is opt-in. It is useful when you want the workflow to attempt implementation repair automatically after a failed preview check.
+
+Add repair settings to `.postman-template/onboarding.yml`:
+
+```yaml
+tdd:
+  repair:
+    enabled: true
+    provider: openai-responses
+    maxAttempts: 3
+    allowedWritePaths:
+      - src/**
+    allowedReadPaths:
+      - src/**
+      - package.json
+      - package-lock.json
+    localTestCommand: npm test # optional
+```
+
+`allowedWritePaths` is required when repair is enabled. Keep it as narrow as possible.
+
+`allowedReadPaths` defaults to `allowedWritePaths` when omitted.
+
+The worker will not write to:
+
+- the OpenAPI spec path,
+- `.postman-template/**`,
+- `.postman-tdd/**`,
+- `.github/workflows/**`,
+- generated Postman files,
+- secret-like files.
+
+The OpenAI model does not receive Postman secrets, GitHub tokens, the canonical spec file content, generated collection content, shell access, git access, or raw filesystem write tools.
+
+### Repair Workflow
+
+Add a second workflow, `.github/workflows/postman-tdd-repair.yml`:
+
+For `workflow_run` triggers, GitHub uses the workflow definition from the default branch. Merge this repair workflow to the default branch before expecting it to run automatically for PR failures.
+
+```yaml
+name: Postman TDD Repair
+
+on:
+  workflow_run:
+    workflows: [Postman TDD Preview]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: postman-tdd-repair-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: >
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0].number
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+
+      - uses: postman-cs/postman-onboarding-tdd@main
+        with:
+          mode: repair
+          pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
+          postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
+          postman-access-token: ${{ secrets.POSTMAN_ACCESS_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repair-github-token: ${{ secrets.POSTMAN_TDD_REPAIR_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
+          workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
+```
+
+The repair worker:
+
+1. Reads the latest preview sticky comment.
+2. Blocks if the failure JSON is stale.
+3. Blocks fork PRs.
+4. Blocks unsupported phases such as config, workspace, immutable-state, or immutable-spec failures.
+5. Allows repair for `collection_run`, `service_startup`, and `health_check`.
+6. Lets OpenAI use guarded read/search/patch tools only.
+7. Runs `localTestCommand` when configured.
+8. Starts the service and runs the Postman TDD collection locally.
+9. Verifies immutable paths and allowed write paths.
+10. Pushes one repair commit only after the local Postman collection passes.
+
+The worker posts a separate sticky PR comment titled `Postman TDD Repair`. It does not overwrite the preview comment.
+
+## Action Inputs
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `mode` | no | `run` | `run` or `cleanup`. |
+| `mode` | no | `run` | `run`, `cleanup`, or `repair`. |
 | `onboarding-config-path` | no | `.postman-template/onboarding.yml` | Service onboarding config path. |
 | `project-name` | no | `service.name` | Optional service name override. |
 | `spec-path` | no | `spec.path` | Optional OpenAPI spec path override. |
-| `pr-number` | no | pull request event number | Optional PR number override. |
+| `pr-number` | no | pull request event number | Optional PR number override. Recommended for `workflow_run` repair workflows. |
 | `postman-api-key` | yes | | Postman API key. |
-| `postman-access-token` | no | | Compatibility input for onboarding pipelines. |
-| `github-token` | yes | | Token for PR comments and config writeback. |
-| `immutable-state-signing-key` | no | | Action input for the HMAC key used to sign immutable spec baselines. Recommended value: `${{ secrets.POSTMAN_TDD_SIGNING_KEY }}`. |
+| `postman-access-token` | no | | Compatibility input for broader onboarding pipelines. |
+| `github-token` | yes | | Token for PR comments and workspace ID config writeback. |
+| `immutable-state-signing-key` | no | | HMAC key used to sign immutable spec baselines. Recommended value: `${{ secrets.POSTMAN_TDD_SIGNING_KEY }}`. |
 | `workspace-team-id` | no | | Numeric Postman sub-team ID for org-mode workspace creation. |
 | `config-write-mode` | no | `commit-and-push` | `commit-and-push`, `commit-only`, or `none`. |
-| `committer-name` | no | `Postman` | Commit author name for config writeback. |
-| `committer-email` | no | `support@postman.com` | Commit author email for config writeback. |
+| `committer-name` | no | `Postman` | Commit author name for workspace ID writeback. |
+| `committer-email` | no | `support@postman.com` | Commit author email for workspace ID writeback. |
 | `postman-region` | no | `us` | `us` or `eu`. |
 | `postman-stack` | no | `prod` | `prod` or `beta`. |
+| `openai-api-key` | repair only | | OpenAI API key for `mode: repair`. |
+| `repair-github-token` | repair recommended | `github-token` | Token used by `mode: repair` for pushing repair commits. Prefer a PAT or GitHub App token. |
+| `repair-provider` | no | `openai-responses` | Repair provider. V1 only accepts `openai-responses`. |
+| `repair-model` | no | `gpt-5.5` | OpenAI model used by `mode: repair`. |
+| `repair-max-attempts` | no | `3` | Maximum accepted implementation patch attempts. |
+| `repair-commit-message` | no | `Postman TDD repair` | Commit message used for a passing repair commit. |
+
+## Action Outputs
+
+Important preview outputs:
+
+| Output | Description |
+| --- | --- |
+| `status` | `passed`, `failed`, `skipped`, or `cleaned-up`. |
+| `failure-phase` | Failure phase, such as `collection_run`, `service_startup`, `health_check`, `immutable_spec`, or `immutable_state_tampered`. |
+| `workspace-id` | Shared TDD preview workspace ID. |
+| `spec-id` | PR-scoped Spec Hub spec ID. |
+| `tdd-collection-id` | PR-scoped generated collection ID. |
+| `pr-comment-id` | Sticky preview PR comment ID. |
+| `agent-context-artifact` | Uploaded agent context artifact name, when available. |
+
+Important repair outputs:
+
+| Output | Description |
+| --- | --- |
+| `repair-status` | `repaired`, `blocked`, `skipped`, or `failed`. |
+| `repair-blocked-reason` | Machine-readable reason when repair is blocked. |
+| `repair-attempts` | Number of accepted implementation patch attempts. |
+| `repair-commit-sha` | Commit SHA pushed by the repair worker after a passing local collection run. |
+| `repair-summary-path` | Local JSON summary path. |
 
 ## Development
+
+For contributors to this action:
 
 ```bash
 npm install

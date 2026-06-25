@@ -1,4 +1,4 @@
-export type ActionMode = 'run' | 'cleanup';
+export type ActionMode = 'run' | 'cleanup' | 'repair';
 
 export type ConfigWriteMode = 'commit-and-push' | 'commit-only' | 'none';
 
@@ -13,6 +13,10 @@ export type FailurePhase =
   | 'health_check'
   | 'collection_run'
   | 'cleanup';
+
+export type RepairStatus = 'repaired' | 'blocked' | 'skipped' | 'failed';
+
+export type RepairProvider = 'openai-responses';
 
 export type ActionStatus = 'passed' | 'failed' | 'skipped' | 'cleaned-up';
 
@@ -29,6 +33,15 @@ export interface TddRuntimeConfig {
   timeoutSeconds: number;
 }
 
+export interface TddRepairConfig {
+  allowedReadPaths: string[];
+  allowedWritePaths: string[];
+  enabled: boolean;
+  localTestCommand?: string;
+  maxAttempts: number;
+  provider: RepairProvider;
+}
+
 export interface ResolvedOnboardingConfig {
   configPath: string;
   projectName: string;
@@ -36,6 +49,7 @@ export interface ResolvedOnboardingConfig {
   tddEnabled: boolean;
   workspace: TddWorkspaceConfig;
   runtime: TddRuntimeConfig;
+  repair: TddRepairConfig;
 }
 
 export interface PrMetadata {
@@ -118,12 +132,18 @@ export interface ActionInputs {
   immutableStateSigningKey?: string;
   mode: ActionMode;
   onboardingConfigPath: string;
+  openaiApiKey?: string;
   postmanAccessToken?: string;
   postmanApiKey: string;
   postmanRegion: PostmanRegion;
   postmanStack: PostmanStack;
   prNumber?: number;
   projectName?: string;
+  repairCommitMessage: string;
+  repairGithubToken?: string;
+  repairMaxAttempts: number;
+  repairModel: string;
+  repairProvider: RepairProvider;
   specPath?: string;
   workspaceTeamId?: string;
 }

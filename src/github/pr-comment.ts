@@ -1,5 +1,6 @@
 import { context, getOctokit } from '@actions/github';
 
+import { isRepairComment, renderRepairComment, type RepairSummary } from '../repair/summary.js';
 import type { ActionStatus, AgentFailureDocument, PreviewAssetState, PrMetadata } from '../types.js';
 
 const MARKER_START = '<!-- postman-tdd-preview';
@@ -24,6 +25,15 @@ export interface PrCommentSummary {
   specId?: string;
   status: ActionStatus;
   workspaceId?: string;
+}
+
+export interface PullRequestDetails {
+  baseRepository: string;
+  headBranch: string;
+  headRepository: string;
+  headSha: string;
+  isFork: boolean;
+  number: number;
 }
 
 export class GitHubPrClient {
@@ -57,6 +67,52 @@ export class GitHubPrClient {
       body: found.body,
       id: found.id
     };
+  }
+
+  async getPullRequest(prNumber: number): Promise<PullRequestDetails> {
+    const response = await this.octokit.rest.pulls.get({
+      owner: this.owner,
+      pull_number: prNumber,
+      repo: this.repo
+    });
+    const data = response.data;
+    const headRepository = data.head.repo?.full_name || '';
+    const baseRepository = data.base.repo?.full_name || `${this.owner}/${this.repo}`;
+    return {
+      baseRepository,
+      headBranch: data.head.ref,
+      headRepository,
+      headSha: data.head.sha,
+      isFork: headRepository !== baseRepository,
+      number: data.number
+    };
+  }
+
+  async upsertRepairComment(prNumber: number, summary: RepairSummary): Promise<number> {
+    const comments = await this.octokit.paginate(this.octokit.rest.issues.listComments, {
+      issue_number: prNumber,
+      owner: this.owner,
+      per_page: 100,
+      repo: this.repo
+    });
+    const body = renderRepairComment(summary);
+    const existing = comments.find((comment) => isRepairComment(comment.body));
+    if (existing) {
+      await this.octokit.rest.issues.updateComment({
+        comment_id: existing.id,
+        owner: this.owner,
+        repo: this.repo,
+        body
+      });
+      return existing.id;
+    }
+    const created = await this.octokit.rest.issues.createComment({
+      issue_number: prNumber,
+      owner: this.owner,
+      repo: this.repo,
+      body
+    });
+    return created.data.id;
   }
 
   async upsertStickyComment(
@@ -230,7 +286,13 @@ export function resolvePrMetadata(inputPrNumber?: number): PrMetadata {
     (context.repo.owner && context.repo.repo ? `${context.repo.owner}/${context.repo.repo}` : '');
   const event = context.payload;
   const pr = event.pull_request;
-  const number = inputPrNumber || Number(pr?.number || event.number || 0);
+  const workflowRun = event.workflow_run as {
+    head_branch?: string;
+    head_sha?: string;
+    pull_requests?: Array<{ number?: number }>;
+  } | undefined;
+  const workflowRunPr = workflowRun?.pull_requests?.[0];
+  const number = inputPrNumber || Number(pr?.number || workflowRunPr?.number || event.number || 0);
   if (!number || !Number.isInteger(number)) {
     throw new Error('A pull request number is required. Set pr-number or run on a pull_request event.');
   }
@@ -238,9 +300,9 @@ export function resolvePrMetadata(inputPrNumber?: number): PrMetadata {
     throw new Error('GITHUB_REPOSITORY is required');
   }
   return {
-    branch: pr?.head?.ref || process.env.GITHUB_HEAD_REF || undefined,
+    branch: pr?.head?.ref || workflowRun?.head_branch || process.env.GITHUB_HEAD_REF || undefined,
     number,
     repository,
-    sha: pr?.head?.sha || process.env.GITHUB_SHA || undefined
+    sha: pr?.head?.sha || workflowRun?.head_sha || process.env.GITHUB_SHA || undefined
   };
 }
