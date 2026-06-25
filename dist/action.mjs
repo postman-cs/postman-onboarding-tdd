@@ -61316,6 +61316,9 @@ function issueCommand(command, properties, message) {
   const cmd = new Command(command, properties, message);
   process.stdout.write(cmd.toString() + os.EOL);
 }
+function issue(name, message = "") {
+  issueCommand(name, {}, message);
+}
 var CMD_STRING = "::";
 var Command = class {
   constructor(command, properties, message) {
@@ -62488,6 +62491,12 @@ function warning(message, properties = {}) {
 }
 function info(message) {
   process.stdout.write(message + os4.EOL);
+}
+function startGroup(name) {
+  issue("group", name);
+}
+function endGroup() {
+  issue("endgroup");
 }
 
 // node_modules/@actions/artifact/lib/internal/shared/config.js
@@ -107115,7 +107124,9 @@ async function resolveTddWorkspace(options) {
     info(`Using configured TDD workspace: ${configuredId}`);
     return { workspaceId: configuredId };
   }
+  info(`[postman-tdd] No workspace ID configured; searching for workspace named "${options.config.workspace.name}".`);
   const matches = await options.postman.findWorkspacesByName(options.config.workspace.name);
+  info(`[postman-tdd] Workspace name search returned ${matches.length} exact match(es).`);
   if (matches.length > 1) {
     throw new Error(
       `Multiple Postman workspaces named "${options.config.workspace.name}" exist. Set tdd.workspace.id explicitly.`
@@ -107126,14 +107137,17 @@ async function resolveTddWorkspace(options) {
     `Shared TDD preview workspace for ${options.config.projectName}`,
     parseWorkspaceTeamId(options.inputs.workspaceTeamId)
   )).id;
+  info(matches[0]?.id ? `[postman-tdd] Reusing workspace matched by name: ${workspaceId}.` : `[postman-tdd] Created shared TDD workspace: ${workspaceId}.`);
   if (options.inputs.configWriteMode === "none") {
     warning(`Resolved TDD workspace ${workspaceId}, but config-write-mode=none so tdd.workspace.id was not persisted.`);
     return { workspaceId };
   }
   const patch = patchWorkspaceId(options.config.configPath, workspaceId);
   if (!patch.changed) {
+    info("[postman-tdd] Workspace ID was already present in config after patch check.");
     return { workspaceId };
   }
+  info(`[postman-tdd] Persisting workspace ID to ${options.config.configPath} using ${options.inputs.configWriteMode}.`);
   const result = await commitConfigWriteback({
     committerEmail: options.inputs.committerEmail,
     committerName: options.inputs.committerName,
@@ -107145,9 +107159,12 @@ async function resolveTddWorkspace(options) {
   return { configCommitSha: result.commitSha, workspaceId };
 }
 async function upsertPreviewAssets(options) {
+  info(`[postman-tdd] Reading OpenAPI spec from ${options.config.specPath}.`);
   const specContent = readFileSync4(resolveWorkspacePath(options.config.specPath), "utf8");
+  info(`[postman-tdd] Spec size: ${Buffer.byteLength(specContent, "utf8")} bytes.`);
   const document2 = parseOpenApiDocument(specContent);
   const contractIndex = buildContractIndex(document2);
+  info(`[postman-tdd] Parsed OpenAPI ${contractIndex.openapiVersion}; instrumenting ${contractIndex.operations.length} operation(s).`);
   const specId = await upsertSpec({
     content: specContent,
     name: options.assetNames.specName,
@@ -107161,26 +107178,32 @@ async function upsertPreviewAssets(options) {
     options.config.projectName,
     `[TDD PR-${options.state.prNumber}] [Contract]`
   );
+  info(`[postman-tdd] Generated temporary collection ${tempCollectionId} from spec ${specId}.`);
   const tempCollection = await options.postman.getCollection(tempCollectionId);
   if (!tempCollection || typeof tempCollection !== "object") {
     throw new Error(`Generated TDD collection ${tempCollectionId} could not be fetched`);
   }
   const planned = instrumentContractCollection(tempCollection, contractIndex);
+  info(`[postman-tdd] Contract instrumentation complete with ${planned.warnings.length} warning(s).`);
   for (const warning2 of planned.warnings) {
     warning(warning2);
   }
   let collectionId = options.state.collectionId || "";
   if (collectionId) {
     try {
+      info(`[postman-tdd] Updating existing PR TDD collection ${collectionId}.`);
       await options.postman.updateCollection(collectionId, planned.collection);
       await options.postman.deleteCollection(tempCollectionId);
+      info(`[postman-tdd] Deleted temporary collection ${tempCollectionId}.`);
     } catch {
       warning(`Existing PR TDD collection ${collectionId} could not be updated; adopting generated collection ${tempCollectionId}`);
       collectionId = tempCollectionId;
       await options.postman.updateCollection(collectionId, planned.collection);
+      info(`[postman-tdd] Adopted generated collection ${collectionId}.`);
     }
   } else {
     collectionId = tempCollectionId;
+    info(`[postman-tdd] No existing collection marker; adopting generated collection ${collectionId}.`);
     await options.postman.updateCollection(collectionId, planned.collection);
   }
   return { collectionId, specId };
@@ -107196,12 +107219,14 @@ function parseWorkspaceTeamId(value) {
 async function upsertSpec(options) {
   if (options.specId) {
     try {
+      info(`[postman-tdd] Updating existing PR TDD spec ${options.specId}.`);
       await options.postman.updateSpec(options.specId, options.content);
       return options.specId;
     } catch {
       warning(`Existing PR TDD spec ${options.specId} could not be updated; creating a new spec.`);
     }
   }
+  info(`[postman-tdd] Uploading new PR TDD spec "${options.name}" to workspace ${options.workspaceId}.`);
   return options.postman.uploadSpec(options.workspaceId, options.name, options.content, options.openapiVersion);
 }
 
@@ -107704,6 +107729,7 @@ function assertReadablePath(context5, value) {
 
 // src/repair/openai-responses-provider.ts
 async function runOpenAiRepairTurn(options) {
+  info(`[postman-tdd] OpenAI Responses repair turn: model=${options.model}, failurePhase=${options.failure.phase}, failures=${options.failure.failures.length}.`);
   let input = [{
     content: [{
       text: buildRepairPrompt(options.failure, options.repairContext),
@@ -107714,6 +107740,7 @@ async function runOpenAiRepairTurn(options) {
   const tools = createRepairTools(options.repairContext);
   let previousResponseId;
   for (let round = 0; round < (options.maxToolRounds || 12); round += 1) {
+    info(`[postman-tdd] OpenAI Responses round ${round + 1}: sending ${previousResponseId ? "tool output(s)" : "initial repair instructions"}.`);
     const response = await createResponse({
       apiKey: options.apiKey,
       fetchImpl: options.fetchImpl,
@@ -107727,6 +107754,7 @@ async function runOpenAiRepairTurn(options) {
       previousResponseId = response.id;
     }
     const calls = (Array.isArray(response.output) ? response.output : []).filter((item) => isFunctionCall(item));
+    info(`[postman-tdd] OpenAI Responses round ${round + 1}: received ${calls.length} function call(s).`);
     if (calls.length === 0) {
       return {
         status: "no_change",
@@ -107737,7 +107765,19 @@ async function runOpenAiRepairTurn(options) {
     for (const call of calls) {
       const name = String(call.name || "");
       const args = parseArguments(call.arguments);
+      info(`[postman-tdd] Executing guarded repair tool: ${name}.`);
       const result = executeRepairTool(name, args, options.repairContext);
+      if (result.error) {
+        info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
+      } else if (name === "list_files") {
+        info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
+      } else if (name === "search_files") {
+        info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
+      } else if (name === "read_file") {
+        info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
+      } else if (name === "propose_patch") {
+        info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(", ") || "(none)"}.`);
+      }
       toolOutputs.push({
         call_id: call.call_id,
         output: JSON.stringify(result),
@@ -107761,6 +107801,7 @@ async function runOpenAiRepairTurn(options) {
     }
     input = toolOutputs;
   }
+  info("[postman-tdd] OpenAI repair turn exhausted tool-call rounds without a patch.");
   return {
     status: "no_change",
     message: "Repair agent exhausted tool-call rounds without proposing a patch."
@@ -107841,12 +107882,15 @@ function extractText(response) {
 var REPAIRABLE_PHASES = /* @__PURE__ */ new Set(["collection_run", "service_startup", "health_check"]);
 async function runRepairMode(options) {
   const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+  info(`[postman-tdd] Starting repair mode for ${options.pr.repository}#${options.pr.number}.`);
   const config = loadOnboardingConfig({
     configPath: options.inputs.onboardingConfigPath,
     projectNameOverride: options.inputs.projectName,
     specPathOverride: options.inputs.specPath
   });
+  logRepairConfig(config, options);
   if (!config.tddEnabled || !config.repair.enabled) {
+    info(`[postman-tdd] Repair skipped: ${!config.tddEnabled ? "tdd_disabled" : "repair_disabled"}.`);
     await publishRepair(options.github, options.pr.number, {
       attempts: 0,
       blockedReason: !config.tddEnabled ? "tdd_disabled" : "repair_disabled",
@@ -107859,36 +107903,46 @@ async function runRepairMode(options) {
     return;
   }
   if (!options.inputs.openaiApiKey) {
+    info("[postman-tdd] Repair cannot start because openai-api-key was not provided.");
     throw new Error("openai-api-key is required when mode=repair");
   }
   if (options.inputs.repairProvider !== "openai-responses" || config.repair.provider !== "openai-responses") {
     throw new Error("mode=repair v1 only supports repair-provider=openai-responses");
   }
+  info(`[postman-tdd] Fetching PR details for #${options.pr.number}.`);
   const prDetails = await options.github.getPullRequest(options.pr.number);
+  info(`[postman-tdd] PR details: head=${prDetails.headRepository}:${prDetails.headBranch}@${prDetails.headSha}, base=${prDetails.baseRepository}, fork=${prDetails.isFork}.`);
   if (prDetails.isFork) {
     await block(options, "fork_pr", "Postman TDD repair is disabled for fork pull requests in v1.", 0);
     return;
   }
+  info("[postman-tdd] Reading latest Postman TDD Preview sticky comment.");
   const sticky = await options.github.findStickyComment(options.pr.number);
   const failure = sticky?.body ? parseFailureDocument(sticky.body) : void 0;
   if (!failure) {
     await block(options, "missing_failure_context", "No Postman TDD Preview failure JSON was found on the sticky PR comment.", 0);
     return;
   }
+  info(`[postman-tdd] Failure context found: phase=${failure.phase}, commit=${failure.commit || "(missing)"}, failures=${failure.failures.length}.`);
   if (failure.commit && failure.commit !== prDetails.headSha) {
+    info(`[postman-tdd] Repair blocked because failure context is stale: failure=${failure.commit}, head=${prDetails.headSha}.`);
     await block(options, "stale_failure", `Latest failure JSON commit ${failure.commit} does not match PR head ${prDetails.headSha}.`, 0);
     return;
   }
   if (!REPAIRABLE_PHASES.has(failure.phase)) {
+    info(`[postman-tdd] Repair blocked because phase ${failure.phase} is unsupported.`);
     await block(options, "unsupported_failure_phase", `Repair mode does not attempt phase ${failure.phase}.`, 0);
     return;
   }
   const assetNames = createAssetNames(options.pr.number, config.projectName);
+  info(`[postman-tdd] Repair asset names: spec="${assetNames.specName}", collection="${assetNames.collectionName}".`);
   let state3 = {
     prNumber: options.pr.number,
     schemaVersion: 1,
     ...sticky?.assetState?.prNumber === options.pr.number ? sticky.assetState : {}
   };
+  info(`[postman-tdd] Sticky marker assets before repair: workspace=${state3.workspaceId || "(missing)"}, spec=${state3.specId || "(missing)"}, collection=${state3.collectionId || "(missing)"}.`);
+  info("[postman-tdd] Repair resolving/updating Postman preview assets for current PR spec.");
   const workspace = await resolveTddWorkspace({
     config,
     inputs: options.inputs,
@@ -107908,6 +107962,8 @@ async function runRepairMode(options) {
     specId: assets.specId,
     workspaceId: workspace.workspaceId
   };
+  info(`[postman-tdd] Repair assets ready: workspace=${state3.workspaceId}, spec=${state3.specId}, collection=${state3.collectionId}.`);
+  info("[postman-tdd] Repair ensuring Postman CLI is available and authenticated.");
   await ensurePostmanCli(options.inputs.postmanApiKey, {
     cliInstallUrl: options.endpointProfile.cliInstallUrl,
     mask: options.mask,
@@ -107918,6 +107974,8 @@ async function runRepairMode(options) {
     ...failure.immutablePaths
   ].filter(Boolean))];
   const immutableHashes = hashPaths(repoRoot, immutablePaths);
+  info(`[postman-tdd] Repair immutable paths: ${immutablePaths.join(", ")}.`);
+  info(`[postman-tdd] Recorded immutable path hash baseline for ${immutableHashes.length} path(s).`);
   const patchPolicy = {
     allowedWritePaths: config.repair.allowedWritePaths,
     immutablePaths,
@@ -107926,7 +107984,9 @@ async function runRepairMode(options) {
   let currentFailure = failure;
   let attempts = 0;
   const maxAttempts = Math.min(options.inputs.repairMaxAttempts, config.repair.maxAttempts);
+  info(`[postman-tdd] Repair loop budget: maxAttempts=${maxAttempts}.`);
   while (attempts < maxAttempts) {
+    info(`[postman-tdd] Repair attempt ${attempts + 1}/${maxAttempts}: asking provider for an implementation-only patch.`);
     const repair = await runOpenAiRepairTurn({
       apiKey: options.inputs.openaiApiKey,
       failure: currentFailure,
@@ -107939,18 +107999,23 @@ async function runRepairMode(options) {
       secretMasker: options.mask
     });
     if (repair.status === "blocked") {
+      info(`[postman-tdd] Provider reported blocked: ${repair.message}`);
       await block(options, "agent_blocked", repair.message, attempts);
       return;
     }
     if (repair.status === "no_change") {
+      info(`[postman-tdd] Provider returned no implementation change: ${repair.message}`);
       await block(options, "agent_no_change", repair.message, attempts);
       return;
     }
     attempts += 1;
-    info(`Repair attempt ${attempts}: ${repair.summary}`);
+    info(`[postman-tdd] Repair attempt ${attempts} accepted patch: ${repair.summary}`);
+    info(`[postman-tdd] Repair attempt ${attempts} touched paths: ${repair.touchedPaths.join(", ") || "(none reported)"}.`);
     if (config.repair.localTestCommand) {
+      info(`[postman-tdd] Running repair local test command: ${options.mask(config.repair.localTestCommand)}.`);
       const localTest = await runCommand(config.repair.localTestCommand, { mask: options.mask });
       if (localTest.exitCode !== 0) {
+        info(`[postman-tdd] Local test command failed with exit code ${localTest.exitCode}; feeding failure back to provider.`);
         currentFailure = createFailureDocument({
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
@@ -107968,7 +108033,9 @@ async function runRepairMode(options) {
         });
         continue;
       }
+      info("[postman-tdd] Local test command passed.");
     }
+    info("[postman-tdd] Running local Postman TDD oracle after repair patch.");
     const result = await runOracle({
       collectionId: state3.collectionId || "",
       config,
@@ -107979,12 +108046,16 @@ async function runRepairMode(options) {
       assetNames
     });
     if (result.ok) {
+      info("[postman-tdd] Local Postman TDD oracle passed.");
+      info("[postman-tdd] Verifying immutable path hashes before commit.");
       verifyPathHashes(repoRoot, immutableHashes);
-      verifyChangedPaths(repoRoot, patchPolicy);
+      const changedPaths2 = verifyChangedPaths(repoRoot, patchPolicy);
+      info(`[postman-tdd] Repair diff validated for commit: ${changedPaths2.join(", ") || "(none)"}.`);
       const token = options.inputs.repairGithubToken || options.inputs.githubToken;
       if (!options.inputs.repairGithubToken) {
         warning("repair-github-token was not set. Commits pushed with GITHUB_TOKEN may not trigger follow-up workflows.");
       }
+      info(`[postman-tdd] Committing and pushing repair to branch ${prDetails.headBranch}.`);
       const commitSha = commitAndPushRepair({
         branch: prDetails.headBranch,
         commitMessage: options.inputs.repairCommitMessage,
@@ -107995,6 +108066,7 @@ async function runRepairMode(options) {
         repoRoot,
         repository: options.pr.repository
       });
+      info(`[postman-tdd] Repair commit pushed: ${commitSha}.`);
       const summary2 = await publishRepair(options.github, options.pr.number, {
         attempts,
         commitSha,
@@ -108011,13 +108083,39 @@ async function runRepairMode(options) {
       });
       return;
     }
+    info(`[postman-tdd] Local Postman TDD oracle still failed: phase=${result.failure.phase}, failures=${result.failure.failures.length}.`);
     currentFailure = result.failure;
   }
+  info(`[postman-tdd] Repair budget exhausted after ${attempts} accepted attempt(s).`);
   await block(options, "budget_exhausted", `Repair budget exhausted after ${attempts} attempt(s).`, attempts);
 }
+function logRepairConfig(config, options) {
+  startGroup("Postman TDD repair config");
+  info(`configPath=${config.configPath}`);
+  info(`projectName=${config.projectName}`);
+  info(`specPath=${config.specPath}`);
+  info(`tddEnabled=${config.tddEnabled}`);
+  info(`repairEnabled=${config.repair.enabled}`);
+  info(`repairProviderInput=${options.inputs.repairProvider}`);
+  info(`repairProviderConfig=${config.repair.provider}`);
+  info(`repairModel=${options.inputs.repairModel}`);
+  info(`repairMaxAttemptsInput=${options.inputs.repairMaxAttempts}`);
+  info(`repairMaxAttemptsConfig=${config.repair.maxAttempts}`);
+  info(`allowedWritePaths=${config.repair.allowedWritePaths.join(", ") || "(none)"}`);
+  info(`allowedReadPaths=${config.repair.allowedReadPaths.join(", ") || "(none)"}`);
+  info(`localTestCommand=${config.repair.localTestCommand ? options.mask(config.repair.localTestCommand) : "(not configured)"}`);
+  info(`baseUrl=${options.mask(config.runtime.baseUrl)}`);
+  info(`healthUrl=${options.mask(config.runtime.healthUrl)}`);
+  info(`startCommand=${options.mask(config.runtime.startCommand)}`);
+  info(`stopCommand=${config.runtime.stopCommand ? options.mask(config.runtime.stopCommand) : "(not configured)"}`);
+  info(`timeoutSeconds=${config.runtime.timeoutSeconds}`);
+  endGroup();
+}
 async function runOracle(options) {
+  info(`[postman-tdd] Oracle starting service: ${options.mask(options.config.runtime.startCommand)}.`);
   const running = startBackgroundCommand(options.config.runtime.startCommand, { mask: options.mask });
   try {
+    info(`[postman-tdd] Oracle waiting for health check ${options.mask(options.config.runtime.healthUrl)} for up to ${options.config.runtime.timeoutSeconds}s.`);
     const health = await waitForHealth(
       options.config.runtime.healthUrl,
       running,
@@ -108025,6 +108123,7 @@ async function runOracle(options) {
       options.mask
     );
     if (!health.ok) {
+      info(`[postman-tdd] Oracle health check failed: phase=${health.phase}, message=${health.message}.`);
       return {
         ok: false,
         failure: createFailureDocument({
@@ -108046,17 +108145,22 @@ async function runOracle(options) {
         })
       };
     }
+    info("[postman-tdd] Oracle health check passed.");
+    info(`[postman-tdd] Oracle running collection ${options.collectionId} against ${options.mask(options.config.runtime.baseUrl)}.`);
     const collectionRun = await runTddCollection(options.collectionId, options.config.runtime.baseUrl, options.mask);
     if (collectionRun.exitCode === 0) {
+      info("[postman-tdd] Oracle collection run passed.");
       return { ok: true };
     }
+    const failures = extractCollectionFailures(collectionRun.logExcerpt);
+    info(`[postman-tdd] Oracle collection run failed with exit code ${collectionRun.exitCode}; normalized ${failures.length} failure(s).`);
     return {
       ok: false,
       failure: createFailureDocument({
         baseUrl: options.config.runtime.baseUrl,
         collectionName: options.assetNames.collectionName,
         commit: options.prHeadSha,
-        failures: extractCollectionFailures(collectionRun.logExcerpt),
+        failures,
         immutablePathHashes: options.immutableHashes,
         immutablePaths: options.immutablePaths,
         message: `Postman TDD collection failed with exit code ${collectionRun.exitCode}`,
@@ -108066,16 +108170,19 @@ async function runOracle(options) {
     };
   } finally {
     if (options.config.runtime.stopCommand) {
+      info(`[postman-tdd] Oracle running stop command: ${options.mask(options.config.runtime.stopCommand)}.`);
       const stop = await runCommand(options.config.runtime.stopCommand, { mask: options.mask });
       if (stop.exitCode !== 0) {
         warning(`tdd.stopCommand failed: ${stop.logExcerpt}`);
       }
     } else {
+      info("[postman-tdd] Oracle terminating started service process.");
       running.kill();
     }
   }
 }
 async function block(options, reason, message, attempts) {
+  info(`[postman-tdd] Repair blocked: reason=${reason}, attempts=${attempts}, message=${message}`);
   const summaryPath = await publishRepair(options.github, options.pr.number, {
     attempts,
     blockedReason: reason,
@@ -108092,6 +108199,7 @@ async function block(options, reason, message, attempts) {
   });
 }
 async function publishRepair(github, prNumber, summary2) {
+  info(`[postman-tdd] Writing repair summary and updating repair sticky comment: status=${summary2.status}, attempts=${summary2.attempts}.`);
   const summaryPath = writeRepairSummary(summary2);
   await github.upsertRepairComment(prNumber, summary2);
   return resolve6(summaryPath);
@@ -108423,6 +108531,7 @@ async function runAction(options = {}) {
   const pr = resolvePrMetadata(inputs.prNumber);
   const github = options.githubClient ?? new GitHubPrClient(inputs.githubToken, pr.repository);
   const artifactClient = options.artifactClient ?? new DefaultArtifactClient();
+  logActionContext({ endpointProfile, inputs, pr });
   if (inputs.mode === "repair") {
     await runRepairMode({
       endpointProfile,
@@ -108442,28 +108551,36 @@ async function runAction(options = {}) {
     schemaVersion: 1
   };
   try {
+    info(`[postman-tdd] Looking for existing sticky preview comment on PR #${pr.number}.`);
     const sticky = await github.findStickyComment(pr.number);
     prCommentId = sticky?.id ? String(sticky.id) : "";
+    info(sticky ? `[postman-tdd] Found sticky preview comment ${prCommentId}.` : "[postman-tdd] No sticky preview comment found; a new one will be created if needed.");
     state3 = {
       ...state3,
       ...sticky?.assetState?.prNumber === pr.number ? sticky.assetState : {}
     };
+    if (state3.workspaceId || state3.specId || state3.collectionId) {
+      info(`[postman-tdd] Reusing marker asset state: workspace=${state3.workspaceId || "(missing)"}, spec=${state3.specId || "(missing)"}, collection=${state3.collectionId || "(missing)"}.`);
+    }
     const config = loadOnboardingConfig({
       configPath: inputs.onboardingConfigPath,
       projectNameOverride: inputs.projectName,
       specPathOverride: inputs.specPath
     });
+    logResolvedConfig(config, inputs, mask);
     setStandardOutputs({
       agentTaskPath: `${AGENT_CONTEXT_DIR}/agent-task.md`,
       failuresJsonPath: `${AGENT_CONTEXT_DIR}/failures.json`
     });
     if (!config.tddEnabled) {
+      info("[postman-tdd] tdd.enabled=false; skipping preview run.");
       setOutput("status", "skipped");
       setOutput("failure-phase", "none");
       return;
     }
     if (inputs.mode === "cleanup") {
       currentPhase = "cleanup";
+      info(`[postman-tdd] Cleanup mode: deleting PR-scoped assets for PR #${pr.number}.`);
       await cleanupPreviewAssets({ github, postman, prNumber: pr.number, state: state3 });
       prCommentId = String(await github.upsertStickyComment(pr.number, state3, {
         status: "cleaned-up",
@@ -108477,7 +108594,9 @@ async function runAction(options = {}) {
       return;
     }
     const assetNames = createAssetNames(pr.number, config.projectName);
+    info(`[postman-tdd] Preview asset names: spec="${assetNames.specName}", collection="${assetNames.collectionName}".`);
     const previousFailureDocument = sticky?.body ? parseFailureDocument(sticky.body) : void 0;
+    info(previousFailureDocument ? `[postman-tdd] Previous failure JSON found: phase=${previousFailureDocument.phase}, commit=${previousFailureDocument.commit || "(missing)"}.` : "[postman-tdd] No previous failure JSON found in sticky comment.");
     const trustedBaseline = resolveTrustedImmutableBaseline(
       previousFailureDocument,
       inputs.immutableStateSigningKey,
@@ -108490,6 +108609,7 @@ async function runAction(options = {}) {
     );
     if (!trustedBaseline.ok) {
       currentPhase = "immutable_state_tampered";
+      info(`[postman-tdd] Immutable state verification failed: ${trustedBaseline.message}`);
       delete state3.immutableState;
       const document2 = createFailureDocument({
         baseUrl: config.runtime.baseUrl,
@@ -108520,9 +108640,11 @@ async function runAction(options = {}) {
       throw new Error(IMMUTABLE_STATE_TAMPERED_MESSAGE);
     }
     const previousImmutableHashes = trustedBaseline.hashes;
+    info(`[postman-tdd] Immutable baseline: ${previousImmutableHashes.length} path(s), signing=${inputs.immutableStateSigningKey ? "enabled" : "disabled"}.`);
     const immutableSpecChanges = findImmutablePathChanges(previousImmutableHashes);
     if (immutableSpecChanges.length > 0) {
       currentPhase = "immutable_spec";
+      info(`[postman-tdd] Immutable spec guard failed for ${immutableSpecChanges.length} path(s).`);
       if (trustedBaseline.signedState) {
         state3.immutableState = trustedBaseline.signedState;
       }
@@ -108558,6 +108680,7 @@ async function runAction(options = {}) {
       throw new Error(IMMUTABLE_SPEC_GUARD_MESSAGE);
     }
     currentPhase = "workspace";
+    info("[postman-tdd] Resolving shared TDD preview workspace.");
     const resolvedWorkspace = await resolveTddWorkspace({
       config,
       inputs,
@@ -108569,6 +108692,7 @@ async function runAction(options = {}) {
       setOutput("config-commit-sha", resolvedWorkspace.configCommitSha);
     }
     currentPhase = "asset_upsert";
+    info("[postman-tdd] Upserting PR-scoped Postman spec and TDD collection.");
     const assetResult = await upsertPreviewAssets({
       assetNames,
       config,
@@ -108584,6 +108708,8 @@ async function runAction(options = {}) {
     setOutput("workspace-id", state3.workspaceId || "");
     setOutput("spec-id", state3.specId || "");
     setOutput("tdd-collection-id", state3.collectionId || "");
+    info(`[postman-tdd] Asset upsert complete: workspace=${state3.workspaceId}, spec=${state3.specId}, collection=${state3.collectionId}.`);
+    info("[postman-tdd] Ensuring Postman CLI is available and authenticated.");
     await ensurePostmanCli(inputs.postmanApiKey, {
       cliInstallUrl: endpointProfile.cliInstallUrl,
       mask,
@@ -108599,8 +108725,10 @@ async function runAction(options = {}) {
       specPath: config.specPath
     }), inputs.immutableStateSigningKey) : void 0;
     currentPhase = "service_startup";
+    info(`[postman-tdd] Starting service: ${mask(config.runtime.startCommand)}`);
     const running = startBackgroundCommand(config.runtime.startCommand, { mask });
     try {
+      info(`[postman-tdd] Waiting for health check ${mask(config.runtime.healthUrl)} for up to ${config.runtime.timeoutSeconds}s.`);
       const health = await waitForHealth(
         config.runtime.healthUrl,
         running,
@@ -108608,6 +108736,7 @@ async function runAction(options = {}) {
         mask
       );
       if (!health.ok) {
+        info(`[postman-tdd] Health check failed in phase=${health.phase}: ${health.message}`);
         const document2 = createFailureDocument({
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
@@ -108643,10 +108772,13 @@ async function runAction(options = {}) {
         failurePublished = true;
         throw new Error(health.message);
       }
+      info("[postman-tdd] Health check passed.");
       currentPhase = "collection_run";
+      info(`[postman-tdd] Running TDD collection ${state3.collectionId || "(missing)"} against ${mask(config.runtime.baseUrl)}.`);
       const collectionRun = await runTddCollection(state3.collectionId || "", config.runtime.baseUrl, mask);
       if (collectionRun.exitCode !== 0) {
         const failures = extractCollectionFailures(collectionRun.logExcerpt);
+        info(`[postman-tdd] Collection run failed with exit code ${collectionRun.exitCode}; normalized ${failures.length} failure(s).`);
         const document2 = createFailureDocument({
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
@@ -108676,16 +108808,20 @@ async function runAction(options = {}) {
         failurePublished = true;
         throw new Error(document2.message);
       }
+      info("[postman-tdd] Collection run passed.");
     } finally {
       if (config.runtime.stopCommand) {
+        info(`[postman-tdd] Running stop command: ${mask(config.runtime.stopCommand)}`);
         const stop = await runCommand(config.runtime.stopCommand, { mask });
         if (stop.exitCode !== 0) {
           warning(`tdd.stopCommand failed: ${stop.logExcerpt}`);
         }
       } else {
+        info("[postman-tdd] No stop command configured; terminating started service process.");
         running.kill();
       }
     }
+    info("[postman-tdd] Updating sticky preview comment with passed status.");
     prCommentId = String(await github.upsertStickyComment(pr.number, state3, {
       collectionId: state3.collectionId,
       collectionName: assetNames.collectionName,
@@ -108698,6 +108834,7 @@ async function runAction(options = {}) {
     setOutput("failure-phase", "none");
     setOutput("pr-comment-id", prCommentId);
   } catch (error2) {
+    info(`[postman-tdd] Action failed during phase=${currentPhase}.`);
     setOutput("status", "failed");
     setOutput("pr-comment-id", prCommentId);
     if (!failurePublished) {
@@ -108705,6 +108842,43 @@ async function runAction(options = {}) {
     }
     throw error2;
   }
+}
+function logActionContext(options) {
+  startGroup("Postman TDD action context");
+  info(`mode=${options.inputs.mode}`);
+  info(`repository=${options.pr.repository}`);
+  info(`prNumber=${options.pr.number}`);
+  info(`headBranch=${options.pr.branch || "(unknown)"}`);
+  info(`headSha=${options.pr.sha || "(unknown)"}`);
+  info(`postmanRegion=${options.inputs.postmanRegion}`);
+  info(`postmanStack=${options.inputs.postmanStack}`);
+  info(`postmanApiBaseUrl=${options.endpointProfile.apiBaseUrl}`);
+  info(`configWriteMode=${options.inputs.configWriteMode}`);
+  info(`repairProvider=${options.inputs.repairProvider}`);
+  info(`repairMaxAttemptsInput=${options.inputs.repairMaxAttempts}`);
+  endGroup();
+}
+function logResolvedConfig(config, inputs, mask) {
+  startGroup("Postman TDD resolved config");
+  info(`configPath=${config.configPath}`);
+  info(`projectName=${config.projectName}`);
+  info(`specPath=${config.specPath}`);
+  info(`tddEnabled=${config.tddEnabled}`);
+  info(`workspaceName=${config.workspace.name || "(not configured)"}`);
+  info(`workspaceId=${config.workspace.id || "(not configured)"}`);
+  info(`baseUrl=${mask(config.runtime.baseUrl)}`);
+  info(`healthUrl=${mask(config.runtime.healthUrl)}`);
+  info(`startCommand=${mask(config.runtime.startCommand)}`);
+  info(`stopCommand=${config.runtime.stopCommand ? mask(config.runtime.stopCommand) : "(not configured)"}`);
+  info(`timeoutSeconds=${config.runtime.timeoutSeconds}`);
+  info(`repairEnabled=${config.repair.enabled}`);
+  info(`repairProvider=${config.repair.provider}`);
+  info(`repairMaxAttemptsConfig=${config.repair.maxAttempts}`);
+  info(`repairMaxAttemptsEffectiveInput=${inputs.repairMaxAttempts}`);
+  info(`repairAllowedWritePaths=${config.repair.allowedWritePaths.join(", ") || "(none)"}`);
+  info(`repairAllowedReadPaths=${config.repair.allowedReadPaths.join(", ") || "(none)"}`);
+  info(`repairLocalTestCommand=${config.repair.localTestCommand ? mask(config.repair.localTestCommand) : "(not configured)"}`);
+  endGroup();
 }
 function uniquePaths(hashes) {
   return [...new Set(hashes.map((hash) => hash.path).filter(Boolean))];
@@ -108718,17 +108892,22 @@ async function cleanupPreviewAssets(options) {
   void options.github;
   void options.prNumber;
   if (options.state.collectionId) {
+    info(`[postman-tdd] Deleting collection ${options.state.collectionId}.`);
     await options.postman.deleteCollection(options.state.collectionId);
   }
   if (options.state.specId) {
+    info(`[postman-tdd] Deleting spec ${options.state.specId}.`);
     await options.postman.deleteSpec(options.state.specId);
   }
 }
 async function publishFailure(options) {
+  info(`[postman-tdd] Publishing failure context: phase=${options.document.phase}, failures=${options.document.failures.length}.`);
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
+  info(`[postman-tdd] Wrote agent context files: ${paths.agentTaskPath}, ${paths.failuresJsonPath}, ${paths.immutableSpecGuardPath}.`);
   setOutput("failure-phase", options.document.phase);
   let artifact;
   try {
+    info(`[postman-tdd] Uploading agent context artifact "${AGENT_CONTEXT_ARTIFACT_NAME}".`);
     artifact = await options.artifactClient.uploadArtifact(
       AGENT_CONTEXT_ARTIFACT_NAME,
       [paths.agentTaskPath, paths.failuresJsonPath, paths.immutableSpecGuardPath],
@@ -108745,6 +108924,7 @@ async function publishFailure(options) {
     const message = error2 instanceof Error ? error2.message : String(error2);
     warning(`Unable to upload agent context artifact: ${message}`);
   }
+  info("[postman-tdd] Updating sticky preview comment with failed status.");
   const commentId = await options.github.upsertStickyComment(options.prNumber, options.state, {
     agentContextArtifactDigest: artifact?.digest,
     agentContextArtifactId: artifact?.id,

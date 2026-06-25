@@ -1,3 +1,5 @@
+import * as core from '@actions/core';
+
 import { createRepairTools, executeRepairTool, type RepairToolContext } from './tools.js';
 import type { AgentFailureDocument } from '../types.js';
 import type { SecretMasker } from '../secrets.js';
@@ -21,6 +23,7 @@ export type OpenAiRepairResult =
   | { status: 'no_change'; message: string };
 
 export async function runOpenAiRepairTurn(options: OpenAiRepairOptions): Promise<OpenAiRepairResult> {
+  core.info(`[postman-tdd] OpenAI Responses repair turn: model=${options.model}, failurePhase=${options.failure.phase}, failures=${options.failure.failures.length}.`);
   let input: unknown[] = [{
     content: [{
       text: buildRepairPrompt(options.failure, options.repairContext),
@@ -32,6 +35,7 @@ export async function runOpenAiRepairTurn(options: OpenAiRepairOptions): Promise
   let previousResponseId: string | undefined;
 
   for (let round = 0; round < (options.maxToolRounds || 12); round += 1) {
+    core.info(`[postman-tdd] OpenAI Responses round ${round + 1}: sending ${previousResponseId ? 'tool output(s)' : 'initial repair instructions'}.`);
     const response = await createResponse({
       apiKey: options.apiKey,
       fetchImpl: options.fetchImpl,
@@ -46,6 +50,7 @@ export async function runOpenAiRepairTurn(options: OpenAiRepairOptions): Promise
     }
     const calls = (Array.isArray(response.output) ? response.output : [])
       .filter((item): item is JsonRecord => isFunctionCall(item));
+    core.info(`[postman-tdd] OpenAI Responses round ${round + 1}: received ${calls.length} function call(s).`);
     if (calls.length === 0) {
       return {
         status: 'no_change',
@@ -57,7 +62,19 @@ export async function runOpenAiRepairTurn(options: OpenAiRepairOptions): Promise
     for (const call of calls) {
       const name = String(call.name || '');
       const args = parseArguments(call.arguments);
+      core.info(`[postman-tdd] Executing guarded repair tool: ${name}.`);
       const result = executeRepairTool(name, args, options.repairContext);
+      if (result.error) {
+        core.info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
+      } else if (name === 'list_files') {
+        core.info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
+      } else if (name === 'search_files') {
+        core.info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
+      } else if (name === 'read_file') {
+        core.info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
+      } else if (name === 'propose_patch') {
+        core.info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(', ') || '(none)'}.`);
+      }
       toolOutputs.push({
         call_id: call.call_id,
         output: JSON.stringify(result),
@@ -83,6 +100,7 @@ export async function runOpenAiRepairTurn(options: OpenAiRepairOptions): Promise
     input = toolOutputs;
   }
 
+  core.info('[postman-tdd] OpenAI repair turn exhausted tool-call rounds without a patch.');
   return {
     status: 'no_change',
     message: 'Repair agent exhausted tool-call rounds without proposing a patch.'

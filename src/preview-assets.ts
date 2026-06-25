@@ -26,7 +26,9 @@ export async function resolveTddWorkspace(options: {
     return { workspaceId: configuredId };
   }
 
+  core.info(`[postman-tdd] No workspace ID configured; searching for workspace named "${options.config.workspace.name}".`);
   const matches = await options.postman.findWorkspacesByName(options.config.workspace.name);
+  core.info(`[postman-tdd] Workspace name search returned ${matches.length} exact match(es).`);
   if (matches.length > 1) {
     throw new Error(
       `Multiple Postman workspaces named "${options.config.workspace.name}" exist. Set tdd.workspace.id explicitly.`
@@ -39,6 +41,9 @@ export async function resolveTddWorkspace(options: {
       `Shared TDD preview workspace for ${options.config.projectName}`,
       parseWorkspaceTeamId(options.inputs.workspaceTeamId)
     )).id;
+  core.info(matches[0]?.id
+    ? `[postman-tdd] Reusing workspace matched by name: ${workspaceId}.`
+    : `[postman-tdd] Created shared TDD workspace: ${workspaceId}.`);
 
   if (options.inputs.configWriteMode === 'none') {
     core.warning(`Resolved TDD workspace ${workspaceId}, but config-write-mode=none so tdd.workspace.id was not persisted.`);
@@ -47,8 +52,10 @@ export async function resolveTddWorkspace(options: {
 
   const patch = patchWorkspaceId(options.config.configPath, workspaceId);
   if (!patch.changed) {
+    core.info('[postman-tdd] Workspace ID was already present in config after patch check.');
     return { workspaceId };
   }
+  core.info(`[postman-tdd] Persisting workspace ID to ${options.config.configPath} using ${options.inputs.configWriteMode}.`);
   const result = await commitConfigWriteback({
     committerEmail: options.inputs.committerEmail,
     committerName: options.inputs.committerName,
@@ -66,9 +73,12 @@ export async function upsertPreviewAssets(options: {
   postman: PostmanClient;
   state: PreviewAssetState;
 }): Promise<{ collectionId: string; specId: string }> {
+  core.info(`[postman-tdd] Reading OpenAPI spec from ${options.config.specPath}.`);
   const specContent = readFileSync(resolveWorkspacePath(options.config.specPath), 'utf8');
+  core.info(`[postman-tdd] Spec size: ${Buffer.byteLength(specContent, 'utf8')} bytes.`);
   const document = parseOpenApiDocument(specContent);
   const contractIndex = buildContractIndex(document);
+  core.info(`[postman-tdd] Parsed OpenAPI ${contractIndex.openapiVersion}; instrumenting ${contractIndex.operations.length} operation(s).`);
   const specId = await upsertSpec({
     content: specContent,
     name: options.assetNames.specName,
@@ -83,11 +93,13 @@ export async function upsertPreviewAssets(options: {
     options.config.projectName,
     `[TDD PR-${options.state.prNumber}] [Contract]`
   );
+  core.info(`[postman-tdd] Generated temporary collection ${tempCollectionId} from spec ${specId}.`);
   const tempCollection = await options.postman.getCollection(tempCollectionId);
   if (!tempCollection || typeof tempCollection !== 'object') {
     throw new Error(`Generated TDD collection ${tempCollectionId} could not be fetched`);
   }
   const planned = instrumentContractCollection(tempCollection as Record<string, unknown>, contractIndex);
+  core.info(`[postman-tdd] Contract instrumentation complete with ${planned.warnings.length} warning(s).`);
   for (const warning of planned.warnings) {
     core.warning(warning);
   }
@@ -95,15 +107,19 @@ export async function upsertPreviewAssets(options: {
   let collectionId = options.state.collectionId || '';
   if (collectionId) {
     try {
+      core.info(`[postman-tdd] Updating existing PR TDD collection ${collectionId}.`);
       await options.postman.updateCollection(collectionId, planned.collection);
       await options.postman.deleteCollection(tempCollectionId);
+      core.info(`[postman-tdd] Deleted temporary collection ${tempCollectionId}.`);
     } catch {
       core.warning(`Existing PR TDD collection ${collectionId} could not be updated; adopting generated collection ${tempCollectionId}`);
       collectionId = tempCollectionId;
       await options.postman.updateCollection(collectionId, planned.collection);
+      core.info(`[postman-tdd] Adopted generated collection ${collectionId}.`);
     }
   } else {
     collectionId = tempCollectionId;
+    core.info(`[postman-tdd] No existing collection marker; adopting generated collection ${collectionId}.`);
     await options.postman.updateCollection(collectionId, planned.collection);
   }
 
@@ -129,11 +145,13 @@ async function upsertSpec(options: {
 }): Promise<string> {
   if (options.specId) {
     try {
+      core.info(`[postman-tdd] Updating existing PR TDD spec ${options.specId}.`);
       await options.postman.updateSpec(options.specId, options.content);
       return options.specId;
     } catch {
       core.warning(`Existing PR TDD spec ${options.specId} could not be updated; creating a new spec.`);
     }
   }
+  core.info(`[postman-tdd] Uploading new PR TDD spec "${options.name}" to workspace ${options.workspaceId}.`);
   return options.postman.uploadSpec(options.workspaceId, options.name, options.content, options.openapiVersion);
 }
