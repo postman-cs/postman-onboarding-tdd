@@ -107956,9 +107956,21 @@ async function runRepairMode(options) {
     return;
   }
   info(`[postman-tdd] Failure context found: phase=${failure.phase}, commit=${failure.commit || "(missing)"}, failures=${failure.failures.length}.`);
-  if (failure.commit && failure.commit !== prDetails.headSha) {
-    info(`[postman-tdd] Repair blocked because failure context is stale: failure=${failure.commit}, head=${prDetails.headSha}.`);
-    await block(options, "stale_failure", `Latest failure JSON commit ${failure.commit} does not match PR head ${prDetails.headSha}.`, 0);
+  const failureCommit = failure.commit;
+  if (!isNonEmptyString(failureCommit)) {
+    info("[postman-tdd] Repair blocked because failure context is missing the PR head commit.");
+    await block(options, "missing_failure_commit", "Latest failure JSON is missing commit; wait for Postman TDD Preview to publish failure context for the latest PR head.", 0);
+    return;
+  }
+  const malformedReason = validateRepairFailureContext(failure);
+  if (malformedReason) {
+    info(`[postman-tdd] Repair blocked because failure context is malformed: ${malformedReason}.`);
+    await block(options, "malformed_failure_context", `Latest failure JSON is malformed: ${malformedReason}.`, 0);
+    return;
+  }
+  if (failureCommit !== prDetails.headSha) {
+    info(`[postman-tdd] Repair blocked because failure context is stale: failure=${failureCommit}, head=${prDetails.headSha}.`);
+    await block(options, "stale_failure", `Latest failure JSON commit ${failureCommit} does not match PR head ${prDetails.headSha}.`, 0);
     return;
   }
   if (!REPAIRABLE_PHASES.has(failure.phase)) {
@@ -108120,6 +108132,37 @@ async function runRepairMode(options) {
   }
   info(`[postman-tdd] Repair budget exhausted after ${attempts} accepted attempt(s).`);
   await block(options, "budget_exhausted", `Repair budget exhausted after ${attempts} attempt(s).`, attempts);
+}
+function validateRepairFailureContext(failure) {
+  const context5 = failure;
+  if (!Array.isArray(context5.failures) || !context5.failures.every(isFailureEntry)) {
+    return "failures must be an array of failure objects with messages";
+  }
+  if (!Array.isArray(context5.immutablePaths) || !context5.immutablePaths.every(isNonEmptyString)) {
+    return "immutablePaths must be an array of path strings";
+  }
+  if (!Array.isArray(context5.immutablePathHashes) || !context5.immutablePathHashes.every(isImmutablePathHash)) {
+    return "immutablePathHashes must be an array of path hash objects";
+  }
+  if (!isSuccessCriteria(context5.successCriteria)) {
+    return "successCriteria must describe the required latest-head check";
+  }
+  return void 0;
+}
+function isFailureEntry(value) {
+  return isRecord(value) && isNonEmptyString(value.message);
+}
+function isImmutablePathHash(value) {
+  return isRecord(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
+}
+function isSuccessCriteria(value) {
+  return isRecord(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
 }
 function logRepairConfig(config, options) {
   startGroup("Postman TDD repair config");

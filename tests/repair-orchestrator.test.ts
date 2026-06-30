@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { renderStickyComment, type GitHubPrClient, type PullRequestDetails } from '../src/github/pr-comment.js';
+import { type GitHubPrClient, type PullRequestDetails } from '../src/github/pr-comment.js';
 import { runRepairMode } from '../src/repair/orchestrator.js';
 import type { ActionInputs, AgentFailureDocument } from '../src/types.js';
 
@@ -105,13 +105,17 @@ tdd:
       },
       ...overrides
     };
-    return renderStickyComment({
-      prNumber: 123,
-      schemaVersion: 1
-    }, {
-      failureDocument: failure,
-      status: 'failed'
-    });
+    return [
+      '# Postman TDD Preview (FAILED)',
+      '',
+      '<details>',
+      '<summary>Agent failure JSON</summary>',
+      '',
+      '```json',
+      JSON.stringify(failure, null, 2),
+      '```',
+      '</details>'
+    ].join('\n');
   }
 
   async function runGuard(options: {
@@ -171,6 +175,32 @@ tdd:
     expect(summary).toMatchObject({
       attempts: 0,
       blockedReason: 'stale_failure',
+      status: 'blocked'
+    });
+  });
+
+  it('blocks failure context without a commit before asset or model work starts', async () => {
+    const summary = await runGuard({
+      stickyBody: failureBody({ commit: undefined })
+    });
+
+    expect(summary).toMatchObject({
+      attempts: 0,
+      blockedReason: 'missing_failure_commit',
+      status: 'blocked'
+    });
+  });
+
+  it('blocks malformed failure context before asset or model work starts', async () => {
+    const summary = await runGuard({
+      stickyBody: failureBody({
+        immutablePaths: 'api/openapi.yaml'
+      } as unknown as Partial<AgentFailureDocument>)
+    });
+
+    expect(summary).toMatchObject({
+      attempts: 0,
+      blockedReason: 'malformed_failure_context',
       status: 'blocked'
     });
   });
