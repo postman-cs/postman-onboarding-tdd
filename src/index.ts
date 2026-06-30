@@ -195,6 +195,10 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
     core.info(previousFailureDocument
       ? `[postman-tdd] Previous failure JSON found: phase=${previousFailureDocument.phase}, commit=${previousFailureDocument.commit || '(missing)'}.`
       : '[postman-tdd] No previous failure JSON found in sticky comment.');
+    if (!previousFailureDocument && state.immutableState) {
+      core.info('[postman-tdd] Ignoring stale immutable state marker because the sticky comment has no failure JSON.');
+      delete state.immutableState;
+    }
     const trustedBaseline = resolveTrustedImmutableBaseline(
       previousFailureDocument,
       inputs.immutableStateSigningKey,

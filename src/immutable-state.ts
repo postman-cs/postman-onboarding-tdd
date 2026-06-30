@@ -86,7 +86,7 @@ export function resolveTrustedImmutableBaseline(
   expectation: ImmutableStateExpectation,
   signedStateOverride?: SignedImmutableState
 ): TrustedImmutableBaseline {
-  const signedState = signedStateOverride || document?.immutableState;
+  const signedState = document ? signedStateOverride || document.immutableState : undefined;
   const hashes = signedState?.payload.immutablePathHashes || document?.immutablePathHashes || [];
   if (hashes.length === 0) {
     return { hashes: [], ok: true };
