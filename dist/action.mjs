@@ -108586,16 +108586,16 @@ async function runAction(options = {}) {
     if (state3.workspaceId || state3.specId || state3.collectionId) {
       info(`[postman-tdd] Reusing marker asset state: workspace=${state3.workspaceId || "(missing)"}, spec=${state3.specId || "(missing)"}, collection=${state3.collectionId || "(missing)"}.`);
     }
+    setStandardOutputs({
+      agentTaskPath: `${AGENT_CONTEXT_DIR}/agent-task.md`,
+      failuresJsonPath: `${AGENT_CONTEXT_DIR}/failures.json`
+    });
     const config = loadOnboardingConfig({
       configPath: inputs.onboardingConfigPath,
       projectNameOverride: inputs.projectName,
       specPathOverride: inputs.specPath
     });
     logResolvedConfig(config, inputs, mask);
-    setStandardOutputs({
-      agentTaskPath: `${AGENT_CONTEXT_DIR}/agent-task.md`,
-      failuresJsonPath: `${AGENT_CONTEXT_DIR}/failures.json`
-    });
     if (!config.tddEnabled) {
       info("[postman-tdd] tdd.enabled=false; skipping preview run.");
       setOutput("status", "skipped");
@@ -108649,7 +108649,7 @@ async function runAction(options = {}) {
         phase: "immutable_state_tampered",
         specPath: config.specPath
       });
-      await publishFailure({
+      prCommentId = String(await publishFailure({
         artifactClient,
         document: document2,
         github,
@@ -108659,7 +108659,7 @@ async function runAction(options = {}) {
           collectionName: assetNames.collectionName,
           failurePhase: "immutable_state_tampered"
         }
-      });
+      }));
       failurePublished = true;
       throw new Error(IMMUTABLE_STATE_TAMPERED_MESSAGE);
     }
@@ -108689,7 +108689,7 @@ async function runAction(options = {}) {
         phase: "immutable_spec",
         specPath: config.specPath
       });
-      await publishFailure({
+      prCommentId = String(await publishFailure({
         artifactClient,
         document: document2,
         github,
@@ -108699,7 +108699,7 @@ async function runAction(options = {}) {
           collectionName: assetNames.collectionName,
           failurePhase: "immutable_spec"
         }
-      });
+      }));
       failurePublished = true;
       throw new Error(IMMUTABLE_SPEC_GUARD_MESSAGE);
     }
@@ -108782,7 +108782,7 @@ async function runAction(options = {}) {
         if (immutableState) {
           state3.immutableState = immutableState;
         }
-        await publishFailure({
+        prCommentId = String(await publishFailure({
           artifactClient,
           document: document2,
           github,
@@ -108792,7 +108792,7 @@ async function runAction(options = {}) {
             collectionName: assetNames.collectionName,
             failurePhase: health.phase
           }
-        });
+        }));
         failurePublished = true;
         throw new Error(health.message);
       }
@@ -108818,7 +108818,7 @@ async function runAction(options = {}) {
         if (immutableState) {
           state3.immutableState = immutableState;
         }
-        await publishFailure({
+        prCommentId = String(await publishFailure({
           artifactClient,
           document: document2,
           github,
@@ -108828,7 +108828,7 @@ async function runAction(options = {}) {
             collectionName: assetNames.collectionName,
             failurePhase: "collection_run"
           }
-        });
+        }));
         failurePublished = true;
         throw new Error(document2.message);
       }
@@ -108859,6 +108859,35 @@ async function runAction(options = {}) {
     setOutput("pr-comment-id", prCommentId);
   } catch (error2) {
     info(`[postman-tdd] Action failed during phase=${currentPhase}.`);
+    if (!failurePublished && inputs.mode === "run" && currentPhase === "config") {
+      try {
+        const message = formatUnknownError(error2);
+        info("[postman-tdd] Publishing config failure context to the sticky preview comment.");
+        const document2 = createFailureDocument({
+          commit: pr.sha,
+          failures: [{
+            message
+          }],
+          message,
+          phase: "config",
+          specPath: inputs.specPath
+        });
+        prCommentId = String(await publishFailure({
+          artifactClient,
+          document: document2,
+          github,
+          prNumber: pr.number,
+          state: state3,
+          summary: {
+            collectionName: "",
+            failurePhase: "config"
+          }
+        }));
+        failurePublished = true;
+      } catch (publishError) {
+        warning(`Unable to publish config failure context: ${formatUnknownError(publishError)}`);
+      }
+    }
     setOutput("status", "failed");
     setOutput("pr-comment-id", prCommentId);
     if (!failurePublished) {
@@ -108906,6 +108935,9 @@ function logResolvedConfig(config, inputs, mask) {
 }
 function uniquePaths(hashes) {
   return [...new Set(hashes.map((hash) => hash.path).filter(Boolean))];
+}
+function formatUnknownError(error2) {
+  return error2 instanceof Error ? error2.message : String(error2);
 }
 function setStandardOutputs(paths) {
   setOutput("agent-context-dir", AGENT_CONTEXT_DIR);
@@ -108963,6 +108995,7 @@ async function publishFailure(options) {
     workspaceId: options.state.workspaceId
   });
   setOutput("pr-comment-id", String(commentId));
+  return commentId;
 }
 
 // src/main.ts

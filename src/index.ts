@@ -154,17 +154,17 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
       core.info(`[postman-tdd] Reusing marker asset state: workspace=${state.workspaceId || '(missing)'}, spec=${state.specId || '(missing)'}, collection=${state.collectionId || '(missing)'}.`);
     }
 
+    setStandardOutputs({
+      agentTaskPath: `${AGENT_CONTEXT_DIR}/agent-task.md`,
+      failuresJsonPath: `${AGENT_CONTEXT_DIR}/failures.json`
+    });
+
     const config = loadOnboardingConfig({
       configPath: inputs.onboardingConfigPath,
       projectNameOverride: inputs.projectName,
       specPathOverride: inputs.specPath
     });
     logResolvedConfig(config, inputs, mask);
-
-    setStandardOutputs({
-      agentTaskPath: `${AGENT_CONTEXT_DIR}/agent-task.md`,
-      failuresJsonPath: `${AGENT_CONTEXT_DIR}/failures.json`
-    });
 
     if (!config.tddEnabled) {
       core.info('[postman-tdd] tdd.enabled=false; skipping preview run.');
@@ -223,7 +223,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
         phase: 'immutable_state_tampered',
         specPath: config.specPath
       });
-      await publishFailure({
+      prCommentId = String(await publishFailure({
         artifactClient,
         document,
         github,
@@ -233,7 +233,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
           collectionName: assetNames.collectionName,
           failurePhase: 'immutable_state_tampered'
         }
-      });
+      }));
       failurePublished = true;
       throw new Error(IMMUTABLE_STATE_TAMPERED_MESSAGE);
     }
@@ -263,7 +263,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
         phase: 'immutable_spec',
         specPath: config.specPath
       });
-      await publishFailure({
+      prCommentId = String(await publishFailure({
         artifactClient,
         document,
         github,
@@ -273,7 +273,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
           collectionName: assetNames.collectionName,
           failurePhase: 'immutable_spec'
         }
-      });
+      }));
       failurePublished = true;
       throw new Error(IMMUTABLE_SPEC_GUARD_MESSAGE);
     }
@@ -362,7 +362,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
         if (immutableState) {
           state.immutableState = immutableState;
         }
-        await publishFailure({
+        prCommentId = String(await publishFailure({
           artifactClient,
           document,
           github,
@@ -372,7 +372,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
             collectionName: assetNames.collectionName,
             failurePhase: health.phase
           }
-        });
+        }));
         failurePublished = true;
         throw new Error(health.message);
       }
@@ -399,7 +399,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
         if (immutableState) {
           state.immutableState = immutableState;
         }
-        await publishFailure({
+        prCommentId = String(await publishFailure({
           artifactClient,
           document,
           github,
@@ -409,7 +409,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
             collectionName: assetNames.collectionName,
             failurePhase: 'collection_run'
           }
-        });
+        }));
         failurePublished = true;
         throw new Error(document.message);
       }
@@ -442,6 +442,35 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
     core.setOutput('pr-comment-id', prCommentId);
   } catch (error) {
     core.info(`[postman-tdd] Action failed during phase=${currentPhase}.`);
+    if (!failurePublished && inputs.mode === 'run' && currentPhase === 'config') {
+      try {
+        const message = formatUnknownError(error);
+        core.info('[postman-tdd] Publishing config failure context to the sticky preview comment.');
+        const document = createFailureDocument({
+          commit: pr.sha,
+          failures: [{
+            message
+          }],
+          message,
+          phase: 'config',
+          specPath: inputs.specPath
+        });
+        prCommentId = String(await publishFailure({
+          artifactClient,
+          document,
+          github,
+          prNumber: pr.number,
+          state,
+          summary: {
+            collectionName: '',
+            failurePhase: 'config'
+          }
+        }));
+        failurePublished = true;
+      } catch (publishError) {
+        core.warning(`Unable to publish config failure context: ${formatUnknownError(publishError)}`);
+      }
+    }
     core.setOutput('status', 'failed');
     core.setOutput('pr-comment-id', prCommentId);
     if (!failurePublished) {
@@ -502,6 +531,10 @@ function uniquePaths(hashes: ImmutablePathHash[]): string[] {
   return [...new Set(hashes.map((hash) => hash.path).filter(Boolean))];
 }
 
+function formatUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function setStandardOutputs(paths: { agentTaskPath: string; failuresJsonPath: string }): void {
   core.setOutput('agent-context-dir', AGENT_CONTEXT_DIR);
   core.setOutput('agent-task-path', paths.agentTaskPath);
@@ -533,7 +566,7 @@ async function publishFailure(options: {
   prNumber: number;
   state: PreviewAssetState;
   summary: { collectionName: string; failurePhase: FailurePhase };
-}): Promise<void> {
+}): Promise<number> {
   core.info(`[postman-tdd] Publishing failure context: phase=${options.document.phase}, failures=${options.document.failures.length}.`);
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
   core.info(`[postman-tdd] Wrote agent context files: ${paths.agentTaskPath}, ${paths.failuresJsonPath}, ${paths.immutableSpecGuardPath}.`);
@@ -574,4 +607,5 @@ async function publishFailure(options: {
     workspaceId: options.state.workspaceId
   });
   core.setOutput('pr-comment-id', String(commentId));
+  return commentId;
 }
