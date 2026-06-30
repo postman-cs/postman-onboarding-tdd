@@ -149,4 +149,23 @@ describe('immutable state signing', () => {
       signedState: signed
     });
   });
+
+  it('ignores marker-only immutable state when there is no failure document', () => {
+    const payload = createImmutableStatePayload({
+      immutablePathHashes: [{ path: 'api/openapi.yaml', sha256: 'stale' }],
+      prNumber: 4,
+      repository: 'postman-cs/pavan-test-TDD',
+      specPath: 'api/openapi.yaml'
+    });
+    const signed = signImmutableState(payload, signingKey);
+
+    expect(resolveTrustedImmutableBaseline(undefined, signingKey, {
+      prNumber: 4,
+      repository: 'postman-cs/pavan-test-TDD',
+      specPath: 'api/openapi.yaml'
+    }, signed)).toEqual({
+      hashes: [],
+      ok: true
+    });
+  });
 });

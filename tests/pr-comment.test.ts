@@ -5,7 +5,7 @@ import { createImmutableStatePayload, signImmutableState } from '../src/immutabl
 import { isRepairComment, renderRepairComment } from '../src/repair/summary.js';
 
 describe('PR sticky comment marker', () => {
-  it('round-trips asset state through the hidden marker', () => {
+  it('omits immutable state from passed hidden markers', () => {
     const immutableState = signImmutableState(createImmutableStatePayload({
       immutablePathHashes: [{ path: 'api/openapi.yaml', sha256: 'abc123' }],
       prNumber: 123,
@@ -25,7 +25,6 @@ describe('PR sticky comment marker', () => {
 
     expect(parseAssetState(body)).toEqual({
       collectionId: 'col-1',
-      immutableState,
       prNumber: 123,
       schemaVersion: 1,
       specId: 'spec-1',
@@ -35,7 +34,14 @@ describe('PR sticky comment marker', () => {
   });
 
   it('renders failure summaries with the agent artifact pointer', () => {
+    const immutableState = signImmutableState(createImmutableStatePayload({
+      immutablePathHashes: [{ path: 'api/openapi.yaml', sha256: 'abc123' }],
+      prNumber: 123,
+      repository: 'postman-cs/pavan-test-TDD',
+      specPath: 'api/openapi.yaml'
+    }), 'secret');
     const body = renderStickyComment({
+      immutableState,
       prNumber: 123,
       schemaVersion: 1
     }, {
@@ -73,6 +79,11 @@ describe('PR sticky comment marker', () => {
     expect(body).toContain('Artifact contents: `.postman-tdd/agent-task.md`, `.postman-tdd/failures.json`, and `.postman-tdd/immutable-spec-guard.mjs`');
     expect(body).toContain('Expected status 200');
     expect(body).toContain('Agent failure JSON');
+    expect(parseAssetState(body)).toMatchObject({
+      immutableState,
+      prNumber: 123,
+      schemaVersion: 1
+    });
     expect(parseFailureDocument(body)).toMatchObject({
       immutablePathHashes: [{ path: 'api/openapi.yaml', sha256: 'abc123' }],
       immutablePaths: ['api/openapi.yaml'],
