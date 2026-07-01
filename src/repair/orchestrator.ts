@@ -188,7 +188,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
 
     if (config.repair.localTestCommand) {
       core.info(`[postman-tdd] Running repair local test command: ${options.mask(config.repair.localTestCommand)}.`);
-      const localTest = await runCommand(config.repair.localTestCommand, { mask: options.mask });
+      const localTest = await runCommand(config.repair.localTestCommand, { mask: options.mask, sanitizeEnv: true });
       if (localTest.exitCode !== 0) {
         core.info(`[postman-tdd] Local test command failed with exit code ${localTest.exitCode}; feeding failure back to provider.`);
         currentFailure = createFailureDocument({
@@ -341,7 +341,7 @@ async function runOracle(options: {
   prHeadSha: string;
 }): Promise<{ ok: true } | { failure: AgentFailureDocument; ok: false }> {
   core.info(`[postman-tdd] Oracle starting service: ${options.mask(options.config.runtime.startCommand)}.`);
-  const running = startBackgroundCommand(options.config.runtime.startCommand, { mask: options.mask });
+  const running = startBackgroundCommand(options.config.runtime.startCommand, { mask: options.mask, sanitizeEnv: true });
   try {
     core.info(`[postman-tdd] Oracle waiting for health check ${options.mask(options.config.runtime.healthUrl)} for up to ${options.config.runtime.timeoutSeconds}s.`);
     const health = await waitForHealth(
@@ -400,7 +400,7 @@ async function runOracle(options: {
   } finally {
     if (options.config.runtime.stopCommand) {
       core.info(`[postman-tdd] Oracle running stop command: ${options.mask(options.config.runtime.stopCommand)}.`);
-      const stop = await runCommand(options.config.runtime.stopCommand, { mask: options.mask });
+      const stop = await runCommand(options.config.runtime.stopCommand, { mask: options.mask, sanitizeEnv: true });
       if (stop.exitCode !== 0) {
         core.warning(`tdd.stopCommand failed: ${stop.logExcerpt}`);
       }

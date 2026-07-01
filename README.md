@@ -87,6 +87,8 @@ tdd:
 
 `startCommand` is customer-owned. It must make the PR implementation reachable at `baseUrl`. It can run the app directly, start Docker Compose, launch mocks, seed data, or do whatever the service needs in CI.
 
+The action runs `startCommand`, `stopCommand`, and repair `localTestCommand` with a sanitized environment. GitHub Action `INPUT_*` values and token-, secret-, password-, API-key-, access-key-, and private-key-like variables are removed before customer-owned commands start.
+
 This is how the action stays language- and framework-neutral. Java, Node.js, C#, Python, Docker Compose, and multi-service repos all use the same contract: provide one command that starts the PR implementation locally.
 
 If `tdd.workspace.id` is missing, the action:
