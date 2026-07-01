@@ -334,7 +334,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
 
     currentPhase = 'service_startup';
     core.info(`[postman-tdd] Starting service: ${mask(config.runtime.startCommand)}`);
-    const running = startBackgroundCommand(config.runtime.startCommand, { mask });
+    const running = startBackgroundCommand(config.runtime.startCommand, { mask, sanitizeEnv: true });
     try {
       core.info(`[postman-tdd] Waiting for health check ${mask(config.runtime.healthUrl)} for up to ${config.runtime.timeoutSeconds}s.`);
       const health = await waitForHealth(
@@ -421,7 +421,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
     } finally {
       if (config.runtime.stopCommand) {
         core.info(`[postman-tdd] Running stop command: ${mask(config.runtime.stopCommand)}`);
-        const stop = await runCommand(config.runtime.stopCommand, { mask });
+        const stop = await runCommand(config.runtime.stopCommand, { mask, sanitizeEnv: true });
         if (stop.exitCode !== 0) {
           core.warning(`tdd.stopCommand failed: ${stop.logExcerpt}`);
         }

@@ -16,6 +16,12 @@ export interface CommandResult {
   stdout: string;
 }
 
+interface CommandOptions {
+  env?: NodeJS.ProcessEnv;
+  mask: SecretMasker;
+  sanitizeEnv?: boolean;
+}
+
 class RingLog {
   private value = '';
 
@@ -35,12 +41,12 @@ class RingLog {
 
 export function startBackgroundCommand(
   command: string,
-  options: { env?: NodeJS.ProcessEnv; mask: SecretMasker }
+  options: CommandOptions
 ): RunningProcess {
   const logs = new RingLog();
   const child = spawn(command, {
     detached: process.platform !== 'win32',
-    env: { ...process.env, ...(options.env || {}) },
+    env: resolveCommandEnv(options),
     shell: true,
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -71,11 +77,11 @@ export function startBackgroundCommand(
 
 export function runCommand(
   command: string,
-  options: { env?: NodeJS.ProcessEnv; mask: SecretMasker }
+  options: CommandOptions
 ): Promise<CommandResult> {
   return new Promise((resolve) => {
     const child = spawn(command, {
-      env: { ...process.env, ...(options.env || {}) },
+      env: resolveCommandEnv(options),
       shell: true,
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -94,6 +100,44 @@ export function runCommand(
       });
     });
   });
+}
+
+export function createCustomerCommandEnv(
+  baseEnv: NodeJS.ProcessEnv = process.env,
+  extraEnv: NodeJS.ProcessEnv = {}
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const source of [baseEnv, extraEnv]) {
+    for (const [name, value] of Object.entries(source)) {
+      if (value === undefined || isSensitiveEnvName(name)) continue;
+      env[name] = value;
+    }
+  }
+  return env;
+}
+
+function resolveCommandEnv(options: CommandOptions): NodeJS.ProcessEnv {
+  if (options.sanitizeEnv) {
+    return createCustomerCommandEnv(process.env, options.env || {});
+  }
+  return { ...process.env, ...(options.env || {}) };
+}
+
+function isSensitiveEnvName(name: string): boolean {
+  const normalized = name.toUpperCase();
+  return normalized.startsWith('INPUT_')
+    || normalized.includes('TOKEN')
+    || normalized.includes('SECRET')
+    || normalized.includes('PASSWORD')
+    || normalized.includes('API_KEY')
+    || normalized.includes('API-KEY')
+    || normalized.includes('ACCESS_KEY')
+    || normalized.includes('ACCESS-KEY')
+    || normalized.includes('PRIVATE_KEY')
+    || normalized.includes('PRIVATE-KEY')
+    || normalized === 'SSH_AUTH_SOCK'
+    || normalized === 'GIT_ASKPASS'
+    || normalized === 'SSH_ASKPASS';
 }
 
 export async function ensurePostmanCli(

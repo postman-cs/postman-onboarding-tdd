@@ -107260,7 +107260,7 @@ function startBackgroundCommand(command, options) {
   const logs = new RingLog();
   const child = spawn2(command, {
     detached: process.platform !== "win32",
-    env: { ...process.env, ...options.env || {} },
+    env: resolveCommandEnv(options),
     shell: true,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -107289,7 +107289,7 @@ function startBackgroundCommand(command, options) {
 function runCommand(command, options) {
   return new Promise((resolve7) => {
     const child = spawn2(command, {
-      env: { ...process.env, ...options.env || {} },
+      env: resolveCommandEnv(options),
       shell: true,
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -107309,6 +107309,26 @@ ${err}`, options.mask),
       });
     });
   });
+}
+function createCustomerCommandEnv(baseEnv = process.env, extraEnv = {}) {
+  const env = {};
+  for (const source of [baseEnv, extraEnv]) {
+    for (const [name, value] of Object.entries(source)) {
+      if (value === void 0 || isSensitiveEnvName(name)) continue;
+      env[name] = value;
+    }
+  }
+  return env;
+}
+function resolveCommandEnv(options) {
+  if (options.sanitizeEnv) {
+    return createCustomerCommandEnv(process.env, options.env || {});
+  }
+  return { ...process.env, ...options.env || {} };
+}
+function isSensitiveEnvName(name) {
+  const normalized = name.toUpperCase();
+  return normalized.startsWith("INPUT_") || normalized.includes("TOKEN") || normalized.includes("SECRET") || normalized.includes("PASSWORD") || normalized.includes("API_KEY") || normalized.includes("API-KEY") || normalized.includes("ACCESS_KEY") || normalized.includes("ACCESS-KEY") || normalized.includes("PRIVATE_KEY") || normalized.includes("PRIVATE-KEY") || normalized === "SSH_AUTH_SOCK" || normalized === "GIT_ASKPASS" || normalized === "SSH_ASKPASS";
 }
 async function ensurePostmanCli(apiKey, options) {
   const which2 = await runCommand("command -v postman", { mask: options.mask });
@@ -108057,7 +108077,7 @@ async function runRepairMode(options) {
     info(`[postman-tdd] Repair attempt ${attempts} touched paths: ${repair.touchedPaths.join(", ") || "(none reported)"}.`);
     if (config.repair.localTestCommand) {
       info(`[postman-tdd] Running repair local test command: ${options.mask(config.repair.localTestCommand)}.`);
-      const localTest = await runCommand(config.repair.localTestCommand, { mask: options.mask });
+      const localTest = await runCommand(config.repair.localTestCommand, { mask: options.mask, sanitizeEnv: true });
       if (localTest.exitCode !== 0) {
         info(`[postman-tdd] Local test command failed with exit code ${localTest.exitCode}; feeding failure back to provider.`);
         currentFailure = createFailureDocument({
@@ -108188,7 +108208,7 @@ function logRepairConfig(config, options) {
 }
 async function runOracle(options) {
   info(`[postman-tdd] Oracle starting service: ${options.mask(options.config.runtime.startCommand)}.`);
-  const running = startBackgroundCommand(options.config.runtime.startCommand, { mask: options.mask });
+  const running = startBackgroundCommand(options.config.runtime.startCommand, { mask: options.mask, sanitizeEnv: true });
   try {
     info(`[postman-tdd] Oracle waiting for health check ${options.mask(options.config.runtime.healthUrl)} for up to ${options.config.runtime.timeoutSeconds}s.`);
     const health = await waitForHealth(
@@ -108246,7 +108266,7 @@ async function runOracle(options) {
   } finally {
     if (options.config.runtime.stopCommand) {
       info(`[postman-tdd] Oracle running stop command: ${options.mask(options.config.runtime.stopCommand)}.`);
-      const stop = await runCommand(options.config.runtime.stopCommand, { mask: options.mask });
+      const stop = await runCommand(options.config.runtime.stopCommand, { mask: options.mask, sanitizeEnv: true });
       if (stop.exitCode !== 0) {
         warning(`tdd.stopCommand failed: ${stop.logExcerpt}`);
       }
@@ -108805,7 +108825,7 @@ async function runAction(options = {}) {
     }), inputs.immutableStateSigningKey) : void 0;
     currentPhase = "service_startup";
     info(`[postman-tdd] Starting service: ${mask(config.runtime.startCommand)}`);
-    const running = startBackgroundCommand(config.runtime.startCommand, { mask });
+    const running = startBackgroundCommand(config.runtime.startCommand, { mask, sanitizeEnv: true });
     try {
       info(`[postman-tdd] Waiting for health check ${mask(config.runtime.healthUrl)} for up to ${config.runtime.timeoutSeconds}s.`);
       const health = await waitForHealth(
@@ -108891,7 +108911,7 @@ async function runAction(options = {}) {
     } finally {
       if (config.runtime.stopCommand) {
         info(`[postman-tdd] Running stop command: ${mask(config.runtime.stopCommand)}`);
-        const stop = await runCommand(config.runtime.stopCommand, { mask });
+        const stop = await runCommand(config.runtime.stopCommand, { mask, sanitizeEnv: true });
         if (stop.exitCode !== 0) {
           warning(`tdd.stopCommand failed: ${stop.logExcerpt}`);
         }
