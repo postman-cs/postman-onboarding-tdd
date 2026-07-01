@@ -192,6 +192,20 @@ describe('PR sticky comment marker', () => {
 
   it('renders repaired comments with review guidance', () => {
     const body = renderRepairComment({
+      attemptDetails: [{
+        attempt: 1,
+        localTest: {
+          command: 'npm test',
+          status: 'passed'
+        },
+        oracle: {
+          status: 'passed'
+        },
+        outcome: 'oracle_passed',
+        patchSummary: 'Implement the missing widget owner fields.',
+        providerStatus: 'changed',
+        touchedPaths: ['src/server.js']
+      }],
       attempts: 1,
       commitSha: 'repair-sha',
       message: 'Postman TDD repair produced an implementation-only commit after the collection passed in the worker.',
@@ -202,7 +216,63 @@ describe('PR sticky comment marker', () => {
 
     expect(body).toContain('Postman TDD Repair (REPAIRED)');
     expect(body).toContain('**Commit:** `repair-sha`');
+    expect(body).toContain('## Attempt Timeline');
+    expect(body).toContain('| Attempt | Patch | Paths | Local test | Oracle | Outcome |');
+    expect(body).toContain('| 1 | Implement the missing widget owner fields. | src/server.js | passed | passed | oracle passed |');
     expect(body).toContain('**What happened:** Repair produced an implementation-only commit after the local oracle passed.');
     expect(body).toContain('**Next action:** Review the repair commit and wait for preview to rerun on the updated PR branch.');
+  });
+
+  it('renders blocked repair comments with failed attempt diagnostics', () => {
+    const body = renderRepairComment({
+      attemptDetails: [{
+        attempt: 1,
+        localTest: {
+          command: 'npm test',
+          exitCode: 1,
+          status: 'failed'
+        },
+        oracle: {
+          status: 'skipped'
+        },
+        outcome: 'local_test_failed',
+        patchSummary: 'Add the missing createServer export.',
+        providerStatus: 'changed',
+        touchedPaths: ['src/server.js']
+      }, {
+        attempt: 2,
+        localTest: {
+          command: 'npm test',
+          status: 'passed'
+        },
+        oracle: {
+          failureCount: 1,
+          failures: [{
+            assertion: 'response body matches schema',
+            message: 'Missing required property: generatedAt',
+            method: 'GET',
+            operationId: 'getWidgetSummary',
+            path: '/v1/widgets/summary'
+          }],
+          phase: 'collection_run',
+          status: 'failed'
+        },
+        outcome: 'oracle_failed',
+        patchSummary: 'Add widget list and summary endpoints.',
+        providerStatus: 'changed',
+        touchedPaths: ['src/server.js']
+      }],
+      attempts: 2,
+      blockedReason: 'budget_exhausted',
+      message: 'Repair budget exhausted after 2 attempt(s).',
+      prNumber: 123,
+      schemaVersion: 1,
+      status: 'blocked'
+    });
+
+    expect(body).toContain('Postman TDD Repair (BLOCKED)');
+    expect(body).toContain('| 1 | Add the missing createServer export. | src/server.js | failed (1) | skipped | local test failed |');
+    expect(body).toContain('| 2 | Add widget list and summary endpoints. | src/server.js | passed | collection_run, 1 failure(s) | oracle failed |');
+    expect(body).not.toContain('Missing required property: generatedAt');
   });
 });
