@@ -176,6 +176,8 @@ On failure, it includes:
 - failure phase, such as `collection_run`, `service_startup`, or `health_check`,
 - the PR commit that produced the failure,
 - immutable paths, usually the OpenAPI spec path,
+- a phase-aware next action section that explains what happened, what to do next, repair eligibility, and the success condition,
+- current failures summarized before the JSON,
 - compact failure JSON for humans and agents,
 - a pointer to the optional `postman-tdd-agent-context` artifact.
 
@@ -381,7 +383,7 @@ The repair worker:
 9. Verifies immutable paths and allowed write paths.
 10. Pushes one repair commit only after the local Postman collection passes.
 
-The worker posts a separate sticky PR comment titled `Postman TDD Repair`. It does not overwrite the preview comment.
+The worker posts a separate sticky PR comment titled `Postman TDD Repair`. It does not overwrite the preview comment. The repair comment includes the attempts, blocked reason or commit when available, the original repair message, and a next-action section for skipped, blocked, failed, or repaired outcomes.
 
 ## Action Inputs
 
