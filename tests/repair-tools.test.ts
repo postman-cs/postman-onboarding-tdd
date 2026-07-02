@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -48,5 +48,24 @@ describe('repair tools', () => {
     expect(executeRepairTool('read_file', { path: '.env' }, context).error).toContain(
       'Path is not readable by the repair agent'
     );
+  });
+
+  it('accepts a markdown-fenced unified diff while preserving guarded patch validation', () => {
+    const context = createContext();
+    writeFileSync(join(context.repoRoot, 'src', 'app.js'), 'export const status = "fixed";\n', 'utf8');
+    const patch = execFileSync('git', ['diff', '--', 'src/app.js'], {
+      cwd: context.repoRoot,
+      encoding: 'utf8'
+    });
+    writeFileSync(join(context.repoRoot, 'src', 'app.js'), 'export const status = "ok";\n', 'utf8');
+
+    const result = executeRepairTool('propose_patch', {
+      patch: `Here is the implementation-only patch:\n\n\`\`\`diff\n${patch}\`\`\`\n`,
+      summary: 'Return fixed status.'
+    }, context);
+
+    expect(result.error).toBeUndefined();
+    expect(result.touchedPaths).toEqual(['src/app.js']);
+    expect(readFileSync(join(context.repoRoot, 'src', 'app.js'), 'utf8')).toContain('fixed');
   });
 });

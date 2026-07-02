@@ -71,7 +71,7 @@ export function createRepairTools(context: RepairToolContext): Array<Record<stri
     {
       type: 'function',
       name: 'propose_patch',
-      description: 'Propose and apply a unified git diff that changes implementation files only.',
+      description: 'Propose and apply a raw unified git diff beginning with diff --git that changes implementation files only. Do not wrap the diff in Markdown.',
       strict: true,
       parameters: {
         type: 'object',

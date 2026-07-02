@@ -107742,11 +107742,12 @@ function extractPatchPaths(patch) {
   return [...paths].filter(Boolean).sort();
 }
 function validatePatch(patch, policy) {
-  const trimmed = patch.trim();
+  const normalizedPatch = normalizePatchInput(patch);
+  const trimmed = normalizedPatch.trim();
   if (!trimmed || !trimmed.includes("diff --git")) {
-    throw new Error("Repair patch must be a non-empty unified git diff.");
+    throw new Error("Repair patch must be a non-empty unified git diff beginning with diff --git.");
   }
-  const touchedPaths = extractPatchPaths(patch);
+  const touchedPaths = extractPatchPaths(normalizedPatch);
   if (touchedPaths.length === 0) {
     throw new Error("Repair patch did not include any touched paths.");
   }
@@ -107758,13 +107759,28 @@ function validatePatch(patch, policy) {
       throw new Error(`Patch path is outside tdd.repair.allowedWritePaths: ${path4}`);
     }
   }
-  gitApply(["--check", "--whitespace=nowarn"], patch, policy.repoRoot);
+  gitApply(["--check", "--whitespace=nowarn"], normalizedPatch, policy.repoRoot);
   return { touchedPaths };
 }
 function applyValidatedPatch(patch, policy) {
-  const result = validatePatch(patch, policy);
-  gitApply(["--whitespace=nowarn"], patch, policy.repoRoot);
+  const normalizedPatch = normalizePatchInput(patch);
+  const result = validatePatch(normalizedPatch, policy);
+  gitApply(["--whitespace=nowarn"], normalizedPatch, policy.repoRoot);
   return result;
+}
+function normalizePatchInput(patch) {
+  let normalized = String(patch || "").trim();
+  const fenced = normalized.match(/```(?:diff|patch)?\s*\n([\s\S]*?)```/i);
+  if (fenced?.[1]?.includes("diff --git")) {
+    normalized = fenced[1].trim();
+  }
+  normalized = normalized.split(/\r?\n/).filter((line) => !line.trim().startsWith("```")).join("\n").trim();
+  const firstDiff = normalized.indexOf("diff --git ");
+  if (firstDiff > 0) {
+    normalized = normalized.slice(firstDiff).trim();
+  }
+  return normalized ? `${normalized.replace(/\s+$/g, "")}
+` : "";
 }
 function matchesAny(path4, patterns) {
   return patterns.some((pattern) => globMatch(normalizeRepoPath(path4), normalizeRepoPath(pattern)));
@@ -107928,7 +107944,8 @@ function buildRepairPrompt(failure, context5) {
     `Allowed read paths: ${context5.allowedReadPaths.join(", ")}`,
     `Immutable paths: ${context5.patchPolicy.immutablePaths.join(", ") || "(none)"}`,
     "Use read_file, list_files, and search_files to inspect implementation files.",
-    "Use propose_patch with a unified git diff when you have a code-only fix.",
+    "Use propose_patch with a raw unified git diff when you have a code-only fix.",
+    "The propose_patch patch string must begin with diff --git and must not be wrapped in Markdown fences or prose.",
     "Use finish with status=blocked if API intent is unclear, infrastructure is missing, or no implementation-only fix is reasonable.",
     "",
     "Failure context:",
@@ -107996,7 +108013,7 @@ function createRepairTools(context5) {
     {
       type: "function",
       name: "propose_patch",
-      description: "Propose and apply a unified git diff that changes implementation files only.",
+      description: "Propose and apply a raw unified git diff beginning with diff --git that changes implementation files only. Do not wrap the diff in Markdown.",
       strict: true,
       parameters: {
         type: "object",

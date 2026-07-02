@@ -51,11 +51,12 @@ export function extractPatchPaths(patch: string): string[] {
 }
 
 export function validatePatch(patch: string, policy: PatchPolicy): PatchValidationResult {
-  const trimmed = patch.trim();
+  const normalizedPatch = normalizePatchInput(patch);
+  const trimmed = normalizedPatch.trim();
   if (!trimmed || !trimmed.includes('diff --git')) {
-    throw new Error('Repair patch must be a non-empty unified git diff.');
+    throw new Error('Repair patch must be a non-empty unified git diff beginning with diff --git.');
   }
-  const touchedPaths = extractPatchPaths(patch);
+  const touchedPaths = extractPatchPaths(normalizedPatch);
   if (touchedPaths.length === 0) {
     throw new Error('Repair patch did not include any touched paths.');
   }
@@ -69,14 +70,33 @@ export function validatePatch(patch: string, policy: PatchPolicy): PatchValidati
     }
   }
 
-  gitApply(['--check', '--whitespace=nowarn'], patch, policy.repoRoot);
+  gitApply(['--check', '--whitespace=nowarn'], normalizedPatch, policy.repoRoot);
   return { touchedPaths };
 }
 
 export function applyValidatedPatch(patch: string, policy: PatchPolicy): PatchValidationResult {
-  const result = validatePatch(patch, policy);
-  gitApply(['--whitespace=nowarn'], patch, policy.repoRoot);
+  const normalizedPatch = normalizePatchInput(patch);
+  const result = validatePatch(normalizedPatch, policy);
+  gitApply(['--whitespace=nowarn'], normalizedPatch, policy.repoRoot);
   return result;
+}
+
+function normalizePatchInput(patch: string): string {
+  let normalized = String(patch || '').trim();
+  const fenced = normalized.match(/```(?:diff|patch)?\s*\n([\s\S]*?)```/i);
+  if (fenced?.[1]?.includes('diff --git')) {
+    normalized = fenced[1].trim();
+  }
+  normalized = normalized
+    .split(/\r?\n/)
+    .filter((line) => !line.trim().startsWith('```'))
+    .join('\n')
+    .trim();
+  const firstDiff = normalized.indexOf('diff --git ');
+  if (firstDiff > 0) {
+    normalized = normalized.slice(firstDiff).trim();
+  }
+  return normalized ? `${normalized.replace(/\s+$/g, '')}\n` : '';
 }
 
 export function matchesAny(path: string, patterns: string[]): boolean {
