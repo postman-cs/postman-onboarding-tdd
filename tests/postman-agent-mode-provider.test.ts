@@ -177,6 +177,83 @@ describe('Postman Agent Mode repair provider', () => {
     expect(JSON.stringify(requests)).not.toContain('openapi: 3.0.3');
   });
 
+  it('keeps large initial repair context within the Agent Mode chat input limit', async () => {
+    const repoRoot = createRepo();
+    const requests: Array<{ body: JsonRecord }> = [];
+    const largeFailure = failure();
+    largeFailure.failures = Array.from({ length: 18 }, (_, index) => ({
+      assertion: 'response body matches schema',
+      message: `Missing or invalid contract fields for scenario ${index}. ${'field detail '.repeat(120)}`,
+      method: 'GET',
+      operationId: index % 2 === 0 ? 'getHealth' : 'listWidgets',
+      path: index % 2 === 0 ? '/v1/health' : '/v1/widgets'
+    }));
+    largeFailure.contractHints = [{
+      method: 'GET',
+      operationId: 'getHealth',
+      path: '/v1/health',
+      responses: [{
+        content: {
+          'application/json': {
+            schema: {
+              properties: {
+                checks: {
+                  properties: {
+                    database: { enum: ['pass', 'warn', 'fail'], type: 'string' },
+                    postman: { enum: ['pass', 'warn', 'fail'], type: 'string' }
+                  },
+                  required: ['database', 'postman'],
+                  type: 'object'
+                },
+                filler: Object.fromEntries(Array.from({ length: 80 }, (_entry, index) => [
+                  `field${index}`,
+                  { description: 'extra schema context '.repeat(20), type: 'string' }
+                ])),
+                status: { enum: ['ok', 'degraded'], type: 'string' }
+              },
+              required: ['status', 'checks'],
+              type: 'object'
+            }
+          }
+        },
+        status: '200'
+      }]
+    }];
+
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      requests.push({
+        body: JSON.parse(String(init?.body || '{}')) as JsonRecord
+      });
+      return {
+        ok: true,
+        status: 200,
+        text: async () => sse(toolCallEvent(createToolCall('tool-finish', 'finish', {
+          message: 'Need more API intent.',
+          status: 'blocked'
+        })))
+      } as Response;
+    };
+
+    const result = await runPostmanAgentModeRepairTurn({
+      apiKey: 'postman-access-secret',
+      failure: largeFailure,
+      fetchImpl,
+      model: 'GPT_5',
+      repairContext: repairContext(repoRoot),
+      secretMasker: (value) => value.replace(/postman-access-secret/g, '***')
+    });
+
+    expect(result.status).toBe('blocked');
+    const first = requests[0]?.body;
+    expect(first).toBeDefined();
+    if (!first) throw new Error('expected first request');
+    const input = first.input as JsonRecord;
+    const query = String(input.query || '');
+    expect(query.length).toBeLessThanOrEqual(9000);
+    expect(query).toContain('enum=pass|warn|fail');
+    expect(query).toMatch(/do not modify/i);
+  });
+
   it('accumulates streamed toolCallChunk arguments before executing a tool', async () => {
     const repoRoot = createRepo();
     const patch = diffFor(repoRoot);

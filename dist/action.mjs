@@ -68302,10 +68302,10 @@ function getOperationArgumentValueFromParameter(operationArguments, parameter, f
     if (parameterMapper.required) {
       value = {};
     }
-    for (const [propertyName, propertyPath] of Object.entries(parameterPath)) {
+    for (const [propertyName, propertyPath3] of Object.entries(parameterPath)) {
       const propertyMapper = parameterMapper.type.modelProperties[propertyName];
       const propertyValue = getOperationArgumentValueFromParameter(operationArguments, {
-        parameterPath: propertyPath,
+        parameterPath: propertyPath3,
         mapper: propertyMapper
       }, fallbackObject);
       if (propertyValue !== void 0) {
@@ -106550,6 +106550,8 @@ function pathScore(candidate, request2) {
 // src/contract-hints.ts
 var MAX_HINTS = 5;
 var MAX_DEPTH = 8;
+var MAX_RULES_PER_SCHEMA = 80;
+var MAX_RULE_LENGTH = 240;
 function buildContractHints(specPath, failures) {
   if (!specPath || failures.length === 0) return [];
   const root = parseOpenApiDocument(readFileSync4(resolveWorkspacePath(specPath), "utf8"));
@@ -106587,61 +106589,85 @@ function toContractHint(operation) {
       ...response.description ? { description: response.description } : {},
       content: Object.fromEntries(Object.entries(response.content).map(([mediaType, media]) => [
         mediaType,
-        media.schema === void 0 ? {} : { schema: simplifySchema(media.schema) }
+        media.schema === void 0 ? {} : { schema: summarizeSchema(media.schema) }
       ])),
       status
     }))
   };
 }
-function simplifySchema(value, depth = 0) {
-  if (depth > MAX_DEPTH) return {};
-  if (Array.isArray(value)) {
-    return value.map((entry) => simplifySchema(entry, depth + 1));
+function summarizeSchema(value) {
+  const rules = [];
+  collectSchemaRules(value, "$", 0, rules);
+  return { rules };
+}
+function collectSchemaRules(value, path4, depth, rules) {
+  if (rules.length >= MAX_RULES_PER_SCHEMA) return;
+  if (depth > MAX_DEPTH) {
+    addRule(rules, `${path4}: nested schema omitted`);
+    return;
   }
-  if (!isRecord(value)) return value;
-  const output = {};
-  copyScalarKeys(value, output);
-  if (Array.isArray(value.required)) {
-    output.required = value.required.filter((entry) => typeof entry === "string");
-  }
+  if (!isRecord(value)) return;
+  const parts = scalarRuleParts(value);
+  const required = Array.isArray(value.required) ? value.required.filter((entry) => typeof entry === "string") : [];
+  if (required.length > 0) parts.push(`required=${required.join(",")}`);
+  if (parts.length > 0) addRule(rules, `${path4}: ${parts.join("; ")}`);
   if (isRecord(value.properties)) {
-    output.properties = Object.fromEntries(Object.entries(value.properties).map(([key, entry]) => [
-      key,
-      simplifySchema(entry, depth + 1)
-    ]));
-  }
-  if (value.items !== void 0) {
-    output.items = simplifySchema(value.items, depth + 1);
-  }
-  for (const combinator of ["allOf", "anyOf", "oneOf"]) {
-    if (Array.isArray(value[combinator])) {
-      output[combinator] = value[combinator].map((entry) => simplifySchema(entry, depth + 1));
+    for (const [key, entry] of Object.entries(value.properties)) {
+      collectSchemaRules(entry, propertyPath(path4, key), depth + 1, rules);
+      if (rules.length >= MAX_RULES_PER_SCHEMA) return;
     }
   }
-  if (value.additionalProperties !== void 0 && typeof value.additionalProperties !== "function") {
-    output.additionalProperties = typeof value.additionalProperties === "boolean" ? value.additionalProperties : simplifySchema(value.additionalProperties, depth + 1);
+  if (value.items !== void 0) {
+    collectSchemaRules(value.items, `${path4}[]`, depth + 1, rules);
   }
-  return output;
+  for (const combinator of ["allOf", "anyOf", "oneOf"]) {
+    if (!Array.isArray(value[combinator])) continue;
+    value[combinator].forEach((entry, index) => {
+      collectSchemaRules(entry, `${path4}.${combinator}[${index}]`, depth + 1, rules);
+    });
+  }
+  if (isRecord(value.additionalProperties)) {
+    collectSchemaRules(value.additionalProperties, `${path4}.*`, depth + 1, rules);
+  } else if (typeof value.additionalProperties === "boolean") {
+    addRule(rules, `${path4}: additionalProperties=${String(value.additionalProperties)}`);
+  }
 }
-function copyScalarKeys(input, output) {
-  for (const key of [
-    "type",
-    "format",
-    "enum",
-    "const",
-    "nullable",
-    "pattern",
-    "minimum",
-    "maximum",
-    "exclusiveMinimum",
-    "exclusiveMaximum",
-    "minLength",
-    "maxLength",
-    "minItems",
-    "maxItems"
+function scalarRuleParts(input) {
+  const parts = [];
+  for (const [key, label] of [
+    ["type", "type"],
+    ["format", "format"],
+    ["enum", "enum"],
+    ["const", "const"],
+    ["nullable", "nullable"],
+    ["pattern", "pattern"],
+    ["minimum", "minimum"],
+    ["maximum", "maximum"],
+    ["exclusiveMinimum", "exclusiveMinimum"],
+    ["exclusiveMaximum", "exclusiveMaximum"],
+    ["minLength", "minLength"],
+    ["maxLength", "maxLength"],
+    ["minItems", "minItems"],
+    ["maxItems", "maxItems"]
   ]) {
-    if (input[key] !== void 0) output[key] = input[key];
+    if (input[key] !== void 0) parts.push(`${label}=${formatRuleValue(input[key])}`);
   }
+  return parts;
+}
+function formatRuleValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => formatRuleValue(entry)).join("|");
+  }
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || value === null) return String(value);
+  return JSON.stringify(value);
+}
+function addRule(rules, rule) {
+  if (rules.length >= MAX_RULES_PER_SCHEMA) return;
+  rules.push(rule.length > MAX_RULE_LENGTH ? `${rule.slice(0, MAX_RULE_LENGTH - 3)}...` : rule);
+}
+function propertyPath(parent, key) {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? `${parent}.${key}` : `${parent}[${JSON.stringify(key)}]`;
 }
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -108087,7 +108113,18 @@ function execGitOptional(cwd, args) {
 }
 
 // src/repair/provider-common.ts
-function buildRepairPrompt(failure, context5) {
+var COMPACT_PROMPT_BUDGETS = [
+  { maxFailureMessageLength: 500, maxFailures: 6, maxHints: 4, maxRulesPerResponse: 30 },
+  { maxFailureMessageLength: 300, maxFailures: 4, maxHints: 3, maxRulesPerResponse: 20 },
+  { maxFailureMessageLength: 180, maxFailures: 3, maxHints: 2, maxRulesPerResponse: 12 },
+  { maxFailureMessageLength: 120, maxFailures: 2, maxHints: 1, maxRulesPerResponse: 8 },
+  { maxFailureMessageLength: 90, maxFailures: 1, maxHints: 1, maxRulesPerResponse: 4 },
+  { maxFailureMessageLength: 80, maxFailures: 1, maxHints: 0, maxRulesPerResponse: 0 }
+];
+function buildRepairPrompt(failure, context5, options = {}) {
+  if (options.compact) {
+    return buildCompactRepairPrompt(failure, context5, options.maxChars);
+  }
   return [
     "You are repairing an API implementation so it passes a Postman TDD contract collection.",
     "Fix implementation code only.",
@@ -108112,6 +108149,163 @@ function buildRepairPrompt(failure, context5) {
       successCriteria: failure.successCriteria
     }, null, 2)
   ].join("\n");
+}
+function buildCompactRepairPrompt(failure, context5, maxChars) {
+  if (!maxChars) {
+    return renderCompactRepairPrompt(failure, context5, COMPACT_PROMPT_BUDGETS[0]);
+  }
+  for (const budget of COMPACT_PROMPT_BUDGETS) {
+    const prompt = renderCompactRepairPrompt(failure, context5, budget);
+    if (prompt.length <= maxChars) return prompt;
+  }
+  const fallback = renderCompactRepairPrompt(failure, context5, COMPACT_PROMPT_BUDGETS.at(-1));
+  if (fallback.length <= maxChars) return fallback;
+  return `${fallback.slice(0, Math.max(0, maxChars - 55))}
+[Prompt truncated to fit provider input limit.]`;
+}
+function renderCompactRepairPrompt(failure, context5, budget) {
+  return [
+    "Repair the API implementation so it passes Postman TDD.",
+    `Rules: code only; do not modify OpenAPI spec/generated assertions/immutable paths (${context5.patchPolicy.immutablePaths.join(", ") || "none"}).`,
+    `Allowed write paths: ${context5.patchPolicy.allowedWritePaths.join(", ")}`,
+    `Allowed read paths: ${context5.allowedReadPaths.join(", ")}`,
+    "Inspect with list_files/read_file/search_files.",
+    "Patch with propose_patch as raw unified diff starting diff --git.",
+    "If diff formatting fails, propose_patch may use: POSTMAN_TDD_REPLACE_FILE <allowed path> ... POSTMAN_TDD_END_REPLACE_FILE.",
+    "Use finish status=blocked only when an implementation-only fix is unsafe or unclear.",
+    "Failure context JSON:",
+    JSON.stringify(createCompactFailureContext(failure, budget))
+  ].join("\n");
+}
+function createCompactFailureContext(failure, budget) {
+  return {
+    phase: failure.phase,
+    message: truncateText(failure.message, 160),
+    failureCount: failure.failures.length,
+    failures: failure.failures.slice(0, budget.maxFailures).map((entry) => compactFailure(entry, budget)),
+    ...failure.contractHints && budget.maxHints > 0 ? { contractHints: compactContractHints(failure.contractHints, budget) } : {},
+    successCriteria: {
+      requiredCheck: failure.successCriteria.requiredCheck,
+      doneWhen: failure.successCriteria.doneWhen
+    }
+  };
+}
+function compactFailure(failure, budget) {
+  return omitUndefined({
+    method: failure.method,
+    path: failure.path,
+    operationId: failure.operationId,
+    assertion: truncateText(failure.assertion, 160),
+    message: truncateText(failure.message, budget.maxFailureMessageLength)
+  });
+}
+function compactContractHints(hints, budget) {
+  return hints.slice(0, budget.maxHints).map((hint) => omitUndefined({
+    method: hint.method,
+    path: hint.path,
+    operationId: hint.operationId,
+    responses: hint.responses.slice(0, 2).map((response) => ({
+      status: response.status,
+      content: compactContent(response.content, budget.maxRulesPerResponse)
+    }))
+  }));
+}
+function compactContent(content, maxRulesPerResponse) {
+  const preferredEntries = Object.entries(content).sort(([left], [right]) => {
+    if (left === "application/json") return -1;
+    if (right === "application/json") return 1;
+    return left.localeCompare(right);
+  });
+  return Object.fromEntries(preferredEntries.slice(0, 2).map(([mediaType, media]) => [
+    mediaType,
+    media.schema === void 0 ? {} : { schema: summarizePromptSchema(media.schema, maxRulesPerResponse) }
+  ]));
+}
+function summarizePromptSchema(schema, maxRules) {
+  const rules = schemaToRules(schema, maxRules);
+  return { rules };
+}
+function schemaToRules(schema, maxRules) {
+  if (maxRules <= 0) return [];
+  if (isRecord2(schema) && Array.isArray(schema.rules)) {
+    return schema.rules.filter((entry) => typeof entry === "string").slice(0, maxRules).map((entry) => truncateRequiredText(entry, 220));
+  }
+  const rules = [];
+  collectPromptSchemaRules(schema, "$", 0, maxRules, rules);
+  return rules;
+}
+function collectPromptSchemaRules(value, path4, depth, maxRules, rules) {
+  if (rules.length >= maxRules || depth > 7 || !isRecord2(value)) return;
+  const parts = scalarRuleParts2(value);
+  const required = Array.isArray(value.required) ? value.required.filter((entry) => typeof entry === "string") : [];
+  if (required.length > 0) parts.push(`required=${required.join(",")}`);
+  if (parts.length > 0) addRule2(rules, `${path4}: ${parts.join("; ")}`, maxRules);
+  if (isRecord2(value.properties)) {
+    for (const [key, entry] of Object.entries(value.properties)) {
+      collectPromptSchemaRules(entry, propertyPath2(path4, key), depth + 1, maxRules, rules);
+      if (rules.length >= maxRules) return;
+    }
+  }
+  if (value.items !== void 0) {
+    collectPromptSchemaRules(value.items, `${path4}[]`, depth + 1, maxRules, rules);
+  }
+  for (const combinator of ["allOf", "anyOf", "oneOf"]) {
+    if (!Array.isArray(value[combinator])) continue;
+    value[combinator].forEach((entry, index) => {
+      collectPromptSchemaRules(entry, `${path4}.${combinator}[${index}]`, depth + 1, maxRules, rules);
+    });
+  }
+  if (isRecord2(value.additionalProperties)) {
+    collectPromptSchemaRules(value.additionalProperties, `${path4}.*`, depth + 1, maxRules, rules);
+  }
+}
+function scalarRuleParts2(input) {
+  const parts = [];
+  for (const [key, label] of [
+    ["type", "type"],
+    ["format", "format"],
+    ["enum", "enum"],
+    ["const", "const"],
+    ["nullable", "nullable"],
+    ["pattern", "pattern"],
+    ["minimum", "minimum"],
+    ["maximum", "maximum"],
+    ["exclusiveMinimum", "exclusiveMinimum"],
+    ["exclusiveMaximum", "exclusiveMaximum"],
+    ["minLength", "minLength"],
+    ["maxLength", "maxLength"],
+    ["minItems", "minItems"],
+    ["maxItems", "maxItems"]
+  ]) {
+    if (input[key] !== void 0) parts.push(`${label}=${formatRuleValue2(input[key])}`);
+  }
+  return parts;
+}
+function formatRuleValue2(value) {
+  if (Array.isArray(value)) return value.map((entry) => formatRuleValue2(entry)).join("|");
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || value === null) return String(value);
+  return JSON.stringify(value);
+}
+function addRule2(rules, rule, maxRules) {
+  if (rules.length >= maxRules) return;
+  rules.push(truncateRequiredText(rule, 220));
+}
+function propertyPath2(parent, key) {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? `${parent}.${key}` : `${parent}[${JSON.stringify(key)}]`;
+}
+function truncateText(value, maxLength) {
+  if (value === void 0 || value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+function truncateRequiredText(value, maxLength) {
+  return truncateText(value, maxLength) || "";
+}
+function omitUndefined(input) {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== void 0));
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/repair/tools.ts
@@ -108311,7 +108505,7 @@ async function runAnthropicRepairTurn(options) {
       secretMasker: options.secretMasker,
       tools
     });
-    const content = Array.isArray(response.content) ? response.content.filter(isRecord2) : [];
+    const content = Array.isArray(response.content) ? response.content.filter(isRecord3) : [];
     const calls = content.filter(isToolUseBlock);
     info(`[postman-tdd] Anthropic Messages round ${round + 1}: received ${calls.length} tool use block(s).`);
     if (calls.length === 0) {
@@ -108405,9 +108599,9 @@ function logToolResult(name, result) {
   }
 }
 function isToolUseBlock(value) {
-  return value.type === "tool_use" && typeof value.id === "string" && typeof value.name === "string" && isRecord2(value.input);
+  return value.type === "tool_use" && typeof value.id === "string" && typeof value.name === "string" && isRecord3(value.input);
 }
-function isRecord2(value) {
+function isRecord3(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 function extractText(response) {
@@ -108556,13 +108750,17 @@ var POSTMAN_AGENT_MODE_GATEWAY_URL = "https://gateway.postman.com/chat";
 var POSTMAN_AGENT_MODE_SERVICE = "agent-mode-service";
 var POSTMAN_AGENT_MODE_PRODUCT = "workspace_localmode_v12";
 var POSTMAN_TDD_TOOL_SERVER = "Postman TDD Repair";
+var POSTMAN_AGENT_MODE_MAX_PROMPT_CHARS = 9e3;
 async function runPostmanAgentModeRepairTurn(options) {
   info(`[postman-tdd] Postman Agent Mode repair turn: model=${options.model}, failurePhase=${options.failure.phase}, failures=${options.failure.failures.length}.`);
   const tools = createPostmanAgentModeTools(options.repairContext);
   const state3 = {};
   let body2 = createUserQueryBody({
     model: options.model,
-    prompt: buildRepairPrompt(options.failure, options.repairContext),
+    prompt: buildRepairPrompt(options.failure, options.repairContext, {
+      compact: true,
+      maxChars: POSTMAN_AGENT_MODE_MAX_PROMPT_CHARS
+    }),
     tools
   });
   for (let round = 0; round < (options.maxToolRounds || 12); round += 1) {
@@ -108745,8 +108943,8 @@ function parseAgentModeEvents(body2, secretMasker) {
   };
   const chunkBuffers = /* @__PURE__ */ new Map();
   for (const event of parseSseJsonEvents(body2)) {
-    const data = isRecord3(event.data) ? event.data : event;
-    const metadata2 = isRecord3(data.metadata) ? data.metadata : {};
+    const data = isRecord4(event.data) ? event.data : event;
+    const metadata2 = isRecord4(data.metadata) ? data.metadata : {};
     result.conversationId = stringValue2(event.conversationId) || stringValue2(metadata2.conversationId) || stringValue2(data.conversationId) || stringValue2(data.id) || result.conversationId;
     result.toolCallGroupId = stringValue2(event.toolCallGroupId) || stringValue2(metadata2.toolCallGroupId) || stringValue2(data.toolCallGroupId) || result.toolCallGroupId;
     const eventType = String(event.eventType || event.type || "");
@@ -108811,17 +109009,17 @@ function parseSseJsonEvents(body2) {
     const payload = normalized.slice("data:".length).trim();
     if (!payload || payload === "[DONE]") continue;
     const parsed = JSON.parse(payload);
-    if (isRecord3(parsed)) events.push(parsed);
+    if (isRecord4(parsed)) events.push(parsed);
   }
   return events;
 }
 function extractToolCallFragments(data) {
   const rawCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [data];
-  const metadata2 = isRecord3(data.metadata) ? data.metadata : {};
+  const metadata2 = isRecord4(data.metadata) ? data.metadata : {};
   const fragments = [];
   for (const rawCall of rawCalls) {
-    if (!isRecord3(rawCall)) continue;
-    const fn = isRecord3(rawCall.function) ? rawCall.function : {};
+    if (!isRecord4(rawCall)) continue;
+    const fn = isRecord4(rawCall.function) ? rawCall.function : {};
     const name = stringValue2(fn.name) || stringValue2(rawCall.name) || stringValue2(rawCall.toolName);
     const id = stringValue2(rawCall.id) || stringValue2(rawCall.toolCallId) || name;
     if (!id) continue;
@@ -108853,7 +109051,7 @@ function stringifyToolArguments(value) {
   return JSON.stringify(value);
 }
 function parseToolArguments(value) {
-  if (isRecord3(value)) return value;
+  if (isRecord4(value)) return value;
   if (typeof value !== "string" || !value.trim()) return {};
   return parseToolArgumentsMaybe(value) || {};
 }
@@ -108861,7 +109059,7 @@ function parseToolArgumentsMaybe(value) {
   if (!value.trim()) return void 0;
   try {
     const parsed = JSON.parse(value);
-    return isRecord3(parsed) ? parsed : void 0;
+    return isRecord4(parsed) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -108895,7 +109093,7 @@ function resolvePlatform() {
 function stringValue2(value) {
   return typeof value === "string" ? value.trim() : "";
 }
-function isRecord3(value) {
+function isRecord4(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
@@ -109245,15 +109443,15 @@ function validateRepairFailureContext(failure) {
   return void 0;
 }
 function isFailureEntry(value) {
-  return isRecord4(value) && isNonEmptyString(value.message);
+  return isRecord5(value) && isNonEmptyString(value.message);
 }
 function isImmutablePathHash(value) {
-  return isRecord4(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
+  return isRecord5(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
 }
 function isSuccessCriteria(value) {
-  return isRecord4(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
+  return isRecord5(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
 }
-function isRecord4(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isNonEmptyString(value) {

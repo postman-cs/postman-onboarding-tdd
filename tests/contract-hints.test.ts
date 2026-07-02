@@ -68,7 +68,8 @@ describe('contract hints', () => {
     }]);
 
     expect(hints).toHaveLength(1);
-    expect(JSON.stringify(hints[0])).toContain('"enum":["pass","warn","fail"]');
+    expect(JSON.stringify(hints[0])).toContain('enum=pass|warn|fail');
+    expect(JSON.stringify(hints[0])).toContain('$.checks: type=object; required=database,postman');
     expect(hints[0]).toMatchObject({
       method: 'GET',
       operationId: 'getHealth',

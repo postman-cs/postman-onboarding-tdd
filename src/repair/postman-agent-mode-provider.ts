@@ -7,6 +7,7 @@ const POSTMAN_AGENT_MODE_GATEWAY_URL = 'https://gateway.postman.com/chat';
 const POSTMAN_AGENT_MODE_SERVICE = 'agent-mode-service';
 const POSTMAN_AGENT_MODE_PRODUCT = 'workspace_localmode_v12';
 const POSTMAN_TDD_TOOL_SERVER = 'Postman TDD Repair';
+const POSTMAN_AGENT_MODE_MAX_PROMPT_CHARS = 9000;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -51,7 +52,10 @@ export async function runPostmanAgentModeRepairTurn(options: PostmanAgentModeRep
   const state: AgentModeTurnState = {};
   let body = createUserQueryBody({
     model: options.model,
-    prompt: buildRepairPrompt(options.failure, options.repairContext),
+    prompt: buildRepairPrompt(options.failure, options.repairContext, {
+      compact: true,
+      maxChars: POSTMAN_AGENT_MODE_MAX_PROMPT_CHARS
+    }),
     tools
   });
 
