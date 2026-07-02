@@ -22,6 +22,19 @@ interface AgentModeToolCall {
   toolCallGroupId?: string;
 }
 
+interface AgentModeToolCallFragment {
+  arguments: string;
+  id: string;
+  name: string;
+  toolCallGroupId?: string;
+}
+
+interface AgentModeToolCallBuffer {
+  arguments: string;
+  name: string;
+  toolCallGroupId?: string;
+}
+
 interface AgentModeTurnResult {
   conversationId?: string;
   text: string;
@@ -255,6 +268,8 @@ function parseAgentModeEvents(body: string, secretMasker: (value: string) => str
     text: '',
     toolCalls: []
   };
+  const chunkBuffers = new Map<string, AgentModeToolCallBuffer>();
+
   for (const event of parseSseJsonEvents(body)) {
     const data = isRecord(event.data) ? event.data : event;
     const metadata = isRecord(data.metadata) ? data.metadata : {};
@@ -275,13 +290,43 @@ function parseAgentModeEvents(body: string, secretMasker: (value: string) => str
     if (eventType === 'failure') {
       throw new Error(`Postman Agent Mode API failure: ${secretMasker(formatFailureEvent(data)).slice(0, 1000)}`);
     }
-    if (eventType === 'toolCall' || eventType === 'toolCallChunk') {
-      const calls = extractToolCalls(data);
-      for (const call of calls) {
-        result.toolCalls.push(call);
-        result.toolCallGroupId = call.toolCallGroupId || result.toolCallGroupId;
+    if (eventType === 'toolCallChunk') {
+      for (const fragment of extractToolCallFragments(data)) {
+        const existing = chunkBuffers.get(fragment.id);
+        const buffer: AgentModeToolCallBuffer = existing || {
+          arguments: '',
+          name: '',
+          toolCallGroupId: fragment.toolCallGroupId
+        };
+        if (fragment.name) buffer.name = fragment.name;
+        if (fragment.arguments) buffer.arguments += fragment.arguments;
+        buffer.toolCallGroupId = fragment.toolCallGroupId || buffer.toolCallGroupId;
+        chunkBuffers.set(fragment.id, buffer);
+        result.toolCallGroupId = buffer.toolCallGroupId || result.toolCallGroupId;
       }
     }
+    if (eventType === 'toolCall') {
+      for (const fragment of extractToolCallFragments(data)) {
+        const buffered = chunkBuffers.get(fragment.id);
+        const call = createToolCallFromFragment(fragment, buffered);
+        if (!call) continue;
+        result.toolCalls.push(call);
+        result.toolCallGroupId = call.toolCallGroupId || result.toolCallGroupId;
+        chunkBuffers.delete(fragment.id);
+      }
+    }
+  }
+  for (const [id, buffer] of chunkBuffers) {
+    if (!buffer.name) continue;
+    const call = createToolCallFromFragment({
+      arguments: buffer.arguments,
+      id,
+      name: buffer.name,
+      toolCallGroupId: buffer.toolCallGroupId
+    });
+    if (!call) continue;
+    result.toolCalls.push(call);
+    result.toolCallGroupId = call.toolCallGroupId || result.toolCallGroupId;
   }
   result.text = result.text.trim();
   return result;
@@ -306,34 +351,66 @@ function parseSseJsonEvents(body: string): JsonRecord[] {
   return events;
 }
 
-function extractToolCalls(data: JsonRecord): AgentModeToolCall[] {
+function extractToolCallFragments(data: JsonRecord): AgentModeToolCallFragment[] {
   const rawCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [data];
   const metadata = isRecord(data.metadata) ? data.metadata : {};
-  const calls: AgentModeToolCall[] = [];
+  const fragments: AgentModeToolCallFragment[] = [];
   for (const rawCall of rawCalls) {
     if (!isRecord(rawCall)) continue;
     const fn = isRecord(rawCall.function) ? rawCall.function : {};
     const name = stringValue(fn.name) || stringValue(rawCall.name) || stringValue(rawCall.toolName);
-    if (!name) continue;
     const id = stringValue(rawCall.id) || stringValue(rawCall.toolCallId) || name;
-    const input = parseToolArguments(fn.arguments ?? rawCall.arguments ?? rawCall.args);
+    if (!id) continue;
+    const args = stringifyToolArguments(fn.arguments ?? rawCall.arguments ?? rawCall.args);
     const toolCallGroupId = stringValue(rawCall.toolCallGroupId)
       || stringValue(data.toolCallGroupId)
       || stringValue(metadata.toolCallGroupId)
       || undefined;
-    calls.push({ id, input, name, toolCallGroupId });
+    fragments.push({ arguments: args, id, name, toolCallGroupId });
   }
-  return calls;
+  return fragments;
+}
+
+function createToolCallFromFragment(
+  fragment: AgentModeToolCallFragment,
+  buffered?: AgentModeToolCallBuffer
+): AgentModeToolCall | undefined {
+  const name = fragment.name || buffered?.name || '';
+  if (!name) return undefined;
+  const rawArguments = resolveToolArguments(fragment.arguments, buffered?.arguments || '');
+  return {
+    id: fragment.id,
+    input: parseToolArguments(rawArguments),
+    name,
+    toolCallGroupId: fragment.toolCallGroupId || buffered?.toolCallGroupId
+  };
+}
+
+function resolveToolArguments(fragmentArguments: string, bufferedArguments: string): string {
+  if (!bufferedArguments) return fragmentArguments;
+  if (parseToolArgumentsMaybe(fragmentArguments)) return fragmentArguments;
+  return bufferedArguments + fragmentArguments;
+}
+
+function stringifyToolArguments(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value === undefined || value === null) return '';
+  return JSON.stringify(value);
 }
 
 function parseToolArguments(value: unknown): JsonRecord {
   if (isRecord(value)) return value;
   if (typeof value !== 'string' || !value.trim()) return {};
+  return parseToolArgumentsMaybe(value) || {};
+}
+
+function parseToolArgumentsMaybe(value: string): JsonRecord | undefined {
+  if (!value.trim()) return undefined;
   try {
     const parsed = JSON.parse(value) as unknown;
-    return isRecord(parsed) ? parsed : {};
+    return isRecord(parsed) ? parsed : undefined;
   } catch {
-    return {};
+    return undefined;
   }
 }
 

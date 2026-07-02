@@ -108555,6 +108555,7 @@ function parseAgentModeEvents(body2, secretMasker) {
     text: "",
     toolCalls: []
   };
+  const chunkBuffers = /* @__PURE__ */ new Map();
   for (const event of parseSseJsonEvents(body2)) {
     const data = isRecord2(event.data) ? event.data : event;
     const metadata2 = isRecord2(data.metadata) ? data.metadata : {};
@@ -108567,13 +108568,43 @@ function parseAgentModeEvents(body2, secretMasker) {
     if (eventType === "failure") {
       throw new Error(`Postman Agent Mode API failure: ${secretMasker(formatFailureEvent(data)).slice(0, 1e3)}`);
     }
-    if (eventType === "toolCall" || eventType === "toolCallChunk") {
-      const calls = extractToolCalls(data);
-      for (const call of calls) {
-        result.toolCalls.push(call);
-        result.toolCallGroupId = call.toolCallGroupId || result.toolCallGroupId;
+    if (eventType === "toolCallChunk") {
+      for (const fragment of extractToolCallFragments(data)) {
+        const existing = chunkBuffers.get(fragment.id);
+        const buffer2 = existing || {
+          arguments: "",
+          name: "",
+          toolCallGroupId: fragment.toolCallGroupId
+        };
+        if (fragment.name) buffer2.name = fragment.name;
+        if (fragment.arguments) buffer2.arguments += fragment.arguments;
+        buffer2.toolCallGroupId = fragment.toolCallGroupId || buffer2.toolCallGroupId;
+        chunkBuffers.set(fragment.id, buffer2);
+        result.toolCallGroupId = buffer2.toolCallGroupId || result.toolCallGroupId;
       }
     }
+    if (eventType === "toolCall") {
+      for (const fragment of extractToolCallFragments(data)) {
+        const buffered = chunkBuffers.get(fragment.id);
+        const call = createToolCallFromFragment(fragment, buffered);
+        if (!call) continue;
+        result.toolCalls.push(call);
+        result.toolCallGroupId = call.toolCallGroupId || result.toolCallGroupId;
+        chunkBuffers.delete(fragment.id);
+      }
+    }
+  }
+  for (const [id, buffer2] of chunkBuffers) {
+    if (!buffer2.name) continue;
+    const call = createToolCallFromFragment({
+      arguments: buffer2.arguments,
+      id,
+      name: buffer2.name,
+      toolCallGroupId: buffer2.toolCallGroupId
+    });
+    if (!call) continue;
+    result.toolCalls.push(call);
+    result.toolCallGroupId = call.toolCallGroupId || result.toolCallGroupId;
   }
   result.text = result.text.trim();
   return result;
@@ -108596,30 +108627,55 @@ function parseSseJsonEvents(body2) {
   }
   return events;
 }
-function extractToolCalls(data) {
+function extractToolCallFragments(data) {
   const rawCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [data];
   const metadata2 = isRecord2(data.metadata) ? data.metadata : {};
-  const calls = [];
+  const fragments = [];
   for (const rawCall of rawCalls) {
     if (!isRecord2(rawCall)) continue;
     const fn = isRecord2(rawCall.function) ? rawCall.function : {};
     const name = stringValue2(fn.name) || stringValue2(rawCall.name) || stringValue2(rawCall.toolName);
-    if (!name) continue;
     const id = stringValue2(rawCall.id) || stringValue2(rawCall.toolCallId) || name;
-    const input = parseToolArguments(fn.arguments ?? rawCall.arguments ?? rawCall.args);
+    if (!id) continue;
+    const args = stringifyToolArguments(fn.arguments ?? rawCall.arguments ?? rawCall.args);
     const toolCallGroupId = stringValue2(rawCall.toolCallGroupId) || stringValue2(data.toolCallGroupId) || stringValue2(metadata2.toolCallGroupId) || void 0;
-    calls.push({ id, input, name, toolCallGroupId });
+    fragments.push({ arguments: args, id, name, toolCallGroupId });
   }
-  return calls;
+  return fragments;
+}
+function createToolCallFromFragment(fragment, buffered) {
+  const name = fragment.name || buffered?.name || "";
+  if (!name) return void 0;
+  const rawArguments = resolveToolArguments(fragment.arguments, buffered?.arguments || "");
+  return {
+    id: fragment.id,
+    input: parseToolArguments(rawArguments),
+    name,
+    toolCallGroupId: fragment.toolCallGroupId || buffered?.toolCallGroupId
+  };
+}
+function resolveToolArguments(fragmentArguments, bufferedArguments) {
+  if (!bufferedArguments) return fragmentArguments;
+  if (parseToolArgumentsMaybe(fragmentArguments)) return fragmentArguments;
+  return bufferedArguments + fragmentArguments;
+}
+function stringifyToolArguments(value) {
+  if (typeof value === "string") return value;
+  if (value === void 0 || value === null) return "";
+  return JSON.stringify(value);
 }
 function parseToolArguments(value) {
   if (isRecord2(value)) return value;
   if (typeof value !== "string" || !value.trim()) return {};
+  return parseToolArgumentsMaybe(value) || {};
+}
+function parseToolArgumentsMaybe(value) {
+  if (!value.trim()) return void 0;
   try {
     const parsed = JSON.parse(value);
-    return isRecord2(parsed) ? parsed : {};
+    return isRecord2(parsed) ? parsed : void 0;
   } catch {
-    return {};
+    return void 0;
   }
 }
 function formatFailureEvent(data) {

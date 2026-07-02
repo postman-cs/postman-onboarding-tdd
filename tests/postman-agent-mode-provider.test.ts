@@ -175,6 +175,84 @@ describe('Postman Agent Mode repair provider', () => {
     expect(JSON.stringify(requests)).not.toContain('openapi: 3.0.3');
   });
 
+  it('accumulates streamed toolCallChunk arguments before executing a tool', async () => {
+    const repoRoot = createRepo();
+    const patch = diffFor(repoRoot);
+    const requests: JsonRecord[] = [];
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const body = JSON.parse(String(init?.body || '{}')) as JsonRecord;
+      requests.push(body);
+      if (requests.length === 1) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => sse(
+            {
+              data: {
+                metadata: { conversationId: 'conv-1' },
+                toolCalls: [{
+                  function: { arguments: '{"path":', name: 'read_file' },
+                  id: 'tool-read',
+                  toolCallGroupId: 'group-1'
+                }]
+              },
+              eventType: 'toolCallChunk'
+            },
+            {
+              data: {
+                toolCalls: [{
+                  function: { arguments: '"src/app', name: '' },
+                  id: 'tool-read'
+                }]
+              },
+              eventType: 'toolCallChunk'
+            },
+            {
+              data: {
+                toolCalls: [{
+                  function: { arguments: '.js"}', name: '' },
+                  id: 'tool-read'
+                }]
+              },
+              eventType: 'toolCallChunk'
+            }
+          )
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => sse(toolCallEvent(createToolCall('tool-patch', 'propose_patch', {
+          patch,
+          summary: 'Add the missing response field.'
+        })))
+      } as Response;
+    };
+
+    const result = await runPostmanAgentModeRepairTurn({
+      apiKey: 'postman-access-secret',
+      failure: failure(),
+      fetchImpl,
+      model: 'GPT_5',
+      repairContext: repairContext(repoRoot),
+      secretMasker: (value) => value.replace(/postman-access-secret/g, '***')
+    });
+
+    expect(result.status).toBe('changed');
+    expect(requests).toHaveLength(2);
+    const second = requests[1];
+    expect(second).toBeDefined();
+    if (!second) throw new Error('expected second request');
+    const input = second.input as JsonRecord;
+    const toolResponses = input.toolResponses as JsonRecord[];
+    expect(toolResponses).toHaveLength(1);
+    expect(toolResponses[0]).toMatchObject({
+      toolCallId: 'tool-read',
+      toolResponseStatus: 'SUCCESS'
+    });
+    expect(String(toolResponses[0]?.content)).toContain('broken');
+  });
+
   it('continues with TOOL_RESPONSE turns after read_file before applying a patch', async () => {
     const repoRoot = createRepo();
     const patch = diffFor(repoRoot);
@@ -295,6 +373,48 @@ describe('Postman Agent Mode repair provider', () => {
       toolResponseStatus: 'FAILED'
     });
     expect(String(toolResponses[0]?.content)).toContain('finish requires status');
+  });
+
+  it('accumulates streamed finish arguments before validating the terminal outcome', async () => {
+    const repoRoot = createRepo();
+    const fetchImpl = async (): Promise<Response> => ({
+      ok: true,
+      status: 200,
+      text: async () => sse(
+        {
+          data: {
+            metadata: { conversationId: 'conv-1' },
+            toolCalls: [{
+              function: { arguments: '{"status":"blocked",', name: 'finish' },
+              id: 'tool-finish',
+              toolCallGroupId: 'group-1'
+            }]
+          },
+          eventType: 'toolCallChunk'
+        },
+        {
+          data: {
+            toolCalls: [{
+              function: { arguments: '"message":"API intent is unclear."}', name: '' },
+              id: 'tool-finish'
+            }]
+          },
+          eventType: 'toolCallChunk'
+        }
+      )
+    } as Response);
+
+    await expect(runPostmanAgentModeRepairTurn({
+      apiKey: 'postman-access-secret',
+      failure: failure(),
+      fetchImpl,
+      model: 'GPT_5',
+      repairContext: repairContext(repoRoot),
+      secretMasker: (value) => value.replace(/postman-access-secret/g, '***')
+    })).resolves.toEqual({
+      message: 'API intent is unclear.',
+      status: 'blocked'
+    });
   });
 
   it('returns blocked when the finish tool reports blocked', async () => {
