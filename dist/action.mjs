@@ -19549,10 +19549,10 @@ var require_assert = __commonJS({
       }
     }
     exports2.assert = assert;
-    function assertNever(value, msg) {
+    function assertNever2(value, msg) {
       throw new Error(msg !== null && msg !== void 0 ? msg : "Unexpected object: " + value);
     }
-    exports2.assertNever = assertNever;
+    exports2.assertNever = assertNever2;
     var FLOAT32_MAX = 34028234663852886e22;
     var FLOAT32_MIN = -34028234663852886e22;
     var UINT32_MAX = 4294967295;
@@ -105873,10 +105873,10 @@ function stringArrayValue(value) {
 }
 function validateRepairProvider(value) {
   const normalized = stringValue(value || "openai-responses");
-  if (normalized === "openai-responses") {
+  if (normalized === "openai-responses" || normalized === "anthropic-messages") {
     return normalized;
   }
-  throw new Error(`Unsupported repair-provider "${value}". Expected openai-responses`);
+  throw new Error(`Unsupported repair-provider "${value}". Expected openai-responses or anthropic-messages`);
 }
 function loadOnboardingConfig(options) {
   const configPath = options.configPath;
@@ -107918,6 +107918,30 @@ function execGitOptional(cwd, args) {
   }
 }
 
+// src/repair/provider-common.ts
+function buildRepairPrompt(failure, context5) {
+  return [
+    "You are repairing an API implementation so it passes a Postman TDD contract collection.",
+    "Fix implementation code only.",
+    "Do not modify, regenerate, or weaken the OpenAPI spec or generated assertions.",
+    `Allowed write paths: ${context5.patchPolicy.allowedWritePaths.join(", ")}`,
+    `Allowed read paths: ${context5.allowedReadPaths.join(", ")}`,
+    `Immutable paths: ${context5.patchPolicy.immutablePaths.join(", ") || "(none)"}`,
+    "Use read_file, list_files, and search_files to inspect implementation files.",
+    "Use propose_patch with a unified git diff when you have a code-only fix.",
+    "Use finish with status=blocked if API intent is unclear, infrastructure is missing, or no implementation-only fix is reasonable.",
+    "",
+    "Failure context:",
+    JSON.stringify({
+      baseUrl: failure.baseUrl,
+      collectionName: failure.collectionName,
+      failures: failure.failures,
+      phase: failure.phase,
+      successCriteria: failure.successCriteria
+    }, null, 2)
+  ].join("\n");
+}
+
 // src/repair/tools.ts
 import { execFileSync as execFileSync3 } from "node:child_process";
 import { existsSync as existsSync6, readFileSync as readFileSync6, statSync as statSync2 } from "node:fs";
@@ -108078,6 +108102,138 @@ function assertReadablePath(context5, value) {
   return path4;
 }
 
+// src/repair/anthropic-messages-provider.ts
+async function runAnthropicRepairTurn(options) {
+  info(`[postman-tdd] Anthropic Messages repair turn: model=${options.model}, failurePhase=${options.failure.phase}, failures=${options.failure.failures.length}.`);
+  const messages = [{
+    content: [{
+      text: buildRepairPrompt(options.failure, options.repairContext),
+      type: "text"
+    }],
+    role: "user"
+  }];
+  const tools = createAnthropicTools(options.repairContext);
+  for (let round = 0; round < (options.maxToolRounds || 12); round += 1) {
+    info(`[postman-tdd] Anthropic Messages round ${round + 1}: sending ${messages.length === 1 ? "initial repair instructions" : "tool result(s)"}.`);
+    const response = await createMessage({
+      apiKey: options.apiKey,
+      fetchImpl: options.fetchImpl,
+      messages,
+      model: options.model,
+      secretMasker: options.secretMasker,
+      tools
+    });
+    const content = Array.isArray(response.content) ? response.content.filter(isRecord) : [];
+    const calls = content.filter(isToolUseBlock);
+    info(`[postman-tdd] Anthropic Messages round ${round + 1}: received ${calls.length} tool use block(s).`);
+    if (calls.length === 0) {
+      return {
+        status: "no_change",
+        message: extractText(response) || "The repair agent did not call a patch or finish tool."
+      };
+    }
+    messages.push({
+      content,
+      role: "assistant"
+    });
+    const toolResults = [];
+    for (const call of calls) {
+      info(`[postman-tdd] Executing guarded repair tool: ${call.name}.`);
+      const result = executeRepairTool(call.name, call.input, options.repairContext);
+      logToolResult(call.name, result);
+      toolResults.push({
+        content: JSON.stringify(result),
+        ...result.error ? { is_error: true } : {},
+        tool_use_id: call.id,
+        type: "tool_result"
+      });
+      if (call.name === "propose_patch" && result.appliedPatch) {
+        return {
+          status: "changed",
+          summary: result.summary || "Applied implementation repair patch.",
+          touchedPaths: result.touchedPaths || []
+        };
+      }
+      if (call.name === "finish") {
+        const status = String(call.input.status || "");
+        const message = String(call.input.message || result.summary || "").trim();
+        if (status === "blocked") {
+          return { status: "blocked", message: message || "Repair agent reported blocked." };
+        }
+        return { status: "no_change", message: message || "Repair agent reported ready without changes." };
+      }
+    }
+    messages.push({
+      content: toolResults,
+      role: "user"
+    });
+  }
+  info("[postman-tdd] Anthropic repair turn exhausted tool-call rounds without a patch.");
+  return {
+    status: "no_change",
+    message: "Repair agent exhausted tool-call rounds without proposing a patch."
+  };
+}
+function createAnthropicTools(context5) {
+  return createRepairTools(context5).map((tool) => ({
+    description: tool.description,
+    input_schema: tool.parameters,
+    name: tool.name
+  }));
+}
+async function createMessage(options) {
+  const fetchImpl = options.fetchImpl || fetch;
+  const response = await fetchImpl("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+      "x-api-key": options.apiKey
+    },
+    body: JSON.stringify({
+      max_tokens: 4096,
+      messages: options.messages,
+      model: options.model,
+      tools: options.tools
+    })
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Anthropic Messages API failed (${response.status}): ${options.secretMasker(text).slice(0, 1e3)}`);
+  }
+  return JSON.parse(text);
+}
+function logToolResult(name, result) {
+  if (result.error) {
+    info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
+  } else if (name === "list_files") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
+  } else if (name === "search_files") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
+  } else if (name === "read_file") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
+  } else if (name === "propose_patch") {
+    info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(", ") || "(none)"}.`);
+  }
+}
+function isToolUseBlock(value) {
+  return value.type === "tool_use" && typeof value.id === "string" && typeof value.name === "string" && isRecord(value.input);
+}
+function isRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+function extractText(response) {
+  const content = Array.isArray(response.content) ? response.content : [];
+  const chunks = [];
+  for (const item of content) {
+    const record = item && typeof item === "object" ? item : void 0;
+    if (record?.type === "text" && typeof record.text === "string") {
+      chunks.push(record.text);
+    }
+  }
+  return chunks.join("\n").trim();
+}
+
 // src/repair/openai-responses-provider.ts
 async function runOpenAiRepairTurn(options) {
   info(`[postman-tdd] OpenAI Responses repair turn: model=${options.model}, failurePhase=${options.failure.phase}, failures=${options.failure.failures.length}.`);
@@ -108109,7 +108265,7 @@ async function runOpenAiRepairTurn(options) {
     if (calls.length === 0) {
       return {
         status: "no_change",
-        message: extractText(response) || "The repair agent did not call a patch or finish tool."
+        message: extractText2(response) || "The repair agent did not call a patch or finish tool."
       };
     }
     const toolOutputs = [];
@@ -108180,28 +108336,6 @@ async function createResponse(options) {
   }
   return JSON.parse(text);
 }
-function buildRepairPrompt(failure, context5) {
-  return [
-    "You are repairing an API implementation so it passes a Postman TDD contract collection.",
-    "Fix implementation code only.",
-    "Do not modify, regenerate, or weaken the OpenAPI spec or generated assertions.",
-    `Allowed write paths: ${context5.patchPolicy.allowedWritePaths.join(", ")}`,
-    `Allowed read paths: ${context5.allowedReadPaths.join(", ")}`,
-    `Immutable paths: ${context5.patchPolicy.immutablePaths.join(", ") || "(none)"}`,
-    "Use read_file, list_files, and search_files to inspect implementation files.",
-    "Use propose_patch with a unified git diff when you have a code-only fix.",
-    "Use finish with status=blocked if API intent is unclear, infrastructure is missing, or no implementation-only fix is reasonable.",
-    "",
-    "Failure context:",
-    JSON.stringify({
-      baseUrl: failure.baseUrl,
-      collectionName: failure.collectionName,
-      failures: failure.failures,
-      phase: failure.phase,
-      successCriteria: failure.successCriteria
-    }, null, 2)
-  ].join("\n");
-}
 function isFunctionCall(item) {
   return Boolean(item && typeof item === "object" && item.type === "function_call");
 }
@@ -108215,7 +108349,7 @@ function parseArguments(value) {
     return {};
   }
 }
-function extractText(response) {
+function extractText2(response) {
   const output = Array.isArray(response.output) ? response.output : [];
   const chunks = [];
   for (const item of output) {
@@ -108227,6 +108361,61 @@ function extractText(response) {
     }
   }
   return chunks.join("\n").trim();
+}
+
+// src/repair/provider-dispatcher.ts
+function defaultRepairModel(provider) {
+  return provider === "anthropic-messages" ? "claude-sonnet-5" : "gpt-5.5";
+}
+function resolveRepairProviderApiKey(inputs) {
+  if (inputs.repairProvider === "openai-responses") {
+    if (!inputs.openaiApiKey) {
+      throw new Error("openai-api-key is required when mode=repair and repair-provider=openai-responses");
+    }
+    return inputs.openaiApiKey;
+  }
+  if (inputs.repairProvider === "anthropic-messages") {
+    if (!inputs.anthropicApiKey) {
+      throw new Error("anthropic-api-key is required when mode=repair and repair-provider=anthropic-messages");
+    }
+    return inputs.anthropicApiKey;
+  }
+  assertNever(inputs.repairProvider);
+}
+function assertMatchingRepairProvider(inputProvider, configProvider) {
+  if (inputProvider !== configProvider) {
+    throw new Error(`repair-provider input (${inputProvider}) must match tdd.repair.provider (${configProvider})`);
+  }
+  return inputProvider;
+}
+function runRepairProviderTurn(options) {
+  const apiKey = resolveRepairProviderApiKey(options.inputs);
+  if (options.provider === "openai-responses") {
+    return runOpenAiRepairTurn({
+      apiKey,
+      failure: options.failure,
+      fetchImpl: options.fetchImpl,
+      maxToolRounds: options.maxToolRounds,
+      model: options.inputs.repairModel,
+      repairContext: options.repairContext,
+      secretMasker: options.secretMasker
+    });
+  }
+  if (options.provider === "anthropic-messages") {
+    return runAnthropicRepairTurn({
+      apiKey,
+      failure: options.failure,
+      fetchImpl: options.fetchImpl,
+      maxToolRounds: options.maxToolRounds,
+      model: options.inputs.repairModel,
+      repairContext: options.repairContext,
+      secretMasker: options.secretMasker
+    });
+  }
+  assertNever(options.provider);
+}
+function assertNever(value) {
+  throw new Error(`Unsupported repair provider: ${String(value)}`);
 }
 
 // src/repair/orchestrator.ts
@@ -108253,13 +108442,8 @@ async function runRepairMode(options) {
     setRepairOutputs({ attempts: 0, status: "skipped" });
     return;
   }
-  if (!options.inputs.openaiApiKey) {
-    info("[postman-tdd] Repair cannot start because openai-api-key was not provided.");
-    throw new Error("openai-api-key is required when mode=repair");
-  }
-  if (options.inputs.repairProvider !== "openai-responses" || config.repair.provider !== "openai-responses") {
-    throw new Error("mode=repair v1 only supports repair-provider=openai-responses");
-  }
+  const repairProvider = assertMatchingRepairProvider(options.inputs.repairProvider, config.repair.provider);
+  resolveRepairProviderApiKey(options.inputs);
   info(`[postman-tdd] Fetching PR details for #${options.pr.number}.`);
   const prDetails = await options.github.getPullRequest(options.pr.number);
   info(`[postman-tdd] PR details: head=${prDetails.headRepository}:${prDetails.headBranch}@${prDetails.headSha}, base=${prDetails.baseRepository}, fork=${prDetails.isFork}.`);
@@ -108352,10 +108536,10 @@ async function runRepairMode(options) {
   while (attempts < maxAttempts) {
     const attemptNumber = attempts + 1;
     info(`[postman-tdd] Repair attempt ${attemptNumber}/${maxAttempts}: asking provider for an implementation-only patch.`);
-    const repair = await runOpenAiRepairTurn({
-      apiKey: options.inputs.openaiApiKey,
+    const repair = await runRepairProviderTurn({
       failure: currentFailure,
-      model: options.inputs.repairModel,
+      inputs: options.inputs,
+      provider: repairProvider,
       repairContext: {
         allowedReadPaths: config.repair.allowedReadPaths,
         patchPolicy,
@@ -108506,15 +108690,15 @@ function validateRepairFailureContext(failure) {
   return void 0;
 }
 function isFailureEntry(value) {
-  return isRecord(value) && isNonEmptyString(value.message);
+  return isRecord2(value) && isNonEmptyString(value.message);
 }
 function isImmutablePathHash(value) {
-  return isRecord(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
+  return isRecord2(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
 }
 function isSuccessCriteria(value) {
-  return isRecord(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
+  return isRecord2(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
 }
-function isRecord(value) {
+function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isNonEmptyString(value) {
@@ -108939,11 +109123,13 @@ function readActionInputs() {
   if (modeRaw !== "run" && modeRaw !== "cleanup" && modeRaw !== "repair") {
     throw new Error(`Unsupported mode "${modeRaw}". Expected run, cleanup, or repair`);
   }
+  const repairProvider = validateRepairProvider(getInput("repair-provider") || "openai-responses");
   const repairMaxAttempts = Number(getInput("repair-max-attempts") || "3");
   if (!Number.isFinite(repairMaxAttempts) || repairMaxAttempts <= 0) {
     throw new Error(`repair-max-attempts must be a positive number, got: ${getInput("repair-max-attempts")}`);
   }
   return {
+    anthropicApiKey: getInput("anthropic-api-key") || void 0,
     committerEmail: getInput("committer-email") || "support@postman.com",
     committerName: getInput("committer-name") || "Postman",
     configWriteMode: validateConfigWriteMode(getInput("config-write-mode") || "commit-and-push"),
@@ -108961,8 +109147,8 @@ function readActionInputs() {
     repairCommitMessage: getInput("repair-commit-message") || "Postman TDD repair",
     repairGithubToken: getInput("repair-github-token") || void 0,
     repairMaxAttempts,
-    repairModel: getInput("repair-model") || "gpt-5.5",
-    repairProvider: validateRepairProvider(getInput("repair-provider") || "openai-responses"),
+    repairModel: getInput("repair-model") || defaultRepairModel(repairProvider),
+    repairProvider,
     specPath: getInput("spec-path") || void 0,
     workspaceTeamId: getInput("workspace-team-id") || void 0
   };
@@ -108974,6 +109160,7 @@ async function runAction(options = {}) {
   if (inputs.postmanAccessToken) setSecret(inputs.postmanAccessToken);
   if (inputs.immutableStateSigningKey) setSecret(inputs.immutableStateSigningKey);
   if (inputs.openaiApiKey) setSecret(inputs.openaiApiKey);
+  if (inputs.anthropicApiKey) setSecret(inputs.anthropicApiKey);
   if (inputs.repairGithubToken) setSecret(inputs.repairGithubToken);
   const mask = createSecretMasker([
     inputs.postmanApiKey,
@@ -108981,6 +109168,7 @@ async function runAction(options = {}) {
     inputs.postmanAccessToken,
     inputs.immutableStateSigningKey,
     inputs.openaiApiKey,
+    inputs.anthropicApiKey,
     inputs.repairGithubToken
   ]);
   const endpointProfile = resolvePostmanEndpointProfile(inputs.postmanStack, inputs.postmanRegion);

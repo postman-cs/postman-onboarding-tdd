@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { loadOnboardingConfig, patchWorkspaceId } from '../src/config.js';
+import { loadOnboardingConfig, patchWorkspaceId, validateRepairProvider } from '../src/config.js';
 
 describe('onboarding config', () => {
   let dir = '';
@@ -123,6 +123,29 @@ tdd:
     });
   });
 
+  it('accepts Anthropic Messages as a repair provider', () => {
+    const path = writeConfig(`
+spec:
+  path: api/openapi.yaml
+service:
+  name: reference-service
+tdd:
+  enabled: true
+  workspace:
+    name: Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  repair:
+    enabled: true
+    provider: anthropic-messages
+    allowedWritePaths:
+      - src/**
+`);
+
+    expect(loadOnboardingConfig({ configPath: path }).repair.provider).toBe('anthropic-messages');
+  });
+
   it('uses explicit repair allowedReadPaths when provided', () => {
     const path = writeConfig(`
 spec:
@@ -169,5 +192,13 @@ tdd:
 `);
 
     expect(() => loadOnboardingConfig({ configPath: path })).toThrow('tdd.repair.allowedWritePaths is required');
+  });
+
+  it('validates known repair providers', () => {
+    expect(validateRepairProvider('openai-responses')).toBe('openai-responses');
+    expect(validateRepairProvider('anthropic-messages')).toBe('anthropic-messages');
+    expect(() => validateRepairProvider('other-provider')).toThrow(
+      'Expected openai-responses or anthropic-messages'
+    );
   });
 });

@@ -18,6 +18,7 @@ import {
   signImmutableState
 } from './immutable-state.js';
 import { runRepairMode } from './repair/orchestrator.js';
+import { defaultRepairModel } from './repair/provider-dispatcher.js';
 import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from './preview-assets.js';
 import { resolvePostmanEndpointProfile, parsePostmanRegion, parsePostmanStack } from './postman/base-urls.js';
 import type { PostmanEndpointProfile } from './postman/base-urls.js';
@@ -63,11 +64,13 @@ export function readActionInputs(): ActionInputs {
   if (modeRaw !== 'run' && modeRaw !== 'cleanup' && modeRaw !== 'repair') {
     throw new Error(`Unsupported mode "${modeRaw}". Expected run, cleanup, or repair`);
   }
+  const repairProvider = validateRepairProvider(core.getInput('repair-provider') || 'openai-responses');
   const repairMaxAttempts = Number(core.getInput('repair-max-attempts') || '3');
   if (!Number.isFinite(repairMaxAttempts) || repairMaxAttempts <= 0) {
     throw new Error(`repair-max-attempts must be a positive number, got: ${core.getInput('repair-max-attempts')}`);
   }
   return {
+    anthropicApiKey: core.getInput('anthropic-api-key') || undefined,
     committerEmail: core.getInput('committer-email') || 'support@postman.com',
     committerName: core.getInput('committer-name') || 'Postman',
     configWriteMode: validateConfigWriteMode(core.getInput('config-write-mode') || 'commit-and-push'),
@@ -85,8 +88,8 @@ export function readActionInputs(): ActionInputs {
     repairCommitMessage: core.getInput('repair-commit-message') || 'Postman TDD repair',
     repairGithubToken: core.getInput('repair-github-token') || undefined,
     repairMaxAttempts,
-    repairModel: core.getInput('repair-model') || 'gpt-5.5',
-    repairProvider: validateRepairProvider(core.getInput('repair-provider') || 'openai-responses'),
+    repairModel: core.getInput('repair-model') || defaultRepairModel(repairProvider),
+    repairProvider,
     specPath: core.getInput('spec-path') || undefined,
     workspaceTeamId: core.getInput('workspace-team-id') || undefined
   };
@@ -99,6 +102,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
   if (inputs.postmanAccessToken) core.setSecret(inputs.postmanAccessToken);
   if (inputs.immutableStateSigningKey) core.setSecret(inputs.immutableStateSigningKey);
   if (inputs.openaiApiKey) core.setSecret(inputs.openaiApiKey);
+  if (inputs.anthropicApiKey) core.setSecret(inputs.anthropicApiKey);
   if (inputs.repairGithubToken) core.setSecret(inputs.repairGithubToken);
 
   const mask = createSecretMasker([
@@ -107,6 +111,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
     inputs.postmanAccessToken,
     inputs.immutableStateSigningKey,
     inputs.openaiApiKey,
+    inputs.anthropicApiKey,
     inputs.repairGithubToken
   ]);
   const endpointProfile = resolvePostmanEndpointProfile(inputs.postmanStack, inputs.postmanRegion);

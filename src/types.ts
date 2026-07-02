@@ -16,7 +16,7 @@ export type FailurePhase =
 
 export type RepairStatus = 'repaired' | 'blocked' | 'skipped' | 'failed';
 
-export type RepairProvider = 'openai-responses';
+export type RepairProvider = 'openai-responses' | 'anthropic-messages';
 
 export type ActionStatus = 'passed' | 'failed' | 'skipped' | 'cleaned-up';
 
@@ -125,6 +125,7 @@ export interface AgentFailureDocument {
 }
 
 export interface ActionInputs {
+  anthropicApiKey?: string;
   committerEmail: string;
   committerName: string;
   configWriteMode: ConfigWriteMode;
