@@ -60,11 +60,41 @@ You add three things to the service repository:
 
 For most teams, start with the preview workflow first. Add the automated repair workflow after the preview check is stable.
 
+## Quick Start
+
+1. Copy the sample config into the service repository:
+
+   ```bash
+   mkdir -p .postman-template
+   curl -fsSL https://raw.githubusercontent.com/postman-cs/postman-onboarding-tdd/main/.postman-template/onboarding.yml \
+     -o .postman-template/onboarding.yml
+   ```
+
+   If your environment cannot access the raw GitHub URL, copy `.postman-template/onboarding.yml` from a local checkout of this repository. If the package is installed locally, the same sample is available at `node_modules/@postman-cse/onboarding-tdd/.postman-template/onboarding.yml`.
+
+2. Edit `.postman-template/onboarding.yml`:
+
+   - set `spec.path` to the service OpenAPI file,
+   - set `service.name`,
+   - set `tdd.workspace.name`,
+   - set `tdd.baseUrl`, `tdd.healthUrl`, and `tdd.startCommand`,
+   - keep `tdd.repair.enabled: false` until the preview workflow is stable, then enable repair.
+
+3. Add the preview workflow from [Preview Workflow](#preview-workflow).
+
+4. Add the required secrets from [GitHub Secrets](#github-secrets).
+
+5. Open a PR that changes the OpenAPI spec or implementation and confirm `Postman TDD Preview` posts a PR comment.
+
+6. Enable repair using [Repair Setup Checklist](#repair-setup-checklist).
+
 ## Repository Config
 
-Create or update `.postman-template/onboarding.yml`:
+Create or update `.postman-template/onboarding.yml`. A complete sample is packaged at `.postman-template/onboarding.yml` in this repository:
 
 ```yaml
+version: 1
+
 spec:
   path: api/openapi.yaml
 
@@ -83,6 +113,17 @@ tdd:
   startCommand: ./scripts/postman-tdd-start.sh
   stopCommand: ./scripts/postman-tdd-stop.sh # optional
   timeoutSeconds: 90
+  repair:
+    enabled: false
+    provider: openai-responses
+    maxAttempts: 3
+    allowedWritePaths:
+      - src/**
+    allowedReadPaths:
+      - src/**
+      - test/**
+      - package.json
+    localTestCommand: npm test # optional
 ```
 
 `startCommand` is customer-owned. It must make the PR implementation reachable at `baseUrl`. It can run the app directly, start Docker Compose, launch mocks, seed data, or do whatever the service needs in CI.
@@ -116,6 +157,42 @@ Create these secrets in the customer service repository:
 Use a long random value for `POSTMAN_TDD_SIGNING_KEY`. Implementation agents should not be able to read it.
 
 `POSTMAN_TDD_REPAIR_TOKEN` should be a token that can push to PR branches. A normal `GITHUB_TOKEN` push may not trigger the follow-up workflow run, so production repair should use a PAT or GitHub App token.
+
+## Repair Setup Checklist
+
+Use this checklist after the preview workflow is already posting `Postman TDD Preview` comments.
+
+1. In `.postman-template/onboarding.yml`, enable repair and choose a provider:
+
+   ```yaml
+   tdd:
+     repair:
+       enabled: true
+       provider: anthropic-messages # or openai-responses
+       maxAttempts: 3
+       allowedWritePaths:
+         - src/**
+       allowedReadPaths:
+         - src/**
+         - test/**
+         - package.json
+       localTestCommand: npm test
+   ```
+
+2. Keep `allowedWritePaths` narrow. These are the only implementation paths the repair worker may patch. Do not include the OpenAPI spec, generated Postman files, workflow files, or secret-like files.
+
+3. Add provider credentials:
+
+   | Provider | Config value | Workflow input | Secret |
+   | --- | --- | --- | --- |
+   | OpenAI Responses | `openai-responses` | `openai-api-key` | `OPENAI_API_KEY` |
+   | Anthropic Messages | `anthropic-messages` | `anthropic-api-key` | `ANTHROPIC_API_KEY` |
+
+4. Add `POSTMAN_TDD_REPAIR_TOKEN` so pushed repair commits can trigger the next preview run.
+
+5. Add the repair workflow from [Repair Workflow](#repair-workflow). The action `repair-provider` input must match `tdd.repair.provider`.
+
+6. Test repair with a small implementation-only contract failure. Done means the PR shows both `Postman TDD Repair (REPAIRED)` and a later `Postman TDD Preview (PASSED)` on the repair commit.
 
 ## Preview Workflow
 
@@ -290,7 +367,9 @@ Then verify the runtime actually executes hooks before relying on them.
 
 The repair worker is opt-in. It is useful when you want the workflow to attempt implementation repair automatically after a failed preview check.
 
-Add repair settings to `.postman-template/onboarding.yml`:
+The fastest setup path is the [Repair Setup Checklist](#repair-setup-checklist). The details below explain the repair boundaries and workflow shape.
+
+Add or enable repair settings in `.postman-template/onboarding.yml`:
 
 ```yaml
 tdd:
