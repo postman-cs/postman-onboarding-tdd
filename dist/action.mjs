@@ -28369,7 +28369,7 @@ var require_BufferList = __commonJS({
         this.head = this.tail = null;
         this.length = 0;
       };
-      BufferList.prototype.join = function join4(s) {
+      BufferList.prototype.join = function join5(s) {
         if (this.length === 0) return "";
         var p = this.head;
         var ret = "" + p.data;
@@ -68302,10 +68302,10 @@ function getOperationArgumentValueFromParameter(operationArguments, parameter, f
     if (parameterMapper.required) {
       value = {};
     }
-    for (const [propertyName, propertyPath] of Object.entries(parameterPath)) {
+    for (const [propertyName, propertyPath3] of Object.entries(parameterPath)) {
       const propertyMapper = parameterMapper.type.modelProperties[propertyName];
       const propertyValue = getOperationArgumentValueFromParameter(operationArguments, {
-        parameterPath: propertyPath,
+        parameterPath: propertyPath3,
         mapper: propertyMapper
       }, fallbackObject);
       if (propertyValue !== void 0) {
@@ -105873,10 +105873,10 @@ function stringArrayValue(value) {
 }
 function validateRepairProvider(value) {
   const normalized = stringValue(value || "openai-responses");
-  if (normalized === "openai-responses" || normalized === "anthropic-messages") {
+  if (normalized === "openai-responses" || normalized === "anthropic-messages" || normalized === "postman-agent-mode") {
     return normalized;
   }
-  throw new Error(`Unsupported repair-provider "${value}". Expected openai-responses or anthropic-messages`);
+  throw new Error(`Unsupported repair-provider "${value}". Expected openai-responses, anthropic-messages, or postman-agent-mode`);
 }
 function loadOnboardingConfig(options) {
   const configPath = options.configPath;
@@ -106201,6 +106201,478 @@ console.log(\`Immutable spec guard passed for \${expected.length} path(s).\`);
 `;
 }
 
+// src/contract-hints.ts
+import { readFileSync as readFileSync4 } from "node:fs";
+
+// src/contract.ts
+var import_yaml2 = __toESM(require_dist6(), 1);
+var HTTP_METHODS = /* @__PURE__ */ new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"]);
+function asRecord2(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+function parseOpenApiDocument(content) {
+  const head = content.trimStart();
+  const parsed = head.startsWith("{") ? JSON.parse(content) : (0, import_yaml2.parse)(content);
+  const root = asRecord2(parsed);
+  if (!root) {
+    throw new Error("OpenAPI document must be an object");
+  }
+  return root;
+}
+function detectOpenApiVersion(root) {
+  const raw = String(root.openapi || "").trim();
+  if (/^3\.1(?:\.\d+)?$/.test(raw)) return "3.1";
+  if (/^3\.0(?:\.\d+)?$/.test(raw)) return "3.0";
+  throw new Error(`Dynamic TDD contracts require OpenAPI 3.0 or 3.1, got: ${raw || "<missing>"}`);
+}
+function buildContractIndex(root) {
+  const warnings = [];
+  const paths = asRecord2(root.paths);
+  if (!paths) {
+    throw new Error("OpenAPI document must define paths");
+  }
+  const operations = [];
+  for (const [path4, pathItemRaw] of Object.entries(paths)) {
+    const pathItem = asRecord2(pathItemRaw);
+    if (!pathItem) continue;
+    for (const [methodRaw, operationRaw] of Object.entries(pathItem)) {
+      const method = methodRaw.toLowerCase();
+      if (!HTTP_METHODS.has(method)) continue;
+      const operation = resolveRef(root, operationRaw);
+      if (!operation) continue;
+      operations.push({
+        method: method.toUpperCase(),
+        operationId: typeof operation.operationId === "string" ? operation.operationId : void 0,
+        path: path4,
+        responses: collectResponses(root, operation)
+      });
+    }
+  }
+  if (operations.length === 0) {
+    warnings.push("CONTRACT_NO_OPERATIONS: OpenAPI document contains no operations");
+  }
+  return {
+    openapiVersion: detectOpenApiVersion(root),
+    operations,
+    warnings
+  };
+}
+function collectResponses(root, operation) {
+  const responsesRoot = asRecord2(operation.responses) || {};
+  const responses = {};
+  for (const [status, responseRaw] of Object.entries(responsesRoot)) {
+    const response = resolveRef(root, responseRaw) || {};
+    const contentRoot = asRecord2(response.content) || {};
+    const content = {};
+    for (const [mediaType, mediaRaw] of Object.entries(contentRoot)) {
+      const media = asRecord2(mediaRaw) || {};
+      const schema = media.schema === void 0 ? void 0 : dereferenceSchema(root, media.schema);
+      content[mediaType] = schema === void 0 ? {} : { schema };
+    }
+    responses[normalizeResponseKey(status)] = {
+      content,
+      description: typeof response.description === "string" ? response.description : void 0
+    };
+  }
+  return responses;
+}
+function resolvePointer(root, ref) {
+  const path4 = ref.slice(2).split("/").map((part) => part.replace(/~1/g, "/").replace(/~0/g, "~"));
+  let current = root;
+  for (const part of path4) {
+    const record = asRecord2(current);
+    if (!record) return void 0;
+    current = record[part];
+  }
+  return current;
+}
+function resolveRef(root, value) {
+  const record = asRecord2(value);
+  if (!record) return null;
+  const ref = typeof record.$ref === "string" ? record.$ref : "";
+  if (!ref) return record;
+  if (!ref.startsWith("#/")) {
+    throw new Error(`External $ref remained in OpenAPI document: ${ref}`);
+  }
+  const resolved = asRecord2(resolvePointer(root, ref));
+  if (!resolved) {
+    throw new Error(`Unresolved OpenAPI $ref: ${ref}`);
+  }
+  return resolved;
+}
+function dereferenceSchema(root, schema, seen = /* @__PURE__ */ new Set()) {
+  if (Array.isArray(schema)) {
+    return schema.map((entry) => dereferenceSchema(root, entry, seen));
+  }
+  const record = asRecord2(schema);
+  if (!record) return schema;
+  const ref = typeof record.$ref === "string" ? record.$ref : "";
+  if (ref) {
+    if (!ref.startsWith("#/")) {
+      return { unsupported: `external ref ${ref}` };
+    }
+    if (seen.has(ref)) {
+      return {};
+    }
+    seen.add(ref);
+    return dereferenceSchema(root, resolvePointer(root, ref), seen);
+  }
+  const copy = {};
+  for (const [key, value] of Object.entries(record)) {
+    copy[key] = dereferenceSchema(root, value, new Set(seen));
+  }
+  return copy;
+}
+function normalizeResponseKey(status) {
+  return /^[1-5]xx$/i.test(status) ? status.toUpperCase() : status;
+}
+function instrumentContractCollection(collection, index) {
+  const warnings = [...index.warnings];
+  const clone = sanitizeCollectionForUpdate(collection);
+  const visit = (item) => {
+    if (item.request) {
+      const match = matchOperation(index, item.request);
+      if (match.operation) {
+        const events = asArray(item.event).filter((event) => {
+          const record = asRecord2(event);
+          return record?.listen !== "test";
+        });
+        item.event = [
+          ...events,
+          {
+            listen: "test",
+            script: {
+              type: "text/javascript",
+              exec: createContractScript(match.operation)
+            }
+          }
+        ];
+      } else {
+        warnings.push(`CONTRACT_REQUEST_NOT_MATCHED: ${match.method || "<method>"} ${match.path}`);
+      }
+    }
+    for (const child of asArray(item.item).map((entry) => asRecord2(entry)).filter(Boolean)) {
+      visit(child);
+    }
+  };
+  for (const item of asArray(clone.item).map((entry) => asRecord2(entry)).filter(Boolean)) {
+    visit(item);
+  }
+  return { collection: clone, warnings };
+}
+function sanitizeCollectionForUpdate(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeCollectionForUpdate(entry));
+  }
+  const record = asRecord2(value);
+  if (!record) return value;
+  const clone = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (["id", "uid", "_postman_id"].includes(key)) continue;
+    if (key === "response") continue;
+    clone[key] = sanitizeCollectionForUpdate(entry);
+  }
+  return clone;
+}
+function createContractScript(operation) {
+  const contract = {
+    method: operation.method,
+    operationId: operation.operationId,
+    path: operation.path,
+    responses: operation.responses
+  };
+  return [
+    "// [Postman TDD] Auto-generated OpenAPI contract assertions",
+    `const contract = JSON.parse(${JSON.stringify(JSON.stringify(contract))});`,
+    'function responseText() { return pm.response.text() || ""; }',
+    'function isBodyless() { return pm.response.code === 204 || pm.response.code === 205 || pm.response.code === 304 || contract.method === "HEAD"; }',
+    'function mediaBase(value) { return String(value || "").toLowerCase().split(";")[0].trim(); }',
+    "function selectResponseContract() {",
+    "  const status = String(pm.response.code);",
+    "  if (contract.responses[status]) return { key: status, value: contract.responses[status] };",
+    '  const range = String(Math.floor(pm.response.code / 100)) + "XX";',
+    "  if (contract.responses[range]) return { key: range, value: contract.responses[range] };",
+    '  if (contract.responses.default) return { key: "default", value: contract.responses.default };',
+    "  return null;",
+    "}",
+    "function expectedMedia(responseContract) { return Object.keys(responseContract.content || {}); }",
+    "function selectSchema(responseContract) {",
+    "  const content = responseContract.content || {};",
+    '  const actual = mediaBase(pm.response.headers.get("Content-Type") || "");',
+    "  const keys = Object.keys(content);",
+    "  if (keys.length === 0) return undefined;",
+    "  const exact = keys.find((key) => mediaBase(key) === actual);",
+    "  if (exact) return content[exact].schema;",
+    '  const json = keys.find((key) => mediaBase(key) === "application/json" && /json$/.test(actual));',
+    "  return json ? content[json].schema : content[keys[0]].schema;",
+    "}",
+    'function typeOf(value) { if (Array.isArray(value)) return "array"; if (value === null) return "null"; if (Number.isInteger(value)) return "integer"; return typeof value; }',
+    "function schemaTypes(schema) { const type = schema && schema.type; return Array.isArray(type) ? type : type ? [type] : []; }",
+    'function operationLabel() { return [contract.operationId, contract.method, contract.path].filter(Boolean).join(" "); }',
+    'function tddAssertion(name) { return "[Postman TDD] " + operationLabel() + " :: " + name; }',
+    "function validateSchema(value, schema, path, errors) {",
+    '  if (!schema || typeof schema !== "object") return;',
+    '  if (schema.unsupported) { errors.push(path + " uses unsupported schema: " + schema.unsupported); return; }',
+    "  if (schema.allOf) schema.allOf.forEach((entry) => validateSchema(value, entry, path, errors));",
+    "  const types = schemaTypes(schema);",
+    "  if (types.length > 0) {",
+    "    const actual = typeOf(value);",
+    '    const ok = types.some((type) => type === actual || (type === "number" && actual === "integer"));',
+    '    if (!ok) { errors.push(path + " expected " + types.join("|") + " but received " + actual); return; }',
+    "  }",
+    '  if (schema.enum && !schema.enum.some((entry) => JSON.stringify(entry) === JSON.stringify(value))) errors.push(path + " expected enum value " + JSON.stringify(schema.enum));',
+    '  if (schema.const !== undefined && JSON.stringify(schema.const) !== JSON.stringify(value)) errors.push(path + " expected const " + JSON.stringify(schema.const));',
+    '  if (typeof value === "string") {',
+    '    if (typeof schema.minLength === "number" && value.length < schema.minLength) errors.push(path + " expected minLength " + schema.minLength + " but received length " + value.length);',
+    '    if (typeof schema.maxLength === "number" && value.length > schema.maxLength) errors.push(path + " expected maxLength " + schema.maxLength + " but received length " + value.length);',
+    '    if (typeof schema.pattern === "string") {',
+    "      let regex;",
+    '      try { regex = new RegExp(schema.pattern); } catch (error) { errors.push(path + " has invalid pattern " + JSON.stringify(schema.pattern)); }',
+    '      if (regex && !regex.test(value)) errors.push(path + " expected pattern " + schema.pattern);',
+    "    }",
+    "  }",
+    '  if (typeof value === "number" && Number.isFinite(value)) {',
+    '    const minimum = typeof schema.minimum === "number" ? schema.minimum : undefined;',
+    '    const maximum = typeof schema.maximum === "number" ? schema.maximum : undefined;',
+    '    const exclusiveMinimum = typeof schema.exclusiveMinimum === "number" ? schema.exclusiveMinimum : undefined;',
+    '    const exclusiveMaximum = typeof schema.exclusiveMaximum === "number" ? schema.exclusiveMaximum : undefined;',
+    '    if (exclusiveMinimum !== undefined) { if (!(value > exclusiveMinimum)) errors.push(path + " expected exclusiveMinimum " + exclusiveMinimum + " but received " + value); }',
+    "    else if (minimum !== undefined) {",
+    '      if (schema.exclusiveMinimum === true ? !(value > minimum) : value < minimum) errors.push(path + " expected " + (schema.exclusiveMinimum === true ? "exclusiveMinimum " : "minimum ") + minimum + " but received " + value);',
+    "    }",
+    '    if (exclusiveMaximum !== undefined) { if (!(value < exclusiveMaximum)) errors.push(path + " expected exclusiveMaximum " + exclusiveMaximum + " but received " + value); }',
+    "    else if (maximum !== undefined) {",
+    '      if (schema.exclusiveMaximum === true ? !(value < maximum) : value > maximum) errors.push(path + " expected " + (schema.exclusiveMaximum === true ? "exclusiveMaximum " : "maximum ") + maximum + " but received " + value);',
+    "    }",
+    "  }",
+    '  if (schema.type === "object" || schema.properties) {',
+    "    const required = Array.isArray(schema.required) ? schema.required : [];",
+    '    required.forEach((key) => { if (!value || typeof value !== "object" || !(key in value)) errors.push(path + "." + key + " is required"); });',
+    '    Object.entries(schema.properties || {}).forEach(([key, child]) => { if (value && typeof value === "object" && key in value) validateSchema(value[key], child, path + "." + key, errors); });',
+    "  }",
+    '  if (schema.type === "array" && schema.items && Array.isArray(value)) value.forEach((entry, index) => validateSchema(entry, schema.items, path + "[" + index + "]", errors));',
+    "}",
+    "const selected = selectResponseContract();",
+    'pm.test(tddAssertion("operation mapping exists"), function () { pm.expect(contract.path).to.be.a("string").and.not.empty; });',
+    'pm.test(tddAssertion("status code is defined by OpenAPI"), function () { pm.expect(selected, "No OpenAPI response defined for " + contract.method + " " + contract.path + " status " + pm.response.code).to.exist; });',
+    'pm.test(tddAssertion("response body matches body contract"), function () {',
+    "  if (!selected) return;",
+    "  if (isBodyless()) { pm.expect(responseText().trim().length).to.equal(0); return; }",
+    "  const media = expectedMedia(selected.value);",
+    '  if (media.length === 0) pm.expect(responseText().trim().length, "OpenAPI response defines no body but response body was not empty").to.equal(0);',
+    '  else pm.expect(responseText().trim().length, "OpenAPI response defines a body but response body was empty").to.be.above(0);',
+    "});",
+    'pm.test(tddAssertion("content-type matches OpenAPI response content"), function () {',
+    "  if (!selected || isBodyless()) return;",
+    "  const media = expectedMedia(selected.value);",
+    "  if (media.length === 0) return;",
+    '  const actual = mediaBase(pm.response.headers.get("Content-Type") || "");',
+    '  pm.expect(actual, "Content-Type must match one of " + media.join(", ")).to.not.equal("");',
+    '  const matches = media.some((entry) => mediaBase(entry) === actual || (mediaBase(entry) === "application/json" && /json$/.test(actual)));',
+    '  pm.expect(matches, "Content-Type " + actual + " did not match OpenAPI content " + media.join(", ")).to.equal(true);',
+    "});",
+    'pm.test(tddAssertion("response body matches schema"), function () {',
+    "  if (!selected || isBodyless()) return;",
+    "  const schema = selectSchema(selected.value);",
+    "  if (!schema) return;",
+    "  const body = responseText().trim();",
+    "  if (!body) return;",
+    "  let parsed;",
+    '  try { parsed = JSON.parse(body); } catch (error) { pm.expect.fail("Response body was not valid JSON: " + error.message); }',
+    "  const errors = [];",
+    '  validateSchema(parsed, schema, "$", errors);',
+    '  if (errors.length > 0) pm.expect.fail(errors.slice(0, 10).join("; "));',
+    "});"
+  ];
+}
+function matchOperation(index, request2) {
+  const record = asRecord2(request2);
+  const method = String(record?.method || "").toUpperCase();
+  const path4 = requestPath(request2);
+  const candidates = index.operations.filter((operation) => operation.method === method).map((operation) => ({ operation, score: pathScore(operation.path, path4) })).filter((entry) => entry.score >= 0).sort((a, b) => b.score - a.score || a.operation.path.localeCompare(b.operation.path));
+  return { method, operation: candidates[0]?.operation, path: path4 };
+}
+function requestPath(request2) {
+  const record = asRecord2(request2);
+  const url2 = record?.url ?? request2;
+  if (typeof url2 === "string") return pathFromRaw(url2);
+  const urlRecord = asRecord2(url2);
+  if (!urlRecord) return "/";
+  if (typeof urlRecord.raw === "string") return pathFromRaw(urlRecord.raw);
+  if (Array.isArray(urlRecord.path)) {
+    return normalizePath(`/${urlRecord.path.map(stringifyPathSegment).filter(Boolean).join("/")}`);
+  }
+  if (typeof urlRecord.path === "string") return normalizePath(urlRecord.path);
+  return "/";
+}
+function stringifyPathSegment(segment) {
+  if (typeof segment === "string") return segment;
+  const record = asRecord2(segment);
+  return String(record?.value || record?.key || record?.name || segment || "");
+}
+function pathFromRaw(raw) {
+  let value = String(raw || "").trim();
+  value = value.replace(/^\{\{[^}]+}}/, "");
+  try {
+    return normalizePath(new URL(value).pathname);
+  } catch {
+    value = value.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "");
+    return normalizePath(value || "/");
+  }
+}
+function normalizePath(path4) {
+  const raw = String(path4 || "").split(/[?#]/, 1)[0] || "/";
+  const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  const collapsed = withSlash.replace(/\/+/g, "/");
+  return collapsed.length > 1 ? collapsed.replace(/\/+$/g, "") : collapsed;
+}
+function pathScore(candidate, request2) {
+  const candidateParts = normalizePath(candidate).split("/").filter(Boolean);
+  const requestParts = normalizePath(request2).split("/").filter(Boolean);
+  if (candidateParts.length !== requestParts.length) return -1;
+  let score = 0;
+  for (let index = 0; index < candidateParts.length; index += 1) {
+    const candidatePart = candidateParts[index] || "";
+    const requestPart = requestParts[index] || "";
+    if (/^\{[^}]+}$/.test(candidatePart) || /^:[^/]+$/.test(candidatePart) || /^\{\{[^}]+}}$/.test(candidatePart)) {
+      score += 1;
+      continue;
+    }
+    if (candidatePart !== requestPart) return -1;
+    score += 10;
+  }
+  return score;
+}
+
+// src/contract-hints.ts
+var MAX_HINTS = 5;
+var MAX_DEPTH = 8;
+var MAX_RULES_PER_SCHEMA = 80;
+var MAX_RULE_LENGTH = 240;
+function buildContractHints(specPath, failures) {
+  if (!specPath || failures.length === 0) return [];
+  const root = parseOpenApiDocument(readFileSync4(resolveWorkspacePath(specPath), "utf8"));
+  const index = buildContractIndex(root);
+  const hints = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const failure of failures) {
+    const operation = findOperation(index.operations, failure);
+    if (!operation) continue;
+    const key = `${operation.method} ${operation.path} ${operation.operationId || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    hints.push(toContractHint(operation));
+    if (hints.length >= MAX_HINTS) break;
+  }
+  return hints;
+}
+function findOperation(operations, failure) {
+  if (failure.operationId) {
+    const byOperationId = operations.find((operation) => operation.operationId === failure.operationId);
+    if (byOperationId) return byOperationId;
+  }
+  const method = failure.method?.toUpperCase();
+  if (method && failure.path) {
+    return operations.find((operation) => operation.method === method && operation.path === failure.path);
+  }
+  return void 0;
+}
+function toContractHint(operation) {
+  return {
+    method: operation.method,
+    ...operation.operationId ? { operationId: operation.operationId } : {},
+    path: operation.path,
+    responses: Object.entries(operation.responses).sort(([left], [right]) => left.localeCompare(right)).map(([status, response]) => ({
+      ...response.description ? { description: response.description } : {},
+      content: Object.fromEntries(Object.entries(response.content).map(([mediaType, media]) => [
+        mediaType,
+        media.schema === void 0 ? {} : { schema: summarizeSchema(media.schema) }
+      ])),
+      status
+    }))
+  };
+}
+function summarizeSchema(value) {
+  const rules = [];
+  collectSchemaRules(value, "$", 0, rules);
+  return { rules };
+}
+function collectSchemaRules(value, path4, depth, rules) {
+  if (rules.length >= MAX_RULES_PER_SCHEMA) return;
+  if (depth > MAX_DEPTH) {
+    addRule(rules, `${path4}: nested schema omitted`);
+    return;
+  }
+  if (!isRecord(value)) return;
+  const parts = scalarRuleParts(value);
+  const required = Array.isArray(value.required) ? value.required.filter((entry) => typeof entry === "string") : [];
+  if (required.length > 0) parts.push(`required=${required.join(",")}`);
+  if (parts.length > 0) addRule(rules, `${path4}: ${parts.join("; ")}`);
+  if (isRecord(value.properties)) {
+    for (const [key, entry] of Object.entries(value.properties)) {
+      collectSchemaRules(entry, propertyPath(path4, key), depth + 1, rules);
+      if (rules.length >= MAX_RULES_PER_SCHEMA) return;
+    }
+  }
+  if (value.items !== void 0) {
+    collectSchemaRules(value.items, `${path4}[]`, depth + 1, rules);
+  }
+  for (const combinator of ["allOf", "anyOf", "oneOf"]) {
+    if (!Array.isArray(value[combinator])) continue;
+    value[combinator].forEach((entry, index) => {
+      collectSchemaRules(entry, `${path4}.${combinator}[${index}]`, depth + 1, rules);
+    });
+  }
+  if (isRecord(value.additionalProperties)) {
+    collectSchemaRules(value.additionalProperties, `${path4}.*`, depth + 1, rules);
+  } else if (typeof value.additionalProperties === "boolean") {
+    addRule(rules, `${path4}: additionalProperties=${String(value.additionalProperties)}`);
+  }
+}
+function scalarRuleParts(input) {
+  const parts = [];
+  for (const [key, label] of [
+    ["type", "type"],
+    ["format", "format"],
+    ["enum", "enum"],
+    ["const", "const"],
+    ["nullable", "nullable"],
+    ["pattern", "pattern"],
+    ["minimum", "minimum"],
+    ["maximum", "maximum"],
+    ["exclusiveMinimum", "exclusiveMinimum"],
+    ["exclusiveMaximum", "exclusiveMaximum"],
+    ["minLength", "minLength"],
+    ["maxLength", "maxLength"],
+    ["minItems", "minItems"],
+    ["maxItems", "maxItems"]
+  ]) {
+    if (input[key] !== void 0) parts.push(`${label}=${formatRuleValue(input[key])}`);
+  }
+  return parts;
+}
+function formatRuleValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => formatRuleValue(entry)).join("|");
+  }
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || value === null) return String(value);
+  return JSON.stringify(value);
+}
+function addRule(rules, rule) {
+  if (rules.length >= MAX_RULES_PER_SCHEMA) return;
+  rules.push(rule.length > MAX_RULE_LENGTH ? `${rule.slice(0, MAX_RULE_LENGTH - 3)}...` : rule);
+}
+function propertyPath(parent, key) {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? `${parent}.${key}` : `${parent}[${JSON.stringify(key)}]`;
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // src/failure-normalizer.ts
 var MAX_FAILURES = 10;
 var MAX_MESSAGE_LENGTH = 400;
@@ -106251,7 +106723,7 @@ function parseTaggedAssertion(line) {
   const match = TDD_ASSERTION_PATTERN.exec(candidate);
   if (!match?.groups) return void 0;
   const method = match.groups.method?.toUpperCase();
-  const path4 = normalizePath(match.groups.path || "");
+  const path4 = normalizePath2(match.groups.path || "");
   const assertion = normalizeAssertion(match.groups.assertion || "");
   if (!method || !path4 || !assertion) return void 0;
   return {
@@ -106294,7 +106766,7 @@ function normalizeFailureMessage(value) {
 function normalizeAssertion(value) {
   return value.replace(/\s+/g, " ").replace(/\s+(?:failed|error)$/i, "").trim().toLowerCase();
 }
-function normalizePath(value) {
+function normalizePath2(value) {
   try {
     const url2 = new URL(value);
     return url2.pathname || value;
@@ -106983,350 +107455,7 @@ function sortHashes(hashes) {
 import { resolve as resolve6 } from "node:path";
 
 // src/preview-assets.ts
-import { readFileSync as readFileSync4 } from "node:fs";
-
-// src/contract.ts
-var import_yaml2 = __toESM(require_dist6(), 1);
-var HTTP_METHODS = /* @__PURE__ */ new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"]);
-function asRecord2(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-function parseOpenApiDocument(content) {
-  const head = content.trimStart();
-  const parsed = head.startsWith("{") ? JSON.parse(content) : (0, import_yaml2.parse)(content);
-  const root = asRecord2(parsed);
-  if (!root) {
-    throw new Error("OpenAPI document must be an object");
-  }
-  return root;
-}
-function detectOpenApiVersion(root) {
-  const raw = String(root.openapi || "").trim();
-  if (/^3\.1(?:\.\d+)?$/.test(raw)) return "3.1";
-  if (/^3\.0(?:\.\d+)?$/.test(raw)) return "3.0";
-  throw new Error(`Dynamic TDD contracts require OpenAPI 3.0 or 3.1, got: ${raw || "<missing>"}`);
-}
-function buildContractIndex(root) {
-  const warnings = [];
-  const paths = asRecord2(root.paths);
-  if (!paths) {
-    throw new Error("OpenAPI document must define paths");
-  }
-  const operations = [];
-  for (const [path4, pathItemRaw] of Object.entries(paths)) {
-    const pathItem = asRecord2(pathItemRaw);
-    if (!pathItem) continue;
-    for (const [methodRaw, operationRaw] of Object.entries(pathItem)) {
-      const method = methodRaw.toLowerCase();
-      if (!HTTP_METHODS.has(method)) continue;
-      const operation = resolveRef(root, operationRaw);
-      if (!operation) continue;
-      operations.push({
-        method: method.toUpperCase(),
-        operationId: typeof operation.operationId === "string" ? operation.operationId : void 0,
-        path: path4,
-        responses: collectResponses(root, operation)
-      });
-    }
-  }
-  if (operations.length === 0) {
-    warnings.push("CONTRACT_NO_OPERATIONS: OpenAPI document contains no operations");
-  }
-  return {
-    openapiVersion: detectOpenApiVersion(root),
-    operations,
-    warnings
-  };
-}
-function collectResponses(root, operation) {
-  const responsesRoot = asRecord2(operation.responses) || {};
-  const responses = {};
-  for (const [status, responseRaw] of Object.entries(responsesRoot)) {
-    const response = resolveRef(root, responseRaw) || {};
-    const contentRoot = asRecord2(response.content) || {};
-    const content = {};
-    for (const [mediaType, mediaRaw] of Object.entries(contentRoot)) {
-      const media = asRecord2(mediaRaw) || {};
-      const schema = media.schema === void 0 ? void 0 : dereferenceSchema(root, media.schema);
-      content[mediaType] = schema === void 0 ? {} : { schema };
-    }
-    responses[normalizeResponseKey(status)] = {
-      content,
-      description: typeof response.description === "string" ? response.description : void 0
-    };
-  }
-  return responses;
-}
-function resolvePointer(root, ref) {
-  const path4 = ref.slice(2).split("/").map((part) => part.replace(/~1/g, "/").replace(/~0/g, "~"));
-  let current = root;
-  for (const part of path4) {
-    const record = asRecord2(current);
-    if (!record) return void 0;
-    current = record[part];
-  }
-  return current;
-}
-function resolveRef(root, value) {
-  const record = asRecord2(value);
-  if (!record) return null;
-  const ref = typeof record.$ref === "string" ? record.$ref : "";
-  if (!ref) return record;
-  if (!ref.startsWith("#/")) {
-    throw new Error(`External $ref remained in OpenAPI document: ${ref}`);
-  }
-  const resolved = asRecord2(resolvePointer(root, ref));
-  if (!resolved) {
-    throw new Error(`Unresolved OpenAPI $ref: ${ref}`);
-  }
-  return resolved;
-}
-function dereferenceSchema(root, schema, seen = /* @__PURE__ */ new Set()) {
-  if (Array.isArray(schema)) {
-    return schema.map((entry) => dereferenceSchema(root, entry, seen));
-  }
-  const record = asRecord2(schema);
-  if (!record) return schema;
-  const ref = typeof record.$ref === "string" ? record.$ref : "";
-  if (ref) {
-    if (!ref.startsWith("#/")) {
-      return { unsupported: `external ref ${ref}` };
-    }
-    if (seen.has(ref)) {
-      return {};
-    }
-    seen.add(ref);
-    return dereferenceSchema(root, resolvePointer(root, ref), seen);
-  }
-  const copy = {};
-  for (const [key, value] of Object.entries(record)) {
-    copy[key] = dereferenceSchema(root, value, new Set(seen));
-  }
-  return copy;
-}
-function normalizeResponseKey(status) {
-  return /^[1-5]xx$/i.test(status) ? status.toUpperCase() : status;
-}
-function instrumentContractCollection(collection, index) {
-  const warnings = [...index.warnings];
-  const clone = sanitizeCollectionForUpdate(collection);
-  const visit = (item) => {
-    if (item.request) {
-      const match = matchOperation(index, item.request);
-      if (match.operation) {
-        const events = asArray(item.event).filter((event) => {
-          const record = asRecord2(event);
-          return record?.listen !== "test";
-        });
-        item.event = [
-          ...events,
-          {
-            listen: "test",
-            script: {
-              type: "text/javascript",
-              exec: createContractScript(match.operation)
-            }
-          }
-        ];
-      } else {
-        warnings.push(`CONTRACT_REQUEST_NOT_MATCHED: ${match.method || "<method>"} ${match.path}`);
-      }
-    }
-    for (const child of asArray(item.item).map((entry) => asRecord2(entry)).filter(Boolean)) {
-      visit(child);
-    }
-  };
-  for (const item of asArray(clone.item).map((entry) => asRecord2(entry)).filter(Boolean)) {
-    visit(item);
-  }
-  return { collection: clone, warnings };
-}
-function sanitizeCollectionForUpdate(value) {
-  if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeCollectionForUpdate(entry));
-  }
-  const record = asRecord2(value);
-  if (!record) return value;
-  const clone = {};
-  for (const [key, entry] of Object.entries(record)) {
-    if (["id", "uid", "_postman_id"].includes(key)) continue;
-    if (key === "response") continue;
-    clone[key] = sanitizeCollectionForUpdate(entry);
-  }
-  return clone;
-}
-function createContractScript(operation) {
-  const contract = {
-    method: operation.method,
-    operationId: operation.operationId,
-    path: operation.path,
-    responses: operation.responses
-  };
-  return [
-    "// [Postman TDD] Auto-generated OpenAPI contract assertions",
-    `const contract = JSON.parse(${JSON.stringify(JSON.stringify(contract))});`,
-    'function responseText() { return pm.response.text() || ""; }',
-    'function isBodyless() { return pm.response.code === 204 || pm.response.code === 205 || pm.response.code === 304 || contract.method === "HEAD"; }',
-    'function mediaBase(value) { return String(value || "").toLowerCase().split(";")[0].trim(); }',
-    "function selectResponseContract() {",
-    "  const status = String(pm.response.code);",
-    "  if (contract.responses[status]) return { key: status, value: contract.responses[status] };",
-    '  const range = String(Math.floor(pm.response.code / 100)) + "XX";',
-    "  if (contract.responses[range]) return { key: range, value: contract.responses[range] };",
-    '  if (contract.responses.default) return { key: "default", value: contract.responses.default };',
-    "  return null;",
-    "}",
-    "function expectedMedia(responseContract) { return Object.keys(responseContract.content || {}); }",
-    "function selectSchema(responseContract) {",
-    "  const content = responseContract.content || {};",
-    '  const actual = mediaBase(pm.response.headers.get("Content-Type") || "");',
-    "  const keys = Object.keys(content);",
-    "  if (keys.length === 0) return undefined;",
-    "  const exact = keys.find((key) => mediaBase(key) === actual);",
-    "  if (exact) return content[exact].schema;",
-    '  const json = keys.find((key) => mediaBase(key) === "application/json" && /json$/.test(actual));',
-    "  return json ? content[json].schema : content[keys[0]].schema;",
-    "}",
-    'function typeOf(value) { if (Array.isArray(value)) return "array"; if (value === null) return "null"; if (Number.isInteger(value)) return "integer"; return typeof value; }',
-    "function schemaTypes(schema) { const type = schema && schema.type; return Array.isArray(type) ? type : type ? [type] : []; }",
-    'function operationLabel() { return [contract.operationId, contract.method, contract.path].filter(Boolean).join(" "); }',
-    'function tddAssertion(name) { return "[Postman TDD] " + operationLabel() + " :: " + name; }',
-    "function validateSchema(value, schema, path, errors) {",
-    '  if (!schema || typeof schema !== "object") return;',
-    '  if (schema.unsupported) { errors.push(path + " uses unsupported schema: " + schema.unsupported); return; }',
-    "  if (schema.allOf) schema.allOf.forEach((entry) => validateSchema(value, entry, path, errors));",
-    "  const types = schemaTypes(schema);",
-    "  if (types.length > 0) {",
-    "    const actual = typeOf(value);",
-    '    const ok = types.some((type) => type === actual || (type === "number" && actual === "integer"));',
-    '    if (!ok) { errors.push(path + " expected " + types.join("|") + " but received " + actual); return; }',
-    "  }",
-    '  if (schema.enum && !schema.enum.some((entry) => JSON.stringify(entry) === JSON.stringify(value))) errors.push(path + " expected enum value " + JSON.stringify(schema.enum));',
-    '  if (schema.const !== undefined && JSON.stringify(schema.const) !== JSON.stringify(value)) errors.push(path + " expected const " + JSON.stringify(schema.const));',
-    '  if (typeof value === "string") {',
-    '    if (typeof schema.minLength === "number" && value.length < schema.minLength) errors.push(path + " expected minLength " + schema.minLength + " but received length " + value.length);',
-    '    if (typeof schema.maxLength === "number" && value.length > schema.maxLength) errors.push(path + " expected maxLength " + schema.maxLength + " but received length " + value.length);',
-    '    if (typeof schema.pattern === "string") {',
-    "      let regex;",
-    '      try { regex = new RegExp(schema.pattern); } catch (error) { errors.push(path + " has invalid pattern " + JSON.stringify(schema.pattern)); }',
-    '      if (regex && !regex.test(value)) errors.push(path + " expected pattern " + schema.pattern);',
-    "    }",
-    "  }",
-    '  if (typeof value === "number" && Number.isFinite(value)) {',
-    '    const minimum = typeof schema.minimum === "number" ? schema.minimum : undefined;',
-    '    const maximum = typeof schema.maximum === "number" ? schema.maximum : undefined;',
-    '    const exclusiveMinimum = typeof schema.exclusiveMinimum === "number" ? schema.exclusiveMinimum : undefined;',
-    '    const exclusiveMaximum = typeof schema.exclusiveMaximum === "number" ? schema.exclusiveMaximum : undefined;',
-    '    if (exclusiveMinimum !== undefined) { if (!(value > exclusiveMinimum)) errors.push(path + " expected exclusiveMinimum " + exclusiveMinimum + " but received " + value); }',
-    "    else if (minimum !== undefined) {",
-    '      if (schema.exclusiveMinimum === true ? !(value > minimum) : value < minimum) errors.push(path + " expected " + (schema.exclusiveMinimum === true ? "exclusiveMinimum " : "minimum ") + minimum + " but received " + value);',
-    "    }",
-    '    if (exclusiveMaximum !== undefined) { if (!(value < exclusiveMaximum)) errors.push(path + " expected exclusiveMaximum " + exclusiveMaximum + " but received " + value); }',
-    "    else if (maximum !== undefined) {",
-    '      if (schema.exclusiveMaximum === true ? !(value < maximum) : value > maximum) errors.push(path + " expected " + (schema.exclusiveMaximum === true ? "exclusiveMaximum " : "maximum ") + maximum + " but received " + value);',
-    "    }",
-    "  }",
-    '  if (schema.type === "object" || schema.properties) {',
-    "    const required = Array.isArray(schema.required) ? schema.required : [];",
-    '    required.forEach((key) => { if (!value || typeof value !== "object" || !(key in value)) errors.push(path + "." + key + " is required"); });',
-    '    Object.entries(schema.properties || {}).forEach(([key, child]) => { if (value && typeof value === "object" && key in value) validateSchema(value[key], child, path + "." + key, errors); });',
-    "  }",
-    '  if (schema.type === "array" && schema.items && Array.isArray(value)) value.forEach((entry, index) => validateSchema(entry, schema.items, path + "[" + index + "]", errors));',
-    "}",
-    "const selected = selectResponseContract();",
-    'pm.test(tddAssertion("operation mapping exists"), function () { pm.expect(contract.path).to.be.a("string").and.not.empty; });',
-    'pm.test(tddAssertion("status code is defined by OpenAPI"), function () { pm.expect(selected, "No OpenAPI response defined for " + contract.method + " " + contract.path + " status " + pm.response.code).to.exist; });',
-    'pm.test(tddAssertion("response body matches body contract"), function () {',
-    "  if (!selected) return;",
-    "  if (isBodyless()) { pm.expect(responseText().trim().length).to.equal(0); return; }",
-    "  const media = expectedMedia(selected.value);",
-    '  if (media.length === 0) pm.expect(responseText().trim().length, "OpenAPI response defines no body but response body was not empty").to.equal(0);',
-    '  else pm.expect(responseText().trim().length, "OpenAPI response defines a body but response body was empty").to.be.above(0);',
-    "});",
-    'pm.test(tddAssertion("content-type matches OpenAPI response content"), function () {',
-    "  if (!selected || isBodyless()) return;",
-    "  const media = expectedMedia(selected.value);",
-    "  if (media.length === 0) return;",
-    '  const actual = mediaBase(pm.response.headers.get("Content-Type") || "");',
-    '  pm.expect(actual, "Content-Type must match one of " + media.join(", ")).to.not.equal("");',
-    '  const matches = media.some((entry) => mediaBase(entry) === actual || (mediaBase(entry) === "application/json" && /json$/.test(actual)));',
-    '  pm.expect(matches, "Content-Type " + actual + " did not match OpenAPI content " + media.join(", ")).to.equal(true);',
-    "});",
-    'pm.test(tddAssertion("response body matches schema"), function () {',
-    "  if (!selected || isBodyless()) return;",
-    "  const schema = selectSchema(selected.value);",
-    "  if (!schema) return;",
-    "  const body = responseText().trim();",
-    "  if (!body) return;",
-    "  let parsed;",
-    '  try { parsed = JSON.parse(body); } catch (error) { pm.expect.fail("Response body was not valid JSON: " + error.message); }',
-    "  const errors = [];",
-    '  validateSchema(parsed, schema, "$", errors);',
-    '  if (errors.length > 0) pm.expect.fail(errors.slice(0, 10).join("; "));',
-    "});"
-  ];
-}
-function matchOperation(index, request2) {
-  const record = asRecord2(request2);
-  const method = String(record?.method || "").toUpperCase();
-  const path4 = requestPath(request2);
-  const candidates = index.operations.filter((operation) => operation.method === method).map((operation) => ({ operation, score: pathScore(operation.path, path4) })).filter((entry) => entry.score >= 0).sort((a, b) => b.score - a.score || a.operation.path.localeCompare(b.operation.path));
-  return { method, operation: candidates[0]?.operation, path: path4 };
-}
-function requestPath(request2) {
-  const record = asRecord2(request2);
-  const url2 = record?.url ?? request2;
-  if (typeof url2 === "string") return pathFromRaw(url2);
-  const urlRecord = asRecord2(url2);
-  if (!urlRecord) return "/";
-  if (typeof urlRecord.raw === "string") return pathFromRaw(urlRecord.raw);
-  if (Array.isArray(urlRecord.path)) {
-    return normalizePath2(`/${urlRecord.path.map(stringifyPathSegment).filter(Boolean).join("/")}`);
-  }
-  if (typeof urlRecord.path === "string") return normalizePath2(urlRecord.path);
-  return "/";
-}
-function stringifyPathSegment(segment) {
-  if (typeof segment === "string") return segment;
-  const record = asRecord2(segment);
-  return String(record?.value || record?.key || record?.name || segment || "");
-}
-function pathFromRaw(raw) {
-  let value = String(raw || "").trim();
-  value = value.replace(/^\{\{[^}]+}}/, "");
-  try {
-    return normalizePath2(new URL(value).pathname);
-  } catch {
-    value = value.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "");
-    return normalizePath2(value || "/");
-  }
-}
-function normalizePath2(path4) {
-  const raw = String(path4 || "").split(/[?#]/, 1)[0] || "/";
-  const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
-  const collapsed = withSlash.replace(/\/+/g, "/");
-  return collapsed.length > 1 ? collapsed.replace(/\/+$/g, "") : collapsed;
-}
-function pathScore(candidate, request2) {
-  const candidateParts = normalizePath2(candidate).split("/").filter(Boolean);
-  const requestParts = normalizePath2(request2).split("/").filter(Boolean);
-  if (candidateParts.length !== requestParts.length) return -1;
-  let score = 0;
-  for (let index = 0; index < candidateParts.length; index += 1) {
-    const candidatePart = candidateParts[index] || "";
-    const requestPart = requestParts[index] || "";
-    if (/^\{[^}]+}$/.test(candidatePart) || /^:[^/]+$/.test(candidatePart) || /^\{\{[^}]+}}$/.test(candidatePart)) {
-      score += 1;
-      continue;
-    }
-    if (candidatePart !== requestPart) return -1;
-    score += 10;
-  }
-  return score;
-}
+import { readFileSync as readFileSync5 } from "node:fs";
 
 // src/github/repo-mutation.ts
 import { spawn } from "node:child_process";
@@ -107467,7 +107596,7 @@ async function resolveTddWorkspace(options) {
 }
 async function upsertPreviewAssets(options) {
   info(`[postman-tdd] Reading OpenAPI spec from ${options.config.specPath}.`);
-  const specContent = readFileSync4(resolveWorkspacePath(options.config.specPath), "utf8");
+  const specContent = readFileSync5(resolveWorkspacePath(options.config.specPath), "utf8");
   info(`[postman-tdd] Spec size: ${Buffer.byteLength(specContent, "utf8")} bytes.`);
   const document2 = parseOpenApiDocument(specContent);
   const contractIndex = buildContractIndex(document2);
@@ -107698,12 +107827,14 @@ async function runTddCollection(collectionId, baseUrl2, mask) {
 // src/repair/git.ts
 import { createHash as createHash4 } from "node:crypto";
 import { execFileSync as execFileSync2 } from "node:child_process";
-import { readFileSync as readFileSync5 } from "node:fs";
+import { readFileSync as readFileSync6 } from "node:fs";
 import { resolve as resolve4 } from "node:path";
 
 // src/repair/patch.ts
-import { execFileSync } from "node:child_process";
-import { relative, resolve as resolve3, sep as sep3 } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync as writeFileSync4 } from "node:fs";
+import { tmpdir } from "node:os";
+import { join as join4, relative, resolve as resolve3, sep as sep3 } from "node:path";
 var ALWAYS_DENY_PATTERNS = [
   ".env",
   ".env.*",
@@ -107742,11 +107873,12 @@ function extractPatchPaths(patch) {
   return [...paths].filter(Boolean).sort();
 }
 function validatePatch(patch, policy) {
-  const trimmed = patch.trim();
+  const normalizedPatch = normalizePatchInput(patch, policy);
+  const trimmed = normalizedPatch.trim();
   if (!trimmed || !trimmed.includes("diff --git")) {
-    throw new Error("Repair patch must be a non-empty unified git diff.");
+    throw new Error("Repair patch must be a non-empty unified git diff beginning with diff --git.");
   }
-  const touchedPaths = extractPatchPaths(patch);
+  const touchedPaths = extractPatchPaths(normalizedPatch);
   if (touchedPaths.length === 0) {
     throw new Error("Repair patch did not include any touched paths.");
   }
@@ -107758,13 +107890,75 @@ function validatePatch(patch, policy) {
       throw new Error(`Patch path is outside tdd.repair.allowedWritePaths: ${path4}`);
     }
   }
-  gitApply(["--check", "--whitespace=nowarn"], patch, policy.repoRoot);
+  gitApply(["--check", "--whitespace=nowarn"], normalizedPatch, policy.repoRoot);
   return { touchedPaths };
 }
 function applyValidatedPatch(patch, policy) {
-  const result = validatePatch(patch, policy);
-  gitApply(["--whitespace=nowarn"], patch, policy.repoRoot);
+  const normalizedPatch = normalizePatchInput(patch, policy);
+  const result = validatePatch(normalizedPatch, policy);
+  gitApply(["--whitespace=nowarn"], normalizedPatch, policy.repoRoot);
   return result;
+}
+function normalizePatchInput(patch, policy) {
+  let normalized = String(patch || "").trim();
+  const fenced = normalized.match(/```(?:diff|patch)?\s*\n([\s\S]*?)```/i);
+  if (fenced?.[1]?.includes("diff --git")) {
+    normalized = fenced[1].trim();
+  }
+  normalized = normalized.split(/\r?\n/).filter((line) => !line.trim().startsWith("```")).join("\n").trim();
+  const replacementPatch = replacementEnvelopeToPatch(normalized, policy);
+  if (replacementPatch) {
+    return replacementPatch;
+  }
+  const firstDiff = normalized.indexOf("diff --git ");
+  if (firstDiff > 0) {
+    normalized = normalized.slice(firstDiff).trim();
+  }
+  return normalized ? `${normalized.replace(/\s+$/g, "")}
+` : "";
+}
+function replacementEnvelopeToPatch(value, policy) {
+  const markerIndex = value.indexOf("POSTMAN_TDD_REPLACE_FILE ");
+  const normalized = markerIndex > 0 ? value.slice(markerIndex).trim() : value;
+  const match = normalized.match(/^POSTMAN_TDD_REPLACE_FILE\s+([^\r\n]+)\r?\n([\s\S]*?)\r?\nPOSTMAN_TDD_END_REPLACE_FILE\s*$/);
+  if (!match) return "";
+  const path4 = repoRelativePath(policy.repoRoot, match[1] || "");
+  const content = match[2]?.endsWith("\n") ? match[2] : `${match[2] || ""}
+`;
+  const tempDir = mkdtempSync(join4(tmpdir(), "postman-tdd-repair-"));
+  const tempPath = join4(tempDir, "replacement");
+  try {
+    writeFileSync4(tempPath, content, "utf8");
+    const result = spawnSync("git", [
+      "diff",
+      "--no-index",
+      "--no-ext-diff",
+      "--no-color",
+      "--",
+      path4,
+      tempPath
+    ], {
+      cwd: policy.repoRoot,
+      encoding: "utf8"
+    });
+    if (result.status !== 0 && result.status !== 1) {
+      throw new Error(`git diff failed: ${(result.stderr || "").trim() || "unknown error"}`);
+    }
+    const diff = String(result.stdout || "").trim();
+    if (!diff) return "";
+    return `${rewriteReplacementDiffHeaders(diff, path4).replace(/\s+$/g, "")}
+`;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+function rewriteReplacementDiffHeaders(diff, path4) {
+  return diff.split(/\r?\n/).map((line) => {
+    if (line.startsWith("diff --git ")) return `diff --git a/${path4} b/${path4}`;
+    if (line.startsWith("--- ")) return `--- a/${path4}`;
+    if (line.startsWith("+++ ")) return `+++ b/${path4}`;
+    return line;
+  }).join("\n");
 }
 function matchesAny(path4, patterns) {
   return patterns.some((pattern) => globMatch(normalizeRepoPath(path4), normalizeRepoPath(pattern)));
@@ -107828,14 +108022,14 @@ function hashPaths(repoRoot, paths) {
     const normalized = repoRelativePath(repoRoot, path4);
     return {
       path: normalized,
-      sha256: createHash4("sha256").update(readFileSync5(resolve4(repoRoot, normalized))).digest("hex")
+      sha256: createHash4("sha256").update(readFileSync6(resolve4(repoRoot, normalized))).digest("hex")
     };
   });
 }
 function verifyPathHashes(repoRoot, hashes) {
   for (const expected of hashes) {
     const normalized = repoRelativePath(repoRoot, expected.path);
-    const actual = createHash4("sha256").update(readFileSync5(resolve4(repoRoot, normalized))).digest("hex");
+    const actual = createHash4("sha256").update(readFileSync6(resolve4(repoRoot, normalized))).digest("hex");
     if (actual !== expected.sha256) {
       throw new Error(`Immutable path changed during repair: ${normalized}`);
     }
@@ -107919,7 +108113,18 @@ function execGitOptional(cwd, args) {
 }
 
 // src/repair/provider-common.ts
-function buildRepairPrompt(failure, context5) {
+var COMPACT_PROMPT_BUDGETS = [
+  { maxFailureMessageLength: 500, maxFailures: 6, maxHints: 4, maxRulesPerResponse: 30 },
+  { maxFailureMessageLength: 300, maxFailures: 4, maxHints: 3, maxRulesPerResponse: 20 },
+  { maxFailureMessageLength: 180, maxFailures: 3, maxHints: 2, maxRulesPerResponse: 12 },
+  { maxFailureMessageLength: 120, maxFailures: 2, maxHints: 1, maxRulesPerResponse: 8 },
+  { maxFailureMessageLength: 90, maxFailures: 1, maxHints: 1, maxRulesPerResponse: 4 },
+  { maxFailureMessageLength: 80, maxFailures: 1, maxHints: 0, maxRulesPerResponse: 0 }
+];
+function buildRepairPrompt(failure, context5, options = {}) {
+  if (options.compact) {
+    return buildCompactRepairPrompt(failure, context5, options.maxChars);
+  }
   return [
     "You are repairing an API implementation so it passes a Postman TDD contract collection.",
     "Fix implementation code only.",
@@ -107928,23 +108133,184 @@ function buildRepairPrompt(failure, context5) {
     `Allowed read paths: ${context5.allowedReadPaths.join(", ")}`,
     `Immutable paths: ${context5.patchPolicy.immutablePaths.join(", ") || "(none)"}`,
     "Use read_file, list_files, and search_files to inspect implementation files.",
-    "Use propose_patch with a unified git diff when you have a code-only fix.",
+    "Use propose_patch with a raw unified git diff when you have a code-only fix.",
+    "The propose_patch patch string must begin with diff --git and must not be wrapped in Markdown fences or prose.",
+    "If a large single-file diff is difficult to format, use propose_patch with this exact replacement envelope instead: POSTMAN_TDD_REPLACE_FILE <allowed path>, then the complete new file content, then POSTMAN_TDD_END_REPLACE_FILE.",
+    "The replacement envelope is still limited to allowed write paths and must not include spec, workflow, secret, shell, or unrelated changes.",
     "Use finish with status=blocked if API intent is unclear, infrastructure is missing, or no implementation-only fix is reasonable.",
     "",
     "Failure context:",
     JSON.stringify({
       baseUrl: failure.baseUrl,
       collectionName: failure.collectionName,
+      contractHints: failure.contractHints,
       failures: failure.failures,
       phase: failure.phase,
       successCriteria: failure.successCriteria
     }, null, 2)
   ].join("\n");
 }
+function buildCompactRepairPrompt(failure, context5, maxChars) {
+  if (!maxChars) {
+    return renderCompactRepairPrompt(failure, context5, COMPACT_PROMPT_BUDGETS[0]);
+  }
+  for (const budget of COMPACT_PROMPT_BUDGETS) {
+    const prompt = renderCompactRepairPrompt(failure, context5, budget);
+    if (prompt.length <= maxChars) return prompt;
+  }
+  const fallback = renderCompactRepairPrompt(failure, context5, COMPACT_PROMPT_BUDGETS.at(-1));
+  if (fallback.length <= maxChars) return fallback;
+  return `${fallback.slice(0, Math.max(0, maxChars - 55))}
+[Prompt truncated to fit provider input limit.]`;
+}
+function renderCompactRepairPrompt(failure, context5, budget) {
+  return [
+    "Repair the API implementation so it passes Postman TDD.",
+    `Rules: code only; do not modify OpenAPI spec/generated assertions/immutable paths (${context5.patchPolicy.immutablePaths.join(", ") || "none"}).`,
+    `Allowed write paths: ${context5.patchPolicy.allowedWritePaths.join(", ")}`,
+    `Allowed read paths: ${context5.allowedReadPaths.join(", ")}`,
+    "Inspect with list_files/read_file/search_files.",
+    "Patch with propose_patch as raw unified diff starting diff --git.",
+    "If diff formatting fails, propose_patch may use: POSTMAN_TDD_REPLACE_FILE <allowed path> ... POSTMAN_TDD_END_REPLACE_FILE.",
+    "Use finish status=blocked only when an implementation-only fix is unsafe or unclear.",
+    "Failure context JSON:",
+    JSON.stringify(createCompactFailureContext(failure, budget))
+  ].join("\n");
+}
+function createCompactFailureContext(failure, budget) {
+  return {
+    phase: failure.phase,
+    message: truncateText(failure.message, 160),
+    failureCount: failure.failures.length,
+    failures: failure.failures.slice(0, budget.maxFailures).map((entry) => compactFailure(entry, budget)),
+    ...failure.contractHints && budget.maxHints > 0 ? { contractHints: compactContractHints(failure.contractHints, budget) } : {},
+    successCriteria: {
+      requiredCheck: failure.successCriteria.requiredCheck,
+      doneWhen: failure.successCriteria.doneWhen
+    }
+  };
+}
+function compactFailure(failure, budget) {
+  return omitUndefined({
+    method: failure.method,
+    path: failure.path,
+    operationId: failure.operationId,
+    assertion: truncateText(failure.assertion, 160),
+    message: truncateText(failure.message, budget.maxFailureMessageLength)
+  });
+}
+function compactContractHints(hints, budget) {
+  return hints.slice(0, budget.maxHints).map((hint) => omitUndefined({
+    method: hint.method,
+    path: hint.path,
+    operationId: hint.operationId,
+    responses: hint.responses.slice(0, 2).map((response) => ({
+      status: response.status,
+      content: compactContent(response.content, budget.maxRulesPerResponse)
+    }))
+  }));
+}
+function compactContent(content, maxRulesPerResponse) {
+  const preferredEntries = Object.entries(content).sort(([left], [right]) => {
+    if (left === "application/json") return -1;
+    if (right === "application/json") return 1;
+    return left.localeCompare(right);
+  });
+  return Object.fromEntries(preferredEntries.slice(0, 2).map(([mediaType, media]) => [
+    mediaType,
+    media.schema === void 0 ? {} : { schema: summarizePromptSchema(media.schema, maxRulesPerResponse) }
+  ]));
+}
+function summarizePromptSchema(schema, maxRules) {
+  const rules = schemaToRules(schema, maxRules);
+  return { rules };
+}
+function schemaToRules(schema, maxRules) {
+  if (maxRules <= 0) return [];
+  if (isRecord2(schema) && Array.isArray(schema.rules)) {
+    return schema.rules.filter((entry) => typeof entry === "string").slice(0, maxRules).map((entry) => truncateRequiredText(entry, 220));
+  }
+  const rules = [];
+  collectPromptSchemaRules(schema, "$", 0, maxRules, rules);
+  return rules;
+}
+function collectPromptSchemaRules(value, path4, depth, maxRules, rules) {
+  if (rules.length >= maxRules || depth > 7 || !isRecord2(value)) return;
+  const parts = scalarRuleParts2(value);
+  const required = Array.isArray(value.required) ? value.required.filter((entry) => typeof entry === "string") : [];
+  if (required.length > 0) parts.push(`required=${required.join(",")}`);
+  if (parts.length > 0) addRule2(rules, `${path4}: ${parts.join("; ")}`, maxRules);
+  if (isRecord2(value.properties)) {
+    for (const [key, entry] of Object.entries(value.properties)) {
+      collectPromptSchemaRules(entry, propertyPath2(path4, key), depth + 1, maxRules, rules);
+      if (rules.length >= maxRules) return;
+    }
+  }
+  if (value.items !== void 0) {
+    collectPromptSchemaRules(value.items, `${path4}[]`, depth + 1, maxRules, rules);
+  }
+  for (const combinator of ["allOf", "anyOf", "oneOf"]) {
+    if (!Array.isArray(value[combinator])) continue;
+    value[combinator].forEach((entry, index) => {
+      collectPromptSchemaRules(entry, `${path4}.${combinator}[${index}]`, depth + 1, maxRules, rules);
+    });
+  }
+  if (isRecord2(value.additionalProperties)) {
+    collectPromptSchemaRules(value.additionalProperties, `${path4}.*`, depth + 1, maxRules, rules);
+  }
+}
+function scalarRuleParts2(input) {
+  const parts = [];
+  for (const [key, label] of [
+    ["type", "type"],
+    ["format", "format"],
+    ["enum", "enum"],
+    ["const", "const"],
+    ["nullable", "nullable"],
+    ["pattern", "pattern"],
+    ["minimum", "minimum"],
+    ["maximum", "maximum"],
+    ["exclusiveMinimum", "exclusiveMinimum"],
+    ["exclusiveMaximum", "exclusiveMaximum"],
+    ["minLength", "minLength"],
+    ["maxLength", "maxLength"],
+    ["minItems", "minItems"],
+    ["maxItems", "maxItems"]
+  ]) {
+    if (input[key] !== void 0) parts.push(`${label}=${formatRuleValue2(input[key])}`);
+  }
+  return parts;
+}
+function formatRuleValue2(value) {
+  if (Array.isArray(value)) return value.map((entry) => formatRuleValue2(entry)).join("|");
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || value === null) return String(value);
+  return JSON.stringify(value);
+}
+function addRule2(rules, rule, maxRules) {
+  if (rules.length >= maxRules) return;
+  rules.push(truncateRequiredText(rule, 220));
+}
+function propertyPath2(parent, key) {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? `${parent}.${key}` : `${parent}[${JSON.stringify(key)}]`;
+}
+function truncateText(value, maxLength) {
+  if (value === void 0 || value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+function truncateRequiredText(value, maxLength) {
+  return truncateText(value, maxLength) || "";
+}
+function omitUndefined(input) {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== void 0));
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 // src/repair/tools.ts
 import { execFileSync as execFileSync3 } from "node:child_process";
-import { existsSync as existsSync6, readFileSync as readFileSync6, statSync as statSync2 } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync7, statSync as statSync2 } from "node:fs";
 import { resolve as resolve5 } from "node:path";
 var MAX_FILE_BYTES = 12e4;
 var MAX_SEARCH_RESULTS = 25;
@@ -107996,13 +108362,23 @@ function createRepairTools(context5) {
     {
       type: "function",
       name: "propose_patch",
-      description: "Propose and apply a unified git diff that changes implementation files only.",
+      description: [
+        "Propose and apply an implementation-only change.",
+        "Prefer a raw unified git diff beginning with diff --git.",
+        "For large single-file edits, you may instead provide POSTMAN_TDD_REPLACE_FILE <path>, the complete file content, and POSTMAN_TDD_END_REPLACE_FILE."
+      ].join(" "),
       strict: true,
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
-          patch: { type: "string" },
+          patch: {
+            type: "string",
+            description: [
+              "Raw git diff beginning with diff --git, or a full-file replacement envelope:",
+              "POSTMAN_TDD_REPLACE_FILE src/file.js\\n<complete new file content>\\nPOSTMAN_TDD_END_REPLACE_FILE"
+            ].join(" ")
+          },
           summary: { type: "string" }
         },
         required: ["patch", "summary"]
@@ -108038,7 +108414,7 @@ function executeRepairTool(name, args, context5) {
       if (stats.size > MAX_FILE_BYTES) {
         throw new Error(`File is too large to read through repair tool: ${path4}`);
       }
-      return { content: readFileSync6(absolutePath, "utf8") };
+      return { content: readFileSync7(absolutePath, "utf8") };
     }
     if (name === "search_files") {
       const query = String(args.query || "");
@@ -108061,7 +108437,13 @@ function executeRepairTool(name, args, context5) {
     }
     return { error: `Unknown repair tool: ${name}` };
   } catch (error2) {
-    return { error: error2 instanceof Error ? error2.message : String(error2) };
+    const message = error2 instanceof Error ? error2.message : String(error2);
+    if (name === "propose_patch" && message.startsWith("git apply failed:")) {
+      return {
+        error: `${message} If unified diff hunk formatting keeps failing, use patch="POSTMAN_TDD_REPLACE_FILE <allowed path>\\n<complete new file content>\\nPOSTMAN_TDD_END_REPLACE_FILE".`
+      };
+    }
+    return { error: message };
   }
 }
 function listAllowedFiles(context5, prefix2 = "") {
@@ -108077,7 +108459,7 @@ function searchAllowedFiles(context5, query) {
   for (const path4 of listAllowedFiles(context5)) {
     const absolutePath = resolve5(context5.repoRoot, path4);
     if (!existsSync6(absolutePath) || statSync2(absolutePath).size > MAX_FILE_BYTES) continue;
-    const lines = readFileSync6(absolutePath, "utf8").split(/\r?\n/);
+    const lines = readFileSync7(absolutePath, "utf8").split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
       const text = lines[index] || "";
       if (text.includes(query)) {
@@ -108123,7 +108505,7 @@ async function runAnthropicRepairTurn(options) {
       secretMasker: options.secretMasker,
       tools
     });
-    const content = Array.isArray(response.content) ? response.content.filter(isRecord) : [];
+    const content = Array.isArray(response.content) ? response.content.filter(isRecord3) : [];
     const calls = content.filter(isToolUseBlock);
     info(`[postman-tdd] Anthropic Messages round ${round + 1}: received ${calls.length} tool use block(s).`);
     if (calls.length === 0) {
@@ -108217,9 +108599,9 @@ function logToolResult(name, result) {
   }
 }
 function isToolUseBlock(value) {
-  return value.type === "tool_use" && typeof value.id === "string" && typeof value.name === "string" && isRecord(value.input);
+  return value.type === "tool_use" && typeof value.id === "string" && typeof value.name === "string" && isRecord3(value.input);
 }
-function isRecord(value) {
+function isRecord3(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 function extractText(response) {
@@ -108363,9 +108745,363 @@ function extractText2(response) {
   return chunks.join("\n").trim();
 }
 
+// src/repair/postman-agent-mode-provider.ts
+var POSTMAN_AGENT_MODE_GATEWAY_URL = "https://gateway.postman.com/chat";
+var POSTMAN_AGENT_MODE_SERVICE = "agent-mode-service";
+var POSTMAN_AGENT_MODE_PRODUCT = "workspace_localmode_v12";
+var POSTMAN_TDD_TOOL_SERVER = "Postman TDD Repair";
+var POSTMAN_AGENT_MODE_MAX_PROMPT_CHARS = 9e3;
+async function runPostmanAgentModeRepairTurn(options) {
+  info(`[postman-tdd] Postman Agent Mode repair turn: model=${options.model}, failurePhase=${options.failure.phase}, failures=${options.failure.failures.length}.`);
+  const tools = createPostmanAgentModeTools(options.repairContext);
+  const state3 = {};
+  let body2 = createUserQueryBody({
+    model: options.model,
+    prompt: buildRepairPrompt(options.failure, options.repairContext, {
+      compact: true,
+      maxChars: POSTMAN_AGENT_MODE_MAX_PROMPT_CHARS
+    }),
+    tools
+  });
+  for (let round = 0; round < (options.maxToolRounds || 12); round += 1) {
+    info(`[postman-tdd] Postman Agent Mode round ${round + 1}: sending ${round === 0 ? "initial repair instructions" : "tool response(s)"}.`);
+    const turn = await sendAgentModeTurn({
+      apiKey: options.apiKey,
+      body: body2,
+      fetchImpl: options.fetchImpl,
+      secretMasker: options.secretMasker
+    });
+    state3.conversationId = turn.conversationId || state3.conversationId;
+    state3.toolCallGroupId = turn.toolCallGroupId || state3.toolCallGroupId;
+    info(`[postman-tdd] Postman Agent Mode round ${round + 1}: received ${turn.toolCalls.length} tool call(s).`);
+    if (turn.toolCalls.length === 0) {
+      return {
+        status: "no_change",
+        message: turn.text || "The repair agent did not call a patch or finish tool."
+      };
+    }
+    const toolResponses = [];
+    for (const call of turn.toolCalls) {
+      state3.toolCallGroupId = call.toolCallGroupId || state3.toolCallGroupId;
+      info(`[postman-tdd] Executing guarded repair tool: ${call.name}.`);
+      if (call.name === "finish") {
+        const status = String(call.input.status || "").trim();
+        const message = String(call.input.message || "").trim();
+        if (status !== "blocked" && status !== "ready" || !message) {
+          const result3 = {
+            error: 'finish requires status "blocked" or "ready" and a non-empty message.'
+          };
+          logToolResult2(call.name, result3);
+          toolResponses.push(createToolResponse(call, result3));
+          continue;
+        }
+        const result2 = executeRepairTool(call.name, call.input, options.repairContext);
+        logToolResult2(call.name, result2);
+        toolResponses.push(createToolResponse(call, result2));
+        if (status === "blocked") {
+          return { status: "blocked", message };
+        }
+        return { status: "no_change", message };
+      }
+      const result = executeRepairTool(call.name, call.input, options.repairContext);
+      logToolResult2(call.name, result);
+      toolResponses.push(createToolResponse(call, result));
+      if (call.name === "propose_patch" && result.appliedPatch) {
+        return {
+          status: "changed",
+          summary: result.summary || "Applied implementation repair patch.",
+          touchedPaths: result.touchedPaths || []
+        };
+      }
+    }
+    if (!state3.conversationId || !state3.toolCallGroupId) {
+      return {
+        status: "no_change",
+        message: "Postman Agent Mode requested tool results without a conversationId and toolCallGroupId."
+      };
+    }
+    body2 = createToolResponseBody({
+      conversationId: state3.conversationId,
+      model: options.model,
+      toolCallGroupId: state3.toolCallGroupId,
+      toolResponses,
+      tools
+    });
+  }
+  info("[postman-tdd] Postman Agent Mode repair turn exhausted tool-call rounds without a patch.");
+  return {
+    status: "no_change",
+    message: "Repair agent exhausted tool-call rounds without proposing a patch."
+  };
+}
+function createPostmanAgentModeTools(context5) {
+  return createRepairTools(context5).map((tool) => ({
+    description: tool.description,
+    name: tool.name,
+    parameters: tool.parameters
+  }));
+}
+async function sendAgentModeTurn(options) {
+  if (!options.body) {
+    throw new Error("Postman Agent Mode request body is required.");
+  }
+  const fetchImpl = options.fetchImpl || fetch;
+  const response = await fetchImpl(POSTMAN_AGENT_MODE_GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      accept: "*/*",
+      "Content-Type": "application/json",
+      "x-access-token": options.apiKey,
+      "x-app-version": "postman-tdd-action",
+      "x-pstmn-req-service": POSTMAN_AGENT_MODE_SERVICE
+    },
+    body: JSON.stringify(options.body)
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Postman Agent Mode API failed (${response.status}): ${options.secretMasker(text).slice(0, 1e3)}`);
+  }
+  return parseAgentModeEvents(text, options.secretMasker);
+}
+function createUserQueryBody(options) {
+  return createAgentModeBody({
+    input: {
+      agent: null,
+      chatType: "USER_QUERY",
+      conversationId: null,
+      product: POSTMAN_AGENT_MODE_PRODUCT,
+      query: options.prompt,
+      skill: null,
+      startedFrom: "CHAT_INPUT",
+      toolResponse: "",
+      useCase: null
+    },
+    model: options.model,
+    tools: options.tools
+  });
+}
+function createToolResponseBody(options) {
+  return createAgentModeBody({
+    input: {
+      agent: null,
+      chatType: "TOOL_RESPONSE",
+      conversationId: options.conversationId,
+      product: POSTMAN_AGENT_MODE_PRODUCT,
+      skill: null,
+      startedFrom: "TOOL_RESPONSE",
+      toolCallGroupId: options.toolCallGroupId,
+      toolResponses: options.toolResponses,
+      useCase: null
+    },
+    model: options.model,
+    tools: options.tools
+  });
+}
+function createAgentModeBody(options) {
+  return {
+    backgroundContext: [],
+    clientKBTerms: {
+      excludedKBTerms: [],
+      nativeTermsHash: null
+    },
+    clientTools: {
+      excludedTools: [],
+      native: [],
+      thirdParty: {
+        [POSTMAN_TDD_TOOL_SERVER]: {
+          tools: options.tools
+        }
+      }
+    },
+    devModeOptions: {
+      autoRun: true,
+      isParallelToolCallingSupported: true,
+      selectedModel: options.model
+    },
+    input: options.input,
+    mandatoryContext: {
+      workspaceId: ""
+    },
+    platform: resolvePlatform(),
+    selectedContext: []
+  };
+}
+function createToolResponse(call, result) {
+  const summary2 = result.error || result.summary || `Finished executing ${call.name}.`;
+  return {
+    content: JSON.stringify(result),
+    toolCallId: call.id,
+    toolResponseStatus: result.error ? "FAILED" : "SUCCESS",
+    toolResponseSummary: summary2.slice(0, 300),
+    ...result.error ? { toolResponseFailureType: "HANDLED_ERROR" } : {}
+  };
+}
+function parseAgentModeEvents(body2, secretMasker) {
+  const result = {
+    text: "",
+    toolCalls: []
+  };
+  const chunkBuffers = /* @__PURE__ */ new Map();
+  for (const event of parseSseJsonEvents(body2)) {
+    const data = isRecord4(event.data) ? event.data : event;
+    const metadata2 = isRecord4(data.metadata) ? data.metadata : {};
+    result.conversationId = stringValue2(event.conversationId) || stringValue2(metadata2.conversationId) || stringValue2(data.conversationId) || stringValue2(data.id) || result.conversationId;
+    result.toolCallGroupId = stringValue2(event.toolCallGroupId) || stringValue2(metadata2.toolCallGroupId) || stringValue2(data.toolCallGroupId) || result.toolCallGroupId;
+    const eventType = String(event.eventType || event.type || "");
+    if (eventType === "textChunk") {
+      result.text += stringValue2(data.textContent) || stringValue2(data.text) || "";
+    }
+    if (eventType === "failure") {
+      throw new Error(`Postman Agent Mode API failure: ${secretMasker(formatFailureEvent(data)).slice(0, 1e3)}`);
+    }
+    if (eventType === "toolCallChunk") {
+      for (const fragment of extractToolCallFragments(data)) {
+        const existing = chunkBuffers.get(fragment.id);
+        const buffer2 = existing || {
+          arguments: "",
+          name: "",
+          toolCallGroupId: fragment.toolCallGroupId
+        };
+        if (fragment.name) buffer2.name = fragment.name;
+        if (fragment.arguments) buffer2.arguments += fragment.arguments;
+        buffer2.toolCallGroupId = fragment.toolCallGroupId || buffer2.toolCallGroupId;
+        chunkBuffers.set(fragment.id, buffer2);
+        result.toolCallGroupId = buffer2.toolCallGroupId || result.toolCallGroupId;
+      }
+    }
+    if (eventType === "toolCall") {
+      for (const fragment of extractToolCallFragments(data)) {
+        const buffered = chunkBuffers.get(fragment.id);
+        const call = createToolCallFromFragment(fragment, buffered);
+        if (!call) continue;
+        result.toolCalls.push(call);
+        result.toolCallGroupId = call.toolCallGroupId || result.toolCallGroupId;
+        chunkBuffers.delete(fragment.id);
+      }
+    }
+  }
+  for (const [id, buffer2] of chunkBuffers) {
+    if (!buffer2.name) continue;
+    const call = createToolCallFromFragment({
+      arguments: buffer2.arguments,
+      id,
+      name: buffer2.name,
+      toolCallGroupId: buffer2.toolCallGroupId
+    });
+    if (!call) continue;
+    result.toolCalls.push(call);
+    result.toolCallGroupId = call.toolCallGroupId || result.toolCallGroupId;
+  }
+  result.text = result.text.trim();
+  return result;
+}
+function parseSseJsonEvents(body2) {
+  const events = [];
+  const trimmed = body2.trim();
+  if (trimmed.startsWith("{")) {
+    const parsed = JSON.parse(trimmed);
+    events.push(parsed);
+    return events;
+  }
+  for (const line of body2.split(/\r?\n/)) {
+    const normalized = line.trim();
+    if (!normalized.startsWith("data:")) continue;
+    const payload = normalized.slice("data:".length).trim();
+    if (!payload || payload === "[DONE]") continue;
+    const parsed = JSON.parse(payload);
+    if (isRecord4(parsed)) events.push(parsed);
+  }
+  return events;
+}
+function extractToolCallFragments(data) {
+  const rawCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [data];
+  const metadata2 = isRecord4(data.metadata) ? data.metadata : {};
+  const fragments = [];
+  for (const rawCall of rawCalls) {
+    if (!isRecord4(rawCall)) continue;
+    const fn = isRecord4(rawCall.function) ? rawCall.function : {};
+    const name = stringValue2(fn.name) || stringValue2(rawCall.name) || stringValue2(rawCall.toolName);
+    const id = stringValue2(rawCall.id) || stringValue2(rawCall.toolCallId) || name;
+    if (!id) continue;
+    const args = stringifyToolArguments(fn.arguments ?? rawCall.arguments ?? rawCall.args);
+    const toolCallGroupId = stringValue2(rawCall.toolCallGroupId) || stringValue2(data.toolCallGroupId) || stringValue2(metadata2.toolCallGroupId) || void 0;
+    fragments.push({ arguments: args, id, name, toolCallGroupId });
+  }
+  return fragments;
+}
+function createToolCallFromFragment(fragment, buffered) {
+  const name = fragment.name || buffered?.name || "";
+  if (!name) return void 0;
+  const rawArguments = resolveToolArguments(fragment.arguments, buffered?.arguments || "");
+  return {
+    id: fragment.id,
+    input: parseToolArguments(rawArguments),
+    name,
+    toolCallGroupId: fragment.toolCallGroupId || buffered?.toolCallGroupId
+  };
+}
+function resolveToolArguments(fragmentArguments, bufferedArguments) {
+  if (!bufferedArguments) return fragmentArguments;
+  if (parseToolArgumentsMaybe(fragmentArguments)) return fragmentArguments;
+  return bufferedArguments + fragmentArguments;
+}
+function stringifyToolArguments(value) {
+  if (typeof value === "string") return value;
+  if (value === void 0 || value === null) return "";
+  return JSON.stringify(value);
+}
+function parseToolArguments(value) {
+  if (isRecord4(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return {};
+  return parseToolArgumentsMaybe(value) || {};
+}
+function parseToolArgumentsMaybe(value) {
+  if (!value.trim()) return void 0;
+  try {
+    const parsed = JSON.parse(value);
+    return isRecord4(parsed) ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function formatFailureEvent(data) {
+  const parts = [
+    stringValue2(data.errorType),
+    stringValue2(data.userMessage),
+    stringValue2(data.message)
+  ].filter(Boolean);
+  return parts.join(": ") || JSON.stringify(data);
+}
+function logToolResult2(name, result) {
+  if (result.error) {
+    info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
+  } else if (name === "list_files") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
+  } else if (name === "search_files") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
+  } else if (name === "read_file") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
+  } else if (name === "propose_patch") {
+    info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(", ") || "(none)"}.`);
+  }
+}
+function resolvePlatform() {
+  if (process.platform === "darwin") return "DESKTOP_MACOS";
+  if (process.platform === "win32") return "DESKTOP_WINDOWS";
+  return "DESKTOP_LINUX";
+}
+function stringValue2(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+function isRecord4(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
 // src/repair/provider-dispatcher.ts
 function defaultRepairModel(provider) {
-  return provider === "anthropic-messages" ? "claude-sonnet-5" : "gpt-5.5";
+  if (provider === "anthropic-messages") return "claude-sonnet-5";
+  if (provider === "postman-agent-mode") return "GPT_5";
+  return "gpt-5.5";
 }
 function resolveRepairProviderApiKey(inputs) {
   if (inputs.repairProvider === "openai-responses") {
@@ -108379,6 +109115,12 @@ function resolveRepairProviderApiKey(inputs) {
       throw new Error("anthropic-api-key is required when mode=repair and repair-provider=anthropic-messages");
     }
     return inputs.anthropicApiKey;
+  }
+  if (inputs.repairProvider === "postman-agent-mode") {
+    if (!inputs.postmanAccessToken) {
+      throw new Error("postman-access-token is required when mode=repair and repair-provider=postman-agent-mode");
+    }
+    return inputs.postmanAccessToken;
   }
   assertNever(inputs.repairProvider);
 }
@@ -108403,6 +109145,17 @@ function runRepairProviderTurn(options) {
   }
   if (options.provider === "anthropic-messages") {
     return runAnthropicRepairTurn({
+      apiKey,
+      failure: options.failure,
+      fetchImpl: options.fetchImpl,
+      maxToolRounds: options.maxToolRounds,
+      model: options.inputs.repairModel,
+      repairContext: options.repairContext,
+      secretMasker: options.secretMasker
+    });
+  }
+  if (options.provider === "postman-agent-mode") {
+    return runPostmanAgentModeRepairTurn({
       apiKey,
       failure: options.failure,
       fetchImpl: options.fetchImpl,
@@ -108690,15 +109443,15 @@ function validateRepairFailureContext(failure) {
   return void 0;
 }
 function isFailureEntry(value) {
-  return isRecord2(value) && isNonEmptyString(value.message);
+  return isRecord5(value) && isNonEmptyString(value.message);
 }
 function isImmutablePathHash(value) {
-  return isRecord2(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
+  return isRecord5(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
 }
 function isSuccessCriteria(value) {
-  return isRecord2(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
+  return isRecord5(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
 }
-function isRecord2(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isNonEmptyString(value) {
@@ -108804,6 +109557,7 @@ async function runOracle(options) {
         baseUrl: options.config.runtime.baseUrl,
         collectionName: options.assetNames.collectionName,
         commit: options.prHeadSha,
+        contractHints: buildContractHints(options.config.specPath, failures),
         failures,
         immutablePathHashes: options.immutableHashes,
         immutablePaths: options.immutablePaths,
@@ -109436,6 +110190,7 @@ async function runAction(options = {}) {
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
           commit: pr.sha,
+          contractHints: buildContractHints(config.specPath, failures),
           failures,
           immutablePathHashes,
           immutablePaths,

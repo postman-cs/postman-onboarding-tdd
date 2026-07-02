@@ -213,8 +213,9 @@ tdd:
   it('validates known repair providers', () => {
     expect(validateRepairProvider('openai-responses')).toBe('openai-responses');
     expect(validateRepairProvider('anthropic-messages')).toBe('anthropic-messages');
+    expect(validateRepairProvider('postman-agent-mode')).toBe('postman-agent-mode');
     expect(() => validateRepairProvider('other-provider')).toThrow(
-      'Expected openai-responses or anthropic-messages'
+      'Expected openai-responses, anthropic-messages, or postman-agent-mode'
     );
   });
 });

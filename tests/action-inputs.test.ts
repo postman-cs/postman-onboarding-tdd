@@ -8,6 +8,7 @@ describe('action input parsing', () => {
     'INPUT_GITHUB-TOKEN',
     'INPUT_MODE',
     'INPUT_OPENAI-API-KEY',
+    'INPUT_POSTMAN-ACCESS-TOKEN',
     'INPUT_POSTMAN-API-KEY',
     'INPUT_REPAIR-MODEL',
     'INPUT_REPAIR-PROVIDER'
@@ -59,6 +60,19 @@ describe('action input parsing', () => {
       openaiApiKey: undefined,
       repairModel: 'claude-sonnet-5',
       repairProvider: 'anthropic-messages'
+    });
+  });
+
+  it('reads Postman Agent Mode credentials and defaults to a Postman gateway model', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+    setInput('postman-access-token', 'postman-access-token');
+    setInput('repair-provider', 'postman-agent-mode');
+
+    expect(readActionInputs()).toMatchObject({
+      postmanAccessToken: 'postman-access-token',
+      repairModel: 'GPT_5',
+      repairProvider: 'postman-agent-mode'
     });
   });
 });

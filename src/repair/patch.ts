@@ -1,5 +1,7 @@
-import { execFileSync } from 'node:child_process';
-import { relative, resolve, sep } from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, relative, resolve, sep } from 'node:path';
 
 export interface PatchPolicy {
   allowedWritePaths: string[];
@@ -51,11 +53,12 @@ export function extractPatchPaths(patch: string): string[] {
 }
 
 export function validatePatch(patch: string, policy: PatchPolicy): PatchValidationResult {
-  const trimmed = patch.trim();
+  const normalizedPatch = normalizePatchInput(patch, policy);
+  const trimmed = normalizedPatch.trim();
   if (!trimmed || !trimmed.includes('diff --git')) {
-    throw new Error('Repair patch must be a non-empty unified git diff.');
+    throw new Error('Repair patch must be a non-empty unified git diff beginning with diff --git.');
   }
-  const touchedPaths = extractPatchPaths(patch);
+  const touchedPaths = extractPatchPaths(normalizedPatch);
   if (touchedPaths.length === 0) {
     throw new Error('Repair patch did not include any touched paths.');
   }
@@ -69,14 +72,84 @@ export function validatePatch(patch: string, policy: PatchPolicy): PatchValidati
     }
   }
 
-  gitApply(['--check', '--whitespace=nowarn'], patch, policy.repoRoot);
+  gitApply(['--check', '--whitespace=nowarn'], normalizedPatch, policy.repoRoot);
   return { touchedPaths };
 }
 
 export function applyValidatedPatch(patch: string, policy: PatchPolicy): PatchValidationResult {
-  const result = validatePatch(patch, policy);
-  gitApply(['--whitespace=nowarn'], patch, policy.repoRoot);
+  const normalizedPatch = normalizePatchInput(patch, policy);
+  const result = validatePatch(normalizedPatch, policy);
+  gitApply(['--whitespace=nowarn'], normalizedPatch, policy.repoRoot);
   return result;
+}
+
+function normalizePatchInput(patch: string, policy: PatchPolicy): string {
+  let normalized = String(patch || '').trim();
+  const fenced = normalized.match(/```(?:diff|patch)?\s*\n([\s\S]*?)```/i);
+  if (fenced?.[1]?.includes('diff --git')) {
+    normalized = fenced[1].trim();
+  }
+  normalized = normalized
+    .split(/\r?\n/)
+    .filter((line) => !line.trim().startsWith('```'))
+    .join('\n')
+    .trim();
+  const replacementPatch = replacementEnvelopeToPatch(normalized, policy);
+  if (replacementPatch) {
+    return replacementPatch;
+  }
+  const firstDiff = normalized.indexOf('diff --git ');
+  if (firstDiff > 0) {
+    normalized = normalized.slice(firstDiff).trim();
+  }
+  return normalized ? `${normalized.replace(/\s+$/g, '')}\n` : '';
+}
+
+function replacementEnvelopeToPatch(value: string, policy: PatchPolicy): string {
+  const markerIndex = value.indexOf('POSTMAN_TDD_REPLACE_FILE ');
+  const normalized = markerIndex > 0 ? value.slice(markerIndex).trim() : value;
+  const match = normalized.match(/^POSTMAN_TDD_REPLACE_FILE\s+([^\r\n]+)\r?\n([\s\S]*?)\r?\nPOSTMAN_TDD_END_REPLACE_FILE\s*$/);
+  if (!match) return '';
+
+  const path = repoRelativePath(policy.repoRoot, match[1] || '');
+  const content = match[2]?.endsWith('\n') ? match[2] : `${match[2] || ''}\n`;
+  const tempDir = mkdtempSync(join(tmpdir(), 'postman-tdd-repair-'));
+  const tempPath = join(tempDir, 'replacement');
+  try {
+    writeFileSync(tempPath, content, 'utf8');
+    const result = spawnSync('git', [
+      'diff',
+      '--no-index',
+      '--no-ext-diff',
+      '--no-color',
+      '--',
+      path,
+      tempPath
+    ], {
+      cwd: policy.repoRoot,
+      encoding: 'utf8'
+    });
+    if (result.status !== 0 && result.status !== 1) {
+      throw new Error(`git diff failed: ${(result.stderr || '').trim() || 'unknown error'}`);
+    }
+    const diff = String(result.stdout || '').trim();
+    if (!diff) return '';
+    return `${rewriteReplacementDiffHeaders(diff, path).replace(/\s+$/g, '')}\n`;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function rewriteReplacementDiffHeaders(diff: string, path: string): string {
+  return diff
+    .split(/\r?\n/)
+    .map((line) => {
+      if (line.startsWith('diff --git ')) return `diff --git a/${path} b/${path}`;
+      if (line.startsWith('--- ')) return `--- a/${path}`;
+      if (line.startsWith('+++ ')) return `+++ b/${path}`;
+      return line;
+    })
+    .join('\n');
 }
 
 export function matchesAny(path: string, patterns: string[]): boolean {

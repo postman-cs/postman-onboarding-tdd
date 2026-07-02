@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { createFailureDocument } from '../agent-context.js';
 import { loadOnboardingConfig } from '../config.js';
+import { buildContractHints } from '../contract-hints.js';
 import { extractCollectionFailures } from '../failure-normalizer.js';
 import { GitHubPrClient, parseFailureDocument } from '../github/pr-comment.js';
 import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from '../preview-assets.js';
@@ -456,6 +457,7 @@ async function runOracle(options: {
         baseUrl: options.config.runtime.baseUrl,
         collectionName: options.assetNames.collectionName,
         commit: options.prHeadSha,
+        contractHints: buildContractHints(options.config.specPath, failures),
         failures,
         immutablePathHashes: options.immutableHashes,
         immutablePaths: options.immutablePaths,

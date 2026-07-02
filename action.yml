@@ -26,7 +26,7 @@ inputs:
     description: Postman API key used for workspace, spec, and collection operations.
     required: true
   postman-access-token:
-    description: Compatibility input for broader onboarding pipelines. The TDD action does not require it in v1.
+    description: Postman access token. Required by mode=repair when repair-provider=postman-agent-mode; optional otherwise.
     required: false
   openai-api-key:
     description: OpenAI API key used by mode=repair with repair-provider=openai-responses.
@@ -41,11 +41,11 @@ inputs:
     description: Optional token used by mode=repair for pushing repair commits. Prefer a PAT or GitHub App token so pushed commits trigger follow-up workflows.
     required: false
   repair-provider:
-    description: Repair provider for mode=repair. One of openai-responses or anthropic-messages.
+    description: Repair provider for mode=repair. One of openai-responses, anthropic-messages, or postman-agent-mode.
     required: false
     default: openai-responses
   repair-model:
-    description: Model used by mode=repair. Defaults to gpt-5.5 for openai-responses and claude-sonnet-5 for anthropic-messages.
+    description: Model used by mode=repair. Defaults to gpt-5.5 for openai-responses, claude-sonnet-5 for anthropic-messages, and GPT_5 for postman-agent-mode.
     required: false
   repair-max-attempts:
     description: Maximum accepted implementation patch attempts in mode=repair.

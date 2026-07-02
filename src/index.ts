@@ -9,6 +9,7 @@ import {
   writeAgentContext
 } from './agent-context.js';
 import { loadOnboardingConfig, validateConfigWriteMode, validateRepairProvider } from './config.js';
+import { buildContractHints } from './contract-hints.js';
 import { extractCollectionFailures } from './failure-normalizer.js';
 import { GitHubPrClient, parseFailureDocument, resolvePrMetadata } from './github/pr-comment.js';
 import {
@@ -397,6 +398,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
           commit: pr.sha,
+          contractHints: buildContractHints(config.specPath, failures),
           failures,
           immutablePathHashes,
           immutablePaths,
