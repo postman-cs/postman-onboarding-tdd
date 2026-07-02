@@ -168,6 +168,8 @@ describe('Postman Agent Mode repair provider', () => {
       'read_file',
       'search_files'
     ]);
+    expect(JSON.stringify(tools)).toContain('POSTMAN_TDD_REPLACE_FILE');
+    expect(JSON.stringify(first.body.input)).toContain('POSTMAN_TDD_REPLACE_FILE');
     expect(JSON.stringify(tools)).not.toContain('shell');
     expect(JSON.stringify(tools)).not.toContain('write_file');
     expect(JSON.stringify(tools)).not.toContain('workspace');

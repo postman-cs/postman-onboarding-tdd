@@ -28,6 +28,8 @@ export function buildRepairPrompt(failure: AgentFailureDocument, context: Repair
     'Use read_file, list_files, and search_files to inspect implementation files.',
     'Use propose_patch with a raw unified git diff when you have a code-only fix.',
     'The propose_patch patch string must begin with diff --git and must not be wrapped in Markdown fences or prose.',
+    'If a large single-file diff is difficult to format, use propose_patch with this exact replacement envelope instead: POSTMAN_TDD_REPLACE_FILE <allowed path>, then the complete new file content, then POSTMAN_TDD_END_REPLACE_FILE.',
+    'The replacement envelope is still limited to allowed write paths and must not include spec, workflow, secret, shell, or unrelated changes.',
     'Use finish with status=blocked if API intent is unclear, infrastructure is missing, or no implementation-only fix is reasonable.',
     '',
     'Failure context:',

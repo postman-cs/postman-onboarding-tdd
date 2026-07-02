@@ -28369,7 +28369,7 @@ var require_BufferList = __commonJS({
         this.head = this.tail = null;
         this.length = 0;
       };
-      BufferList.prototype.join = function join4(s) {
+      BufferList.prototype.join = function join5(s) {
         if (this.length === 0) return "";
         var p = this.head;
         var ret = "" + p.data;
@@ -107702,8 +107702,10 @@ import { readFileSync as readFileSync5 } from "node:fs";
 import { resolve as resolve4 } from "node:path";
 
 // src/repair/patch.ts
-import { execFileSync } from "node:child_process";
-import { relative, resolve as resolve3, sep as sep3 } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync as writeFileSync4 } from "node:fs";
+import { tmpdir } from "node:os";
+import { join as join4, relative, resolve as resolve3, sep as sep3 } from "node:path";
 var ALWAYS_DENY_PATTERNS = [
   ".env",
   ".env.*",
@@ -107742,7 +107744,7 @@ function extractPatchPaths(patch) {
   return [...paths].filter(Boolean).sort();
 }
 function validatePatch(patch, policy) {
-  const normalizedPatch = normalizePatchInput(patch);
+  const normalizedPatch = normalizePatchInput(patch, policy);
   const trimmed = normalizedPatch.trim();
   if (!trimmed || !trimmed.includes("diff --git")) {
     throw new Error("Repair patch must be a non-empty unified git diff beginning with diff --git.");
@@ -107763,24 +107765,71 @@ function validatePatch(patch, policy) {
   return { touchedPaths };
 }
 function applyValidatedPatch(patch, policy) {
-  const normalizedPatch = normalizePatchInput(patch);
+  const normalizedPatch = normalizePatchInput(patch, policy);
   const result = validatePatch(normalizedPatch, policy);
   gitApply(["--whitespace=nowarn"], normalizedPatch, policy.repoRoot);
   return result;
 }
-function normalizePatchInput(patch) {
+function normalizePatchInput(patch, policy) {
   let normalized = String(patch || "").trim();
   const fenced = normalized.match(/```(?:diff|patch)?\s*\n([\s\S]*?)```/i);
   if (fenced?.[1]?.includes("diff --git")) {
     normalized = fenced[1].trim();
   }
   normalized = normalized.split(/\r?\n/).filter((line) => !line.trim().startsWith("```")).join("\n").trim();
+  const replacementPatch = replacementEnvelopeToPatch(normalized, policy);
+  if (replacementPatch) {
+    return replacementPatch;
+  }
   const firstDiff = normalized.indexOf("diff --git ");
   if (firstDiff > 0) {
     normalized = normalized.slice(firstDiff).trim();
   }
   return normalized ? `${normalized.replace(/\s+$/g, "")}
 ` : "";
+}
+function replacementEnvelopeToPatch(value, policy) {
+  const markerIndex = value.indexOf("POSTMAN_TDD_REPLACE_FILE ");
+  const normalized = markerIndex > 0 ? value.slice(markerIndex).trim() : value;
+  const match = normalized.match(/^POSTMAN_TDD_REPLACE_FILE\s+([^\r\n]+)\r?\n([\s\S]*?)\r?\nPOSTMAN_TDD_END_REPLACE_FILE\s*$/);
+  if (!match) return "";
+  const path4 = repoRelativePath(policy.repoRoot, match[1] || "");
+  const content = match[2]?.endsWith("\n") ? match[2] : `${match[2] || ""}
+`;
+  const tempDir = mkdtempSync(join4(tmpdir(), "postman-tdd-repair-"));
+  const tempPath = join4(tempDir, "replacement");
+  try {
+    writeFileSync4(tempPath, content, "utf8");
+    const result = spawnSync("git", [
+      "diff",
+      "--no-index",
+      "--no-ext-diff",
+      "--no-color",
+      "--",
+      path4,
+      tempPath
+    ], {
+      cwd: policy.repoRoot,
+      encoding: "utf8"
+    });
+    if (result.status !== 0 && result.status !== 1) {
+      throw new Error(`git diff failed: ${(result.stderr || "").trim() || "unknown error"}`);
+    }
+    const diff = String(result.stdout || "").trim();
+    if (!diff) return "";
+    return `${rewriteReplacementDiffHeaders(diff, path4).replace(/\s+$/g, "")}
+`;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+function rewriteReplacementDiffHeaders(diff, path4) {
+  return diff.split(/\r?\n/).map((line) => {
+    if (line.startsWith("diff --git ")) return `diff --git a/${path4} b/${path4}`;
+    if (line.startsWith("--- ")) return `--- a/${path4}`;
+    if (line.startsWith("+++ ")) return `+++ b/${path4}`;
+    return line;
+  }).join("\n");
 }
 function matchesAny(path4, patterns) {
   return patterns.some((pattern) => globMatch(normalizeRepoPath(path4), normalizeRepoPath(pattern)));
@@ -107946,6 +107995,8 @@ function buildRepairPrompt(failure, context5) {
     "Use read_file, list_files, and search_files to inspect implementation files.",
     "Use propose_patch with a raw unified git diff when you have a code-only fix.",
     "The propose_patch patch string must begin with diff --git and must not be wrapped in Markdown fences or prose.",
+    "If a large single-file diff is difficult to format, use propose_patch with this exact replacement envelope instead: POSTMAN_TDD_REPLACE_FILE <allowed path>, then the complete new file content, then POSTMAN_TDD_END_REPLACE_FILE.",
+    "The replacement envelope is still limited to allowed write paths and must not include spec, workflow, secret, shell, or unrelated changes.",
     "Use finish with status=blocked if API intent is unclear, infrastructure is missing, or no implementation-only fix is reasonable.",
     "",
     "Failure context:",
@@ -108013,13 +108064,23 @@ function createRepairTools(context5) {
     {
       type: "function",
       name: "propose_patch",
-      description: "Propose and apply a raw unified git diff beginning with diff --git that changes implementation files only. Do not wrap the diff in Markdown.",
+      description: [
+        "Propose and apply an implementation-only change.",
+        "Prefer a raw unified git diff beginning with diff --git.",
+        "For large single-file edits, you may instead provide POSTMAN_TDD_REPLACE_FILE <path>, the complete file content, and POSTMAN_TDD_END_REPLACE_FILE."
+      ].join(" "),
       strict: true,
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
-          patch: { type: "string" },
+          patch: {
+            type: "string",
+            description: [
+              "Raw git diff beginning with diff --git, or a full-file replacement envelope:",
+              "POSTMAN_TDD_REPLACE_FILE src/file.js\\n<complete new file content>\\nPOSTMAN_TDD_END_REPLACE_FILE"
+            ].join(" ")
+          },
           summary: { type: "string" }
         },
         required: ["patch", "summary"]
@@ -108078,7 +108139,13 @@ function executeRepairTool(name, args, context5) {
     }
     return { error: `Unknown repair tool: ${name}` };
   } catch (error2) {
-    return { error: error2 instanceof Error ? error2.message : String(error2) };
+    const message = error2 instanceof Error ? error2.message : String(error2);
+    if (name === "propose_patch" && message.startsWith("git apply failed:")) {
+      return {
+        error: `${message} If unified diff hunk formatting keeps failing, use patch="POSTMAN_TDD_REPLACE_FILE <allowed path>\\n<complete new file content>\\nPOSTMAN_TDD_END_REPLACE_FILE".`
+      };
+    }
+    return { error: message };
   }
 }
 function listAllowedFiles(context5, prefix2 = "") {

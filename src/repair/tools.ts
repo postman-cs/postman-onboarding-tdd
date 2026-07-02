@@ -71,13 +71,23 @@ export function createRepairTools(context: RepairToolContext): Array<Record<stri
     {
       type: 'function',
       name: 'propose_patch',
-      description: 'Propose and apply a raw unified git diff beginning with diff --git that changes implementation files only. Do not wrap the diff in Markdown.',
+      description: [
+        'Propose and apply an implementation-only change.',
+        'Prefer a raw unified git diff beginning with diff --git.',
+        'For large single-file edits, you may instead provide POSTMAN_TDD_REPLACE_FILE <path>, the complete file content, and POSTMAN_TDD_END_REPLACE_FILE.'
+      ].join(' '),
       strict: true,
       parameters: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          patch: { type: 'string' },
+          patch: {
+            type: 'string',
+            description: [
+              'Raw git diff beginning with diff --git, or a full-file replacement envelope:',
+              'POSTMAN_TDD_REPLACE_FILE src/file.js\\n<complete new file content>\\nPOSTMAN_TDD_END_REPLACE_FILE'
+            ].join(' ')
+          },
           summary: { type: 'string' }
         },
         required: ['patch', 'summary']
@@ -141,7 +151,13 @@ export function executeRepairTool(
     }
     return { error: `Unknown repair tool: ${name}` };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
+    const message = error instanceof Error ? error.message : String(error);
+    if (name === 'propose_patch' && message.startsWith('git apply failed:')) {
+      return {
+        error: `${message} If unified diff hunk formatting keeps failing, use patch="POSTMAN_TDD_REPLACE_FILE <allowed path>\\n<complete new file content>\\nPOSTMAN_TDD_END_REPLACE_FILE".`
+      };
+    }
+    return { error: message };
   }
 }
 
