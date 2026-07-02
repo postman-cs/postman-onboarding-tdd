@@ -385,6 +385,8 @@ The repair worker:
 
 The worker posts a separate sticky PR comment titled `Postman TDD Repair`. It does not overwrite the preview comment. The repair comment includes the attempts, blocked reason or commit when available, the original repair message, and a next-action section for skipped, blocked, failed, or repaired outcomes.
 
+When repair accepts one or more implementation patches, the repair comment also includes a compact attempt timeline with the patch summary, touched paths, local test result, local Postman oracle result, and final outcome for each attempt. The full machine-readable repair summary is written to `.postman-tdd/repair-summary.json` and exposed through the `repair-summary-path` output.
+
 ## Action Inputs
 
 | Input | Required | Default | Description |

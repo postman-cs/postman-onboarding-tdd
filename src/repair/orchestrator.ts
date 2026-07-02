@@ -20,7 +20,7 @@ import type { SecretMasker } from '../secrets.js';
 import { commitAndPushRepair, hashPaths, verifyChangedPaths, verifyPathHashes } from './git.js';
 import { runOpenAiRepairTurn } from './openai-responses-provider.js';
 import type { PatchPolicy } from './patch.js';
-import { writeRepairSummary, type RepairSummary } from './summary.js';
+import { writeRepairSummary, type RepairAttemptDiagnostic, type RepairSummary } from './summary.js';
 
 export interface RepairModeOptions {
   endpointProfile: PostmanEndpointProfile;
@@ -155,11 +155,13 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
   };
   let currentFailure: AgentFailureDocument = failure;
   let attempts = 0;
+  const attemptDetails: RepairAttemptDiagnostic[] = [];
   const maxAttempts = Math.min(options.inputs.repairMaxAttempts, config.repair.maxAttempts);
   core.info(`[postman-tdd] Repair loop budget: maxAttempts=${maxAttempts}.`);
 
   while (attempts < maxAttempts) {
-    core.info(`[postman-tdd] Repair attempt ${attempts + 1}/${maxAttempts}: asking provider for an implementation-only patch.`);
+    const attemptNumber = attempts + 1;
+    core.info(`[postman-tdd] Repair attempt ${attemptNumber}/${maxAttempts}: asking provider for an implementation-only patch.`);
     const repair = await runOpenAiRepairTurn({
       apiKey: options.inputs.openaiApiKey,
       failure: currentFailure,
@@ -173,16 +175,31 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     });
     if (repair.status === 'blocked') {
       core.info(`[postman-tdd] Provider reported blocked: ${repair.message}`);
-      await block(options, 'agent_blocked', repair.message, attempts);
+      attemptDetails.push(providerStoppedAttempt(attemptNumber, 'blocked', repair.message));
+      await block(options, 'agent_blocked', repair.message, attempts, attemptDetails);
       return;
     }
     if (repair.status === 'no_change') {
       core.info(`[postman-tdd] Provider returned no implementation change: ${repair.message}`);
-      await block(options, 'agent_no_change', repair.message, attempts);
+      attemptDetails.push(providerStoppedAttempt(attemptNumber, 'no_change', repair.message));
+      await block(options, 'agent_no_change', repair.message, attempts, attemptDetails);
       return;
     }
 
     attempts += 1;
+    const attempt: RepairAttemptDiagnostic = {
+      attempt: attempts,
+      localTest: {
+        status: 'skipped'
+      },
+      oracle: {
+        status: 'skipped'
+      },
+      outcome: 'oracle_failed',
+      patchSummary: repair.summary,
+      providerStatus: 'changed',
+      touchedPaths: repair.touchedPaths
+    };
     core.info(`[postman-tdd] Repair attempt ${attempts} accepted patch: ${repair.summary}`);
     core.info(`[postman-tdd] Repair attempt ${attempts} touched paths: ${repair.touchedPaths.join(', ') || '(none reported)'}.`);
 
@@ -191,6 +208,13 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       const localTest = await runCommand(config.repair.localTestCommand, { mask: options.mask, sanitizeEnv: true });
       if (localTest.exitCode !== 0) {
         core.info(`[postman-tdd] Local test command failed with exit code ${localTest.exitCode}; feeding failure back to provider.`);
+        attempt.localTest = {
+          command: config.repair.localTestCommand,
+          exitCode: localTest.exitCode,
+          status: 'failed'
+        };
+        attempt.outcome = 'local_test_failed';
+        attemptDetails.push(attempt);
         currentFailure = createFailureDocument({
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
@@ -209,6 +233,10 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
         continue;
       }
       core.info('[postman-tdd] Local test command passed.');
+      attempt.localTest = {
+        command: config.repair.localTestCommand,
+        status: 'passed'
+      };
     }
 
     core.info('[postman-tdd] Running local Postman TDD oracle after repair patch.');
@@ -223,6 +251,11 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     });
     if (result.ok) {
       core.info('[postman-tdd] Local Postman TDD oracle passed.');
+      attempt.oracle = {
+        status: 'passed'
+      };
+      attempt.outcome = 'oracle_passed';
+      attemptDetails.push(attempt);
       core.info('[postman-tdd] Verifying immutable path hashes before commit.');
       verifyPathHashes(repoRoot, immutableHashes);
       const changedPaths = verifyChangedPaths(repoRoot, patchPolicy);
@@ -244,6 +277,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       });
       core.info(`[postman-tdd] Repair commit pushed: ${commitSha}.`);
       const summary = await publishRepair(options.github, options.pr.number, {
+        attemptDetails,
         attempts,
         commitSha,
         message: 'Postman TDD repair produced an implementation-only commit after the collection passed in the worker.',
@@ -260,11 +294,14 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       return;
     }
     core.info(`[postman-tdd] Local Postman TDD oracle still failed: phase=${result.failure.phase}, failures=${result.failure.failures.length}.`);
+    attempt.oracle = failureDiagnostic(result.failure);
+    attempt.outcome = 'oracle_failed';
+    attemptDetails.push(attempt);
     currentFailure = result.failure;
   }
 
   core.info(`[postman-tdd] Repair budget exhausted after ${attempts} accepted attempt(s).`);
-  await block(options, 'budget_exhausted', `Repair budget exhausted after ${attempts} attempt(s).`, attempts);
+  await block(options, 'budget_exhausted', `Repair budget exhausted after ${attempts} attempt(s).`, attempts, attemptDetails);
 }
 
 function validateRepairFailureContext(failure: AgentFailureDocument): string | undefined {
@@ -306,6 +343,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function failureDiagnostic(failure: AgentFailureDocument): NonNullable<RepairAttemptDiagnostic['oracle']> {
+  return {
+    failureCount: failure.failures.length,
+    failures: failure.failures.slice(0, 5).map((entry) => ({
+      ...(entry.assertion ? { assertion: entry.assertion } : {}),
+      message: entry.message,
+      ...(entry.method ? { method: entry.method } : {}),
+      ...(entry.operationId ? { operationId: entry.operationId } : {}),
+      ...(entry.path ? { path: entry.path } : {})
+    })),
+    phase: failure.phase,
+    status: 'failed'
+  };
+}
+
+function providerStoppedAttempt(
+  attempt: number,
+  providerStatus: 'blocked' | 'no_change',
+  message: string
+): RepairAttemptDiagnostic {
+  return {
+    attempt,
+    localTest: {
+      status: 'skipped'
+    },
+    oracle: {
+      status: 'skipped'
+    },
+    outcome: providerStatus === 'blocked' ? 'provider_blocked' : 'provider_no_change',
+    patchSummary: message,
+    providerStatus,
+    touchedPaths: []
+  };
 }
 
 function logRepairConfig(config: ReturnType<typeof loadOnboardingConfig>, options: RepairModeOptions): void {
@@ -415,10 +487,12 @@ async function block(
   options: RepairModeOptions,
   reason: string,
   message: string,
-  attempts: number
+  attempts: number,
+  attemptDetails: RepairAttemptDiagnostic[] = []
 ): Promise<void> {
   core.info(`[postman-tdd] Repair blocked: reason=${reason}, attempts=${attempts}, message=${message}`);
   const summaryPath = await publishRepair(options.github, options.pr.number, {
+    ...(attemptDetails.length > 0 ? { attemptDetails } : {}),
     attempts,
     blockedReason: reason,
     message,
