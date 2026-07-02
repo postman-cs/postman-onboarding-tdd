@@ -79,6 +79,19 @@ export interface AgentFailure {
   path?: string;
 }
 
+export interface AgentContractHint {
+  method?: string;
+  operationId?: string;
+  path?: string;
+  responses: AgentContractResponseHint[];
+}
+
+export interface AgentContractResponseHint {
+  content: Record<string, { schema?: unknown }>;
+  description?: string;
+  status: string;
+}
+
 export interface ImmutablePathHash {
   path: string;
   sha256: string;
@@ -104,6 +117,7 @@ export interface AgentFailureDocument {
   baseUrl?: string;
   collectionName?: string;
   commit?: string;
+  contractHints?: AgentContractHint[];
   failures: AgentFailure[];
   healthUrl?: string;
   immutablePathHashes: ImmutablePathHash[];

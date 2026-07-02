@@ -36,6 +36,7 @@ export function buildRepairPrompt(failure: AgentFailureDocument, context: Repair
     JSON.stringify({
       baseUrl: failure.baseUrl,
       collectionName: failure.collectionName,
+      contractHints: failure.contractHints,
       failures: failure.failures,
       phase: failure.phase,
       successCriteria: failure.successCriteria

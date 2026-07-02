@@ -106201,6 +106201,452 @@ console.log(\`Immutable spec guard passed for \${expected.length} path(s).\`);
 `;
 }
 
+// src/contract-hints.ts
+import { readFileSync as readFileSync4 } from "node:fs";
+
+// src/contract.ts
+var import_yaml2 = __toESM(require_dist6(), 1);
+var HTTP_METHODS = /* @__PURE__ */ new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"]);
+function asRecord2(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+function parseOpenApiDocument(content) {
+  const head = content.trimStart();
+  const parsed = head.startsWith("{") ? JSON.parse(content) : (0, import_yaml2.parse)(content);
+  const root = asRecord2(parsed);
+  if (!root) {
+    throw new Error("OpenAPI document must be an object");
+  }
+  return root;
+}
+function detectOpenApiVersion(root) {
+  const raw = String(root.openapi || "").trim();
+  if (/^3\.1(?:\.\d+)?$/.test(raw)) return "3.1";
+  if (/^3\.0(?:\.\d+)?$/.test(raw)) return "3.0";
+  throw new Error(`Dynamic TDD contracts require OpenAPI 3.0 or 3.1, got: ${raw || "<missing>"}`);
+}
+function buildContractIndex(root) {
+  const warnings = [];
+  const paths = asRecord2(root.paths);
+  if (!paths) {
+    throw new Error("OpenAPI document must define paths");
+  }
+  const operations = [];
+  for (const [path4, pathItemRaw] of Object.entries(paths)) {
+    const pathItem = asRecord2(pathItemRaw);
+    if (!pathItem) continue;
+    for (const [methodRaw, operationRaw] of Object.entries(pathItem)) {
+      const method = methodRaw.toLowerCase();
+      if (!HTTP_METHODS.has(method)) continue;
+      const operation = resolveRef(root, operationRaw);
+      if (!operation) continue;
+      operations.push({
+        method: method.toUpperCase(),
+        operationId: typeof operation.operationId === "string" ? operation.operationId : void 0,
+        path: path4,
+        responses: collectResponses(root, operation)
+      });
+    }
+  }
+  if (operations.length === 0) {
+    warnings.push("CONTRACT_NO_OPERATIONS: OpenAPI document contains no operations");
+  }
+  return {
+    openapiVersion: detectOpenApiVersion(root),
+    operations,
+    warnings
+  };
+}
+function collectResponses(root, operation) {
+  const responsesRoot = asRecord2(operation.responses) || {};
+  const responses = {};
+  for (const [status, responseRaw] of Object.entries(responsesRoot)) {
+    const response = resolveRef(root, responseRaw) || {};
+    const contentRoot = asRecord2(response.content) || {};
+    const content = {};
+    for (const [mediaType, mediaRaw] of Object.entries(contentRoot)) {
+      const media = asRecord2(mediaRaw) || {};
+      const schema = media.schema === void 0 ? void 0 : dereferenceSchema(root, media.schema);
+      content[mediaType] = schema === void 0 ? {} : { schema };
+    }
+    responses[normalizeResponseKey(status)] = {
+      content,
+      description: typeof response.description === "string" ? response.description : void 0
+    };
+  }
+  return responses;
+}
+function resolvePointer(root, ref) {
+  const path4 = ref.slice(2).split("/").map((part) => part.replace(/~1/g, "/").replace(/~0/g, "~"));
+  let current = root;
+  for (const part of path4) {
+    const record = asRecord2(current);
+    if (!record) return void 0;
+    current = record[part];
+  }
+  return current;
+}
+function resolveRef(root, value) {
+  const record = asRecord2(value);
+  if (!record) return null;
+  const ref = typeof record.$ref === "string" ? record.$ref : "";
+  if (!ref) return record;
+  if (!ref.startsWith("#/")) {
+    throw new Error(`External $ref remained in OpenAPI document: ${ref}`);
+  }
+  const resolved = asRecord2(resolvePointer(root, ref));
+  if (!resolved) {
+    throw new Error(`Unresolved OpenAPI $ref: ${ref}`);
+  }
+  return resolved;
+}
+function dereferenceSchema(root, schema, seen = /* @__PURE__ */ new Set()) {
+  if (Array.isArray(schema)) {
+    return schema.map((entry) => dereferenceSchema(root, entry, seen));
+  }
+  const record = asRecord2(schema);
+  if (!record) return schema;
+  const ref = typeof record.$ref === "string" ? record.$ref : "";
+  if (ref) {
+    if (!ref.startsWith("#/")) {
+      return { unsupported: `external ref ${ref}` };
+    }
+    if (seen.has(ref)) {
+      return {};
+    }
+    seen.add(ref);
+    return dereferenceSchema(root, resolvePointer(root, ref), seen);
+  }
+  const copy = {};
+  for (const [key, value] of Object.entries(record)) {
+    copy[key] = dereferenceSchema(root, value, new Set(seen));
+  }
+  return copy;
+}
+function normalizeResponseKey(status) {
+  return /^[1-5]xx$/i.test(status) ? status.toUpperCase() : status;
+}
+function instrumentContractCollection(collection, index) {
+  const warnings = [...index.warnings];
+  const clone = sanitizeCollectionForUpdate(collection);
+  const visit = (item) => {
+    if (item.request) {
+      const match = matchOperation(index, item.request);
+      if (match.operation) {
+        const events = asArray(item.event).filter((event) => {
+          const record = asRecord2(event);
+          return record?.listen !== "test";
+        });
+        item.event = [
+          ...events,
+          {
+            listen: "test",
+            script: {
+              type: "text/javascript",
+              exec: createContractScript(match.operation)
+            }
+          }
+        ];
+      } else {
+        warnings.push(`CONTRACT_REQUEST_NOT_MATCHED: ${match.method || "<method>"} ${match.path}`);
+      }
+    }
+    for (const child of asArray(item.item).map((entry) => asRecord2(entry)).filter(Boolean)) {
+      visit(child);
+    }
+  };
+  for (const item of asArray(clone.item).map((entry) => asRecord2(entry)).filter(Boolean)) {
+    visit(item);
+  }
+  return { collection: clone, warnings };
+}
+function sanitizeCollectionForUpdate(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeCollectionForUpdate(entry));
+  }
+  const record = asRecord2(value);
+  if (!record) return value;
+  const clone = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (["id", "uid", "_postman_id"].includes(key)) continue;
+    if (key === "response") continue;
+    clone[key] = sanitizeCollectionForUpdate(entry);
+  }
+  return clone;
+}
+function createContractScript(operation) {
+  const contract = {
+    method: operation.method,
+    operationId: operation.operationId,
+    path: operation.path,
+    responses: operation.responses
+  };
+  return [
+    "// [Postman TDD] Auto-generated OpenAPI contract assertions",
+    `const contract = JSON.parse(${JSON.stringify(JSON.stringify(contract))});`,
+    'function responseText() { return pm.response.text() || ""; }',
+    'function isBodyless() { return pm.response.code === 204 || pm.response.code === 205 || pm.response.code === 304 || contract.method === "HEAD"; }',
+    'function mediaBase(value) { return String(value || "").toLowerCase().split(";")[0].trim(); }',
+    "function selectResponseContract() {",
+    "  const status = String(pm.response.code);",
+    "  if (contract.responses[status]) return { key: status, value: contract.responses[status] };",
+    '  const range = String(Math.floor(pm.response.code / 100)) + "XX";',
+    "  if (contract.responses[range]) return { key: range, value: contract.responses[range] };",
+    '  if (contract.responses.default) return { key: "default", value: contract.responses.default };',
+    "  return null;",
+    "}",
+    "function expectedMedia(responseContract) { return Object.keys(responseContract.content || {}); }",
+    "function selectSchema(responseContract) {",
+    "  const content = responseContract.content || {};",
+    '  const actual = mediaBase(pm.response.headers.get("Content-Type") || "");',
+    "  const keys = Object.keys(content);",
+    "  if (keys.length === 0) return undefined;",
+    "  const exact = keys.find((key) => mediaBase(key) === actual);",
+    "  if (exact) return content[exact].schema;",
+    '  const json = keys.find((key) => mediaBase(key) === "application/json" && /json$/.test(actual));',
+    "  return json ? content[json].schema : content[keys[0]].schema;",
+    "}",
+    'function typeOf(value) { if (Array.isArray(value)) return "array"; if (value === null) return "null"; if (Number.isInteger(value)) return "integer"; return typeof value; }',
+    "function schemaTypes(schema) { const type = schema && schema.type; return Array.isArray(type) ? type : type ? [type] : []; }",
+    'function operationLabel() { return [contract.operationId, contract.method, contract.path].filter(Boolean).join(" "); }',
+    'function tddAssertion(name) { return "[Postman TDD] " + operationLabel() + " :: " + name; }',
+    "function validateSchema(value, schema, path, errors) {",
+    '  if (!schema || typeof schema !== "object") return;',
+    '  if (schema.unsupported) { errors.push(path + " uses unsupported schema: " + schema.unsupported); return; }',
+    "  if (schema.allOf) schema.allOf.forEach((entry) => validateSchema(value, entry, path, errors));",
+    "  const types = schemaTypes(schema);",
+    "  if (types.length > 0) {",
+    "    const actual = typeOf(value);",
+    '    const ok = types.some((type) => type === actual || (type === "number" && actual === "integer"));',
+    '    if (!ok) { errors.push(path + " expected " + types.join("|") + " but received " + actual); return; }',
+    "  }",
+    '  if (schema.enum && !schema.enum.some((entry) => JSON.stringify(entry) === JSON.stringify(value))) errors.push(path + " expected enum value " + JSON.stringify(schema.enum));',
+    '  if (schema.const !== undefined && JSON.stringify(schema.const) !== JSON.stringify(value)) errors.push(path + " expected const " + JSON.stringify(schema.const));',
+    '  if (typeof value === "string") {',
+    '    if (typeof schema.minLength === "number" && value.length < schema.minLength) errors.push(path + " expected minLength " + schema.minLength + " but received length " + value.length);',
+    '    if (typeof schema.maxLength === "number" && value.length > schema.maxLength) errors.push(path + " expected maxLength " + schema.maxLength + " but received length " + value.length);',
+    '    if (typeof schema.pattern === "string") {',
+    "      let regex;",
+    '      try { regex = new RegExp(schema.pattern); } catch (error) { errors.push(path + " has invalid pattern " + JSON.stringify(schema.pattern)); }',
+    '      if (regex && !regex.test(value)) errors.push(path + " expected pattern " + schema.pattern);',
+    "    }",
+    "  }",
+    '  if (typeof value === "number" && Number.isFinite(value)) {',
+    '    const minimum = typeof schema.minimum === "number" ? schema.minimum : undefined;',
+    '    const maximum = typeof schema.maximum === "number" ? schema.maximum : undefined;',
+    '    const exclusiveMinimum = typeof schema.exclusiveMinimum === "number" ? schema.exclusiveMinimum : undefined;',
+    '    const exclusiveMaximum = typeof schema.exclusiveMaximum === "number" ? schema.exclusiveMaximum : undefined;',
+    '    if (exclusiveMinimum !== undefined) { if (!(value > exclusiveMinimum)) errors.push(path + " expected exclusiveMinimum " + exclusiveMinimum + " but received " + value); }',
+    "    else if (minimum !== undefined) {",
+    '      if (schema.exclusiveMinimum === true ? !(value > minimum) : value < minimum) errors.push(path + " expected " + (schema.exclusiveMinimum === true ? "exclusiveMinimum " : "minimum ") + minimum + " but received " + value);',
+    "    }",
+    '    if (exclusiveMaximum !== undefined) { if (!(value < exclusiveMaximum)) errors.push(path + " expected exclusiveMaximum " + exclusiveMaximum + " but received " + value); }',
+    "    else if (maximum !== undefined) {",
+    '      if (schema.exclusiveMaximum === true ? !(value < maximum) : value > maximum) errors.push(path + " expected " + (schema.exclusiveMaximum === true ? "exclusiveMaximum " : "maximum ") + maximum + " but received " + value);',
+    "    }",
+    "  }",
+    '  if (schema.type === "object" || schema.properties) {',
+    "    const required = Array.isArray(schema.required) ? schema.required : [];",
+    '    required.forEach((key) => { if (!value || typeof value !== "object" || !(key in value)) errors.push(path + "." + key + " is required"); });',
+    '    Object.entries(schema.properties || {}).forEach(([key, child]) => { if (value && typeof value === "object" && key in value) validateSchema(value[key], child, path + "." + key, errors); });',
+    "  }",
+    '  if (schema.type === "array" && schema.items && Array.isArray(value)) value.forEach((entry, index) => validateSchema(entry, schema.items, path + "[" + index + "]", errors));',
+    "}",
+    "const selected = selectResponseContract();",
+    'pm.test(tddAssertion("operation mapping exists"), function () { pm.expect(contract.path).to.be.a("string").and.not.empty; });',
+    'pm.test(tddAssertion("status code is defined by OpenAPI"), function () { pm.expect(selected, "No OpenAPI response defined for " + contract.method + " " + contract.path + " status " + pm.response.code).to.exist; });',
+    'pm.test(tddAssertion("response body matches body contract"), function () {',
+    "  if (!selected) return;",
+    "  if (isBodyless()) { pm.expect(responseText().trim().length).to.equal(0); return; }",
+    "  const media = expectedMedia(selected.value);",
+    '  if (media.length === 0) pm.expect(responseText().trim().length, "OpenAPI response defines no body but response body was not empty").to.equal(0);',
+    '  else pm.expect(responseText().trim().length, "OpenAPI response defines a body but response body was empty").to.be.above(0);',
+    "});",
+    'pm.test(tddAssertion("content-type matches OpenAPI response content"), function () {',
+    "  if (!selected || isBodyless()) return;",
+    "  const media = expectedMedia(selected.value);",
+    "  if (media.length === 0) return;",
+    '  const actual = mediaBase(pm.response.headers.get("Content-Type") || "");',
+    '  pm.expect(actual, "Content-Type must match one of " + media.join(", ")).to.not.equal("");',
+    '  const matches = media.some((entry) => mediaBase(entry) === actual || (mediaBase(entry) === "application/json" && /json$/.test(actual)));',
+    '  pm.expect(matches, "Content-Type " + actual + " did not match OpenAPI content " + media.join(", ")).to.equal(true);',
+    "});",
+    'pm.test(tddAssertion("response body matches schema"), function () {',
+    "  if (!selected || isBodyless()) return;",
+    "  const schema = selectSchema(selected.value);",
+    "  if (!schema) return;",
+    "  const body = responseText().trim();",
+    "  if (!body) return;",
+    "  let parsed;",
+    '  try { parsed = JSON.parse(body); } catch (error) { pm.expect.fail("Response body was not valid JSON: " + error.message); }',
+    "  const errors = [];",
+    '  validateSchema(parsed, schema, "$", errors);',
+    '  if (errors.length > 0) pm.expect.fail(errors.slice(0, 10).join("; "));',
+    "});"
+  ];
+}
+function matchOperation(index, request2) {
+  const record = asRecord2(request2);
+  const method = String(record?.method || "").toUpperCase();
+  const path4 = requestPath(request2);
+  const candidates = index.operations.filter((operation) => operation.method === method).map((operation) => ({ operation, score: pathScore(operation.path, path4) })).filter((entry) => entry.score >= 0).sort((a, b) => b.score - a.score || a.operation.path.localeCompare(b.operation.path));
+  return { method, operation: candidates[0]?.operation, path: path4 };
+}
+function requestPath(request2) {
+  const record = asRecord2(request2);
+  const url2 = record?.url ?? request2;
+  if (typeof url2 === "string") return pathFromRaw(url2);
+  const urlRecord = asRecord2(url2);
+  if (!urlRecord) return "/";
+  if (typeof urlRecord.raw === "string") return pathFromRaw(urlRecord.raw);
+  if (Array.isArray(urlRecord.path)) {
+    return normalizePath(`/${urlRecord.path.map(stringifyPathSegment).filter(Boolean).join("/")}`);
+  }
+  if (typeof urlRecord.path === "string") return normalizePath(urlRecord.path);
+  return "/";
+}
+function stringifyPathSegment(segment) {
+  if (typeof segment === "string") return segment;
+  const record = asRecord2(segment);
+  return String(record?.value || record?.key || record?.name || segment || "");
+}
+function pathFromRaw(raw) {
+  let value = String(raw || "").trim();
+  value = value.replace(/^\{\{[^}]+}}/, "");
+  try {
+    return normalizePath(new URL(value).pathname);
+  } catch {
+    value = value.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "");
+    return normalizePath(value || "/");
+  }
+}
+function normalizePath(path4) {
+  const raw = String(path4 || "").split(/[?#]/, 1)[0] || "/";
+  const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  const collapsed = withSlash.replace(/\/+/g, "/");
+  return collapsed.length > 1 ? collapsed.replace(/\/+$/g, "") : collapsed;
+}
+function pathScore(candidate, request2) {
+  const candidateParts = normalizePath(candidate).split("/").filter(Boolean);
+  const requestParts = normalizePath(request2).split("/").filter(Boolean);
+  if (candidateParts.length !== requestParts.length) return -1;
+  let score = 0;
+  for (let index = 0; index < candidateParts.length; index += 1) {
+    const candidatePart = candidateParts[index] || "";
+    const requestPart = requestParts[index] || "";
+    if (/^\{[^}]+}$/.test(candidatePart) || /^:[^/]+$/.test(candidatePart) || /^\{\{[^}]+}}$/.test(candidatePart)) {
+      score += 1;
+      continue;
+    }
+    if (candidatePart !== requestPart) return -1;
+    score += 10;
+  }
+  return score;
+}
+
+// src/contract-hints.ts
+var MAX_HINTS = 5;
+var MAX_DEPTH = 8;
+function buildContractHints(specPath, failures) {
+  if (!specPath || failures.length === 0) return [];
+  const root = parseOpenApiDocument(readFileSync4(resolveWorkspacePath(specPath), "utf8"));
+  const index = buildContractIndex(root);
+  const hints = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const failure of failures) {
+    const operation = findOperation(index.operations, failure);
+    if (!operation) continue;
+    const key = `${operation.method} ${operation.path} ${operation.operationId || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    hints.push(toContractHint(operation));
+    if (hints.length >= MAX_HINTS) break;
+  }
+  return hints;
+}
+function findOperation(operations, failure) {
+  if (failure.operationId) {
+    const byOperationId = operations.find((operation) => operation.operationId === failure.operationId);
+    if (byOperationId) return byOperationId;
+  }
+  const method = failure.method?.toUpperCase();
+  if (method && failure.path) {
+    return operations.find((operation) => operation.method === method && operation.path === failure.path);
+  }
+  return void 0;
+}
+function toContractHint(operation) {
+  return {
+    method: operation.method,
+    ...operation.operationId ? { operationId: operation.operationId } : {},
+    path: operation.path,
+    responses: Object.entries(operation.responses).sort(([left], [right]) => left.localeCompare(right)).map(([status, response]) => ({
+      ...response.description ? { description: response.description } : {},
+      content: Object.fromEntries(Object.entries(response.content).map(([mediaType, media]) => [
+        mediaType,
+        media.schema === void 0 ? {} : { schema: simplifySchema(media.schema) }
+      ])),
+      status
+    }))
+  };
+}
+function simplifySchema(value, depth = 0) {
+  if (depth > MAX_DEPTH) return {};
+  if (Array.isArray(value)) {
+    return value.map((entry) => simplifySchema(entry, depth + 1));
+  }
+  if (!isRecord(value)) return value;
+  const output = {};
+  copyScalarKeys(value, output);
+  if (Array.isArray(value.required)) {
+    output.required = value.required.filter((entry) => typeof entry === "string");
+  }
+  if (isRecord(value.properties)) {
+    output.properties = Object.fromEntries(Object.entries(value.properties).map(([key, entry]) => [
+      key,
+      simplifySchema(entry, depth + 1)
+    ]));
+  }
+  if (value.items !== void 0) {
+    output.items = simplifySchema(value.items, depth + 1);
+  }
+  for (const combinator of ["allOf", "anyOf", "oneOf"]) {
+    if (Array.isArray(value[combinator])) {
+      output[combinator] = value[combinator].map((entry) => simplifySchema(entry, depth + 1));
+    }
+  }
+  if (value.additionalProperties !== void 0 && typeof value.additionalProperties !== "function") {
+    output.additionalProperties = typeof value.additionalProperties === "boolean" ? value.additionalProperties : simplifySchema(value.additionalProperties, depth + 1);
+  }
+  return output;
+}
+function copyScalarKeys(input, output) {
+  for (const key of [
+    "type",
+    "format",
+    "enum",
+    "const",
+    "nullable",
+    "pattern",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "minLength",
+    "maxLength",
+    "minItems",
+    "maxItems"
+  ]) {
+    if (input[key] !== void 0) output[key] = input[key];
+  }
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // src/failure-normalizer.ts
 var MAX_FAILURES = 10;
 var MAX_MESSAGE_LENGTH = 400;
@@ -106251,7 +106697,7 @@ function parseTaggedAssertion(line) {
   const match = TDD_ASSERTION_PATTERN.exec(candidate);
   if (!match?.groups) return void 0;
   const method = match.groups.method?.toUpperCase();
-  const path4 = normalizePath(match.groups.path || "");
+  const path4 = normalizePath2(match.groups.path || "");
   const assertion = normalizeAssertion(match.groups.assertion || "");
   if (!method || !path4 || !assertion) return void 0;
   return {
@@ -106294,7 +106740,7 @@ function normalizeFailureMessage(value) {
 function normalizeAssertion(value) {
   return value.replace(/\s+/g, " ").replace(/\s+(?:failed|error)$/i, "").trim().toLowerCase();
 }
-function normalizePath(value) {
+function normalizePath2(value) {
   try {
     const url2 = new URL(value);
     return url2.pathname || value;
@@ -106983,350 +107429,7 @@ function sortHashes(hashes) {
 import { resolve as resolve6 } from "node:path";
 
 // src/preview-assets.ts
-import { readFileSync as readFileSync4 } from "node:fs";
-
-// src/contract.ts
-var import_yaml2 = __toESM(require_dist6(), 1);
-var HTTP_METHODS = /* @__PURE__ */ new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"]);
-function asRecord2(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-function parseOpenApiDocument(content) {
-  const head = content.trimStart();
-  const parsed = head.startsWith("{") ? JSON.parse(content) : (0, import_yaml2.parse)(content);
-  const root = asRecord2(parsed);
-  if (!root) {
-    throw new Error("OpenAPI document must be an object");
-  }
-  return root;
-}
-function detectOpenApiVersion(root) {
-  const raw = String(root.openapi || "").trim();
-  if (/^3\.1(?:\.\d+)?$/.test(raw)) return "3.1";
-  if (/^3\.0(?:\.\d+)?$/.test(raw)) return "3.0";
-  throw new Error(`Dynamic TDD contracts require OpenAPI 3.0 or 3.1, got: ${raw || "<missing>"}`);
-}
-function buildContractIndex(root) {
-  const warnings = [];
-  const paths = asRecord2(root.paths);
-  if (!paths) {
-    throw new Error("OpenAPI document must define paths");
-  }
-  const operations = [];
-  for (const [path4, pathItemRaw] of Object.entries(paths)) {
-    const pathItem = asRecord2(pathItemRaw);
-    if (!pathItem) continue;
-    for (const [methodRaw, operationRaw] of Object.entries(pathItem)) {
-      const method = methodRaw.toLowerCase();
-      if (!HTTP_METHODS.has(method)) continue;
-      const operation = resolveRef(root, operationRaw);
-      if (!operation) continue;
-      operations.push({
-        method: method.toUpperCase(),
-        operationId: typeof operation.operationId === "string" ? operation.operationId : void 0,
-        path: path4,
-        responses: collectResponses(root, operation)
-      });
-    }
-  }
-  if (operations.length === 0) {
-    warnings.push("CONTRACT_NO_OPERATIONS: OpenAPI document contains no operations");
-  }
-  return {
-    openapiVersion: detectOpenApiVersion(root),
-    operations,
-    warnings
-  };
-}
-function collectResponses(root, operation) {
-  const responsesRoot = asRecord2(operation.responses) || {};
-  const responses = {};
-  for (const [status, responseRaw] of Object.entries(responsesRoot)) {
-    const response = resolveRef(root, responseRaw) || {};
-    const contentRoot = asRecord2(response.content) || {};
-    const content = {};
-    for (const [mediaType, mediaRaw] of Object.entries(contentRoot)) {
-      const media = asRecord2(mediaRaw) || {};
-      const schema = media.schema === void 0 ? void 0 : dereferenceSchema(root, media.schema);
-      content[mediaType] = schema === void 0 ? {} : { schema };
-    }
-    responses[normalizeResponseKey(status)] = {
-      content,
-      description: typeof response.description === "string" ? response.description : void 0
-    };
-  }
-  return responses;
-}
-function resolvePointer(root, ref) {
-  const path4 = ref.slice(2).split("/").map((part) => part.replace(/~1/g, "/").replace(/~0/g, "~"));
-  let current = root;
-  for (const part of path4) {
-    const record = asRecord2(current);
-    if (!record) return void 0;
-    current = record[part];
-  }
-  return current;
-}
-function resolveRef(root, value) {
-  const record = asRecord2(value);
-  if (!record) return null;
-  const ref = typeof record.$ref === "string" ? record.$ref : "";
-  if (!ref) return record;
-  if (!ref.startsWith("#/")) {
-    throw new Error(`External $ref remained in OpenAPI document: ${ref}`);
-  }
-  const resolved = asRecord2(resolvePointer(root, ref));
-  if (!resolved) {
-    throw new Error(`Unresolved OpenAPI $ref: ${ref}`);
-  }
-  return resolved;
-}
-function dereferenceSchema(root, schema, seen = /* @__PURE__ */ new Set()) {
-  if (Array.isArray(schema)) {
-    return schema.map((entry) => dereferenceSchema(root, entry, seen));
-  }
-  const record = asRecord2(schema);
-  if (!record) return schema;
-  const ref = typeof record.$ref === "string" ? record.$ref : "";
-  if (ref) {
-    if (!ref.startsWith("#/")) {
-      return { unsupported: `external ref ${ref}` };
-    }
-    if (seen.has(ref)) {
-      return {};
-    }
-    seen.add(ref);
-    return dereferenceSchema(root, resolvePointer(root, ref), seen);
-  }
-  const copy = {};
-  for (const [key, value] of Object.entries(record)) {
-    copy[key] = dereferenceSchema(root, value, new Set(seen));
-  }
-  return copy;
-}
-function normalizeResponseKey(status) {
-  return /^[1-5]xx$/i.test(status) ? status.toUpperCase() : status;
-}
-function instrumentContractCollection(collection, index) {
-  const warnings = [...index.warnings];
-  const clone = sanitizeCollectionForUpdate(collection);
-  const visit = (item) => {
-    if (item.request) {
-      const match = matchOperation(index, item.request);
-      if (match.operation) {
-        const events = asArray(item.event).filter((event) => {
-          const record = asRecord2(event);
-          return record?.listen !== "test";
-        });
-        item.event = [
-          ...events,
-          {
-            listen: "test",
-            script: {
-              type: "text/javascript",
-              exec: createContractScript(match.operation)
-            }
-          }
-        ];
-      } else {
-        warnings.push(`CONTRACT_REQUEST_NOT_MATCHED: ${match.method || "<method>"} ${match.path}`);
-      }
-    }
-    for (const child of asArray(item.item).map((entry) => asRecord2(entry)).filter(Boolean)) {
-      visit(child);
-    }
-  };
-  for (const item of asArray(clone.item).map((entry) => asRecord2(entry)).filter(Boolean)) {
-    visit(item);
-  }
-  return { collection: clone, warnings };
-}
-function sanitizeCollectionForUpdate(value) {
-  if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeCollectionForUpdate(entry));
-  }
-  const record = asRecord2(value);
-  if (!record) return value;
-  const clone = {};
-  for (const [key, entry] of Object.entries(record)) {
-    if (["id", "uid", "_postman_id"].includes(key)) continue;
-    if (key === "response") continue;
-    clone[key] = sanitizeCollectionForUpdate(entry);
-  }
-  return clone;
-}
-function createContractScript(operation) {
-  const contract = {
-    method: operation.method,
-    operationId: operation.operationId,
-    path: operation.path,
-    responses: operation.responses
-  };
-  return [
-    "// [Postman TDD] Auto-generated OpenAPI contract assertions",
-    `const contract = JSON.parse(${JSON.stringify(JSON.stringify(contract))});`,
-    'function responseText() { return pm.response.text() || ""; }',
-    'function isBodyless() { return pm.response.code === 204 || pm.response.code === 205 || pm.response.code === 304 || contract.method === "HEAD"; }',
-    'function mediaBase(value) { return String(value || "").toLowerCase().split(";")[0].trim(); }',
-    "function selectResponseContract() {",
-    "  const status = String(pm.response.code);",
-    "  if (contract.responses[status]) return { key: status, value: contract.responses[status] };",
-    '  const range = String(Math.floor(pm.response.code / 100)) + "XX";',
-    "  if (contract.responses[range]) return { key: range, value: contract.responses[range] };",
-    '  if (contract.responses.default) return { key: "default", value: contract.responses.default };',
-    "  return null;",
-    "}",
-    "function expectedMedia(responseContract) { return Object.keys(responseContract.content || {}); }",
-    "function selectSchema(responseContract) {",
-    "  const content = responseContract.content || {};",
-    '  const actual = mediaBase(pm.response.headers.get("Content-Type") || "");',
-    "  const keys = Object.keys(content);",
-    "  if (keys.length === 0) return undefined;",
-    "  const exact = keys.find((key) => mediaBase(key) === actual);",
-    "  if (exact) return content[exact].schema;",
-    '  const json = keys.find((key) => mediaBase(key) === "application/json" && /json$/.test(actual));',
-    "  return json ? content[json].schema : content[keys[0]].schema;",
-    "}",
-    'function typeOf(value) { if (Array.isArray(value)) return "array"; if (value === null) return "null"; if (Number.isInteger(value)) return "integer"; return typeof value; }',
-    "function schemaTypes(schema) { const type = schema && schema.type; return Array.isArray(type) ? type : type ? [type] : []; }",
-    'function operationLabel() { return [contract.operationId, contract.method, contract.path].filter(Boolean).join(" "); }',
-    'function tddAssertion(name) { return "[Postman TDD] " + operationLabel() + " :: " + name; }',
-    "function validateSchema(value, schema, path, errors) {",
-    '  if (!schema || typeof schema !== "object") return;',
-    '  if (schema.unsupported) { errors.push(path + " uses unsupported schema: " + schema.unsupported); return; }',
-    "  if (schema.allOf) schema.allOf.forEach((entry) => validateSchema(value, entry, path, errors));",
-    "  const types = schemaTypes(schema);",
-    "  if (types.length > 0) {",
-    "    const actual = typeOf(value);",
-    '    const ok = types.some((type) => type === actual || (type === "number" && actual === "integer"));',
-    '    if (!ok) { errors.push(path + " expected " + types.join("|") + " but received " + actual); return; }',
-    "  }",
-    '  if (schema.enum && !schema.enum.some((entry) => JSON.stringify(entry) === JSON.stringify(value))) errors.push(path + " expected enum value " + JSON.stringify(schema.enum));',
-    '  if (schema.const !== undefined && JSON.stringify(schema.const) !== JSON.stringify(value)) errors.push(path + " expected const " + JSON.stringify(schema.const));',
-    '  if (typeof value === "string") {',
-    '    if (typeof schema.minLength === "number" && value.length < schema.minLength) errors.push(path + " expected minLength " + schema.minLength + " but received length " + value.length);',
-    '    if (typeof schema.maxLength === "number" && value.length > schema.maxLength) errors.push(path + " expected maxLength " + schema.maxLength + " but received length " + value.length);',
-    '    if (typeof schema.pattern === "string") {',
-    "      let regex;",
-    '      try { regex = new RegExp(schema.pattern); } catch (error) { errors.push(path + " has invalid pattern " + JSON.stringify(schema.pattern)); }',
-    '      if (regex && !regex.test(value)) errors.push(path + " expected pattern " + schema.pattern);',
-    "    }",
-    "  }",
-    '  if (typeof value === "number" && Number.isFinite(value)) {',
-    '    const minimum = typeof schema.minimum === "number" ? schema.minimum : undefined;',
-    '    const maximum = typeof schema.maximum === "number" ? schema.maximum : undefined;',
-    '    const exclusiveMinimum = typeof schema.exclusiveMinimum === "number" ? schema.exclusiveMinimum : undefined;',
-    '    const exclusiveMaximum = typeof schema.exclusiveMaximum === "number" ? schema.exclusiveMaximum : undefined;',
-    '    if (exclusiveMinimum !== undefined) { if (!(value > exclusiveMinimum)) errors.push(path + " expected exclusiveMinimum " + exclusiveMinimum + " but received " + value); }',
-    "    else if (minimum !== undefined) {",
-    '      if (schema.exclusiveMinimum === true ? !(value > minimum) : value < minimum) errors.push(path + " expected " + (schema.exclusiveMinimum === true ? "exclusiveMinimum " : "minimum ") + minimum + " but received " + value);',
-    "    }",
-    '    if (exclusiveMaximum !== undefined) { if (!(value < exclusiveMaximum)) errors.push(path + " expected exclusiveMaximum " + exclusiveMaximum + " but received " + value); }',
-    "    else if (maximum !== undefined) {",
-    '      if (schema.exclusiveMaximum === true ? !(value < maximum) : value > maximum) errors.push(path + " expected " + (schema.exclusiveMaximum === true ? "exclusiveMaximum " : "maximum ") + maximum + " but received " + value);',
-    "    }",
-    "  }",
-    '  if (schema.type === "object" || schema.properties) {',
-    "    const required = Array.isArray(schema.required) ? schema.required : [];",
-    '    required.forEach((key) => { if (!value || typeof value !== "object" || !(key in value)) errors.push(path + "." + key + " is required"); });',
-    '    Object.entries(schema.properties || {}).forEach(([key, child]) => { if (value && typeof value === "object" && key in value) validateSchema(value[key], child, path + "." + key, errors); });',
-    "  }",
-    '  if (schema.type === "array" && schema.items && Array.isArray(value)) value.forEach((entry, index) => validateSchema(entry, schema.items, path + "[" + index + "]", errors));',
-    "}",
-    "const selected = selectResponseContract();",
-    'pm.test(tddAssertion("operation mapping exists"), function () { pm.expect(contract.path).to.be.a("string").and.not.empty; });',
-    'pm.test(tddAssertion("status code is defined by OpenAPI"), function () { pm.expect(selected, "No OpenAPI response defined for " + contract.method + " " + contract.path + " status " + pm.response.code).to.exist; });',
-    'pm.test(tddAssertion("response body matches body contract"), function () {',
-    "  if (!selected) return;",
-    "  if (isBodyless()) { pm.expect(responseText().trim().length).to.equal(0); return; }",
-    "  const media = expectedMedia(selected.value);",
-    '  if (media.length === 0) pm.expect(responseText().trim().length, "OpenAPI response defines no body but response body was not empty").to.equal(0);',
-    '  else pm.expect(responseText().trim().length, "OpenAPI response defines a body but response body was empty").to.be.above(0);',
-    "});",
-    'pm.test(tddAssertion("content-type matches OpenAPI response content"), function () {',
-    "  if (!selected || isBodyless()) return;",
-    "  const media = expectedMedia(selected.value);",
-    "  if (media.length === 0) return;",
-    '  const actual = mediaBase(pm.response.headers.get("Content-Type") || "");',
-    '  pm.expect(actual, "Content-Type must match one of " + media.join(", ")).to.not.equal("");',
-    '  const matches = media.some((entry) => mediaBase(entry) === actual || (mediaBase(entry) === "application/json" && /json$/.test(actual)));',
-    '  pm.expect(matches, "Content-Type " + actual + " did not match OpenAPI content " + media.join(", ")).to.equal(true);',
-    "});",
-    'pm.test(tddAssertion("response body matches schema"), function () {',
-    "  if (!selected || isBodyless()) return;",
-    "  const schema = selectSchema(selected.value);",
-    "  if (!schema) return;",
-    "  const body = responseText().trim();",
-    "  if (!body) return;",
-    "  let parsed;",
-    '  try { parsed = JSON.parse(body); } catch (error) { pm.expect.fail("Response body was not valid JSON: " + error.message); }',
-    "  const errors = [];",
-    '  validateSchema(parsed, schema, "$", errors);',
-    '  if (errors.length > 0) pm.expect.fail(errors.slice(0, 10).join("; "));',
-    "});"
-  ];
-}
-function matchOperation(index, request2) {
-  const record = asRecord2(request2);
-  const method = String(record?.method || "").toUpperCase();
-  const path4 = requestPath(request2);
-  const candidates = index.operations.filter((operation) => operation.method === method).map((operation) => ({ operation, score: pathScore(operation.path, path4) })).filter((entry) => entry.score >= 0).sort((a, b) => b.score - a.score || a.operation.path.localeCompare(b.operation.path));
-  return { method, operation: candidates[0]?.operation, path: path4 };
-}
-function requestPath(request2) {
-  const record = asRecord2(request2);
-  const url2 = record?.url ?? request2;
-  if (typeof url2 === "string") return pathFromRaw(url2);
-  const urlRecord = asRecord2(url2);
-  if (!urlRecord) return "/";
-  if (typeof urlRecord.raw === "string") return pathFromRaw(urlRecord.raw);
-  if (Array.isArray(urlRecord.path)) {
-    return normalizePath2(`/${urlRecord.path.map(stringifyPathSegment).filter(Boolean).join("/")}`);
-  }
-  if (typeof urlRecord.path === "string") return normalizePath2(urlRecord.path);
-  return "/";
-}
-function stringifyPathSegment(segment) {
-  if (typeof segment === "string") return segment;
-  const record = asRecord2(segment);
-  return String(record?.value || record?.key || record?.name || segment || "");
-}
-function pathFromRaw(raw) {
-  let value = String(raw || "").trim();
-  value = value.replace(/^\{\{[^}]+}}/, "");
-  try {
-    return normalizePath2(new URL(value).pathname);
-  } catch {
-    value = value.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "");
-    return normalizePath2(value || "/");
-  }
-}
-function normalizePath2(path4) {
-  const raw = String(path4 || "").split(/[?#]/, 1)[0] || "/";
-  const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
-  const collapsed = withSlash.replace(/\/+/g, "/");
-  return collapsed.length > 1 ? collapsed.replace(/\/+$/g, "") : collapsed;
-}
-function pathScore(candidate, request2) {
-  const candidateParts = normalizePath2(candidate).split("/").filter(Boolean);
-  const requestParts = normalizePath2(request2).split("/").filter(Boolean);
-  if (candidateParts.length !== requestParts.length) return -1;
-  let score = 0;
-  for (let index = 0; index < candidateParts.length; index += 1) {
-    const candidatePart = candidateParts[index] || "";
-    const requestPart = requestParts[index] || "";
-    if (/^\{[^}]+}$/.test(candidatePart) || /^:[^/]+$/.test(candidatePart) || /^\{\{[^}]+}}$/.test(candidatePart)) {
-      score += 1;
-      continue;
-    }
-    if (candidatePart !== requestPart) return -1;
-    score += 10;
-  }
-  return score;
-}
+import { readFileSync as readFileSync5 } from "node:fs";
 
 // src/github/repo-mutation.ts
 import { spawn } from "node:child_process";
@@ -107467,7 +107570,7 @@ async function resolveTddWorkspace(options) {
 }
 async function upsertPreviewAssets(options) {
   info(`[postman-tdd] Reading OpenAPI spec from ${options.config.specPath}.`);
-  const specContent = readFileSync4(resolveWorkspacePath(options.config.specPath), "utf8");
+  const specContent = readFileSync5(resolveWorkspacePath(options.config.specPath), "utf8");
   info(`[postman-tdd] Spec size: ${Buffer.byteLength(specContent, "utf8")} bytes.`);
   const document2 = parseOpenApiDocument(specContent);
   const contractIndex = buildContractIndex(document2);
@@ -107698,7 +107801,7 @@ async function runTddCollection(collectionId, baseUrl2, mask) {
 // src/repair/git.ts
 import { createHash as createHash4 } from "node:crypto";
 import { execFileSync as execFileSync2 } from "node:child_process";
-import { readFileSync as readFileSync5 } from "node:fs";
+import { readFileSync as readFileSync6 } from "node:fs";
 import { resolve as resolve4 } from "node:path";
 
 // src/repair/patch.ts
@@ -107893,14 +107996,14 @@ function hashPaths(repoRoot, paths) {
     const normalized = repoRelativePath(repoRoot, path4);
     return {
       path: normalized,
-      sha256: createHash4("sha256").update(readFileSync5(resolve4(repoRoot, normalized))).digest("hex")
+      sha256: createHash4("sha256").update(readFileSync6(resolve4(repoRoot, normalized))).digest("hex")
     };
   });
 }
 function verifyPathHashes(repoRoot, hashes) {
   for (const expected of hashes) {
     const normalized = repoRelativePath(repoRoot, expected.path);
-    const actual = createHash4("sha256").update(readFileSync5(resolve4(repoRoot, normalized))).digest("hex");
+    const actual = createHash4("sha256").update(readFileSync6(resolve4(repoRoot, normalized))).digest("hex");
     if (actual !== expected.sha256) {
       throw new Error(`Immutable path changed during repair: ${normalized}`);
     }
@@ -108003,6 +108106,7 @@ function buildRepairPrompt(failure, context5) {
     JSON.stringify({
       baseUrl: failure.baseUrl,
       collectionName: failure.collectionName,
+      contractHints: failure.contractHints,
       failures: failure.failures,
       phase: failure.phase,
       successCriteria: failure.successCriteria
@@ -108012,7 +108116,7 @@ function buildRepairPrompt(failure, context5) {
 
 // src/repair/tools.ts
 import { execFileSync as execFileSync3 } from "node:child_process";
-import { existsSync as existsSync6, readFileSync as readFileSync6, statSync as statSync2 } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync7, statSync as statSync2 } from "node:fs";
 import { resolve as resolve5 } from "node:path";
 var MAX_FILE_BYTES = 12e4;
 var MAX_SEARCH_RESULTS = 25;
@@ -108116,7 +108220,7 @@ function executeRepairTool(name, args, context5) {
       if (stats.size > MAX_FILE_BYTES) {
         throw new Error(`File is too large to read through repair tool: ${path4}`);
       }
-      return { content: readFileSync6(absolutePath, "utf8") };
+      return { content: readFileSync7(absolutePath, "utf8") };
     }
     if (name === "search_files") {
       const query = String(args.query || "");
@@ -108161,7 +108265,7 @@ function searchAllowedFiles(context5, query) {
   for (const path4 of listAllowedFiles(context5)) {
     const absolutePath = resolve5(context5.repoRoot, path4);
     if (!existsSync6(absolutePath) || statSync2(absolutePath).size > MAX_FILE_BYTES) continue;
-    const lines = readFileSync6(absolutePath, "utf8").split(/\r?\n/);
+    const lines = readFileSync7(absolutePath, "utf8").split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
       const text = lines[index] || "";
       if (text.includes(query)) {
@@ -108207,7 +108311,7 @@ async function runAnthropicRepairTurn(options) {
       secretMasker: options.secretMasker,
       tools
     });
-    const content = Array.isArray(response.content) ? response.content.filter(isRecord) : [];
+    const content = Array.isArray(response.content) ? response.content.filter(isRecord2) : [];
     const calls = content.filter(isToolUseBlock);
     info(`[postman-tdd] Anthropic Messages round ${round + 1}: received ${calls.length} tool use block(s).`);
     if (calls.length === 0) {
@@ -108301,9 +108405,9 @@ function logToolResult(name, result) {
   }
 }
 function isToolUseBlock(value) {
-  return value.type === "tool_use" && typeof value.id === "string" && typeof value.name === "string" && isRecord(value.input);
+  return value.type === "tool_use" && typeof value.id === "string" && typeof value.name === "string" && isRecord2(value.input);
 }
-function isRecord(value) {
+function isRecord2(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 function extractText(response) {
@@ -108641,8 +108745,8 @@ function parseAgentModeEvents(body2, secretMasker) {
   };
   const chunkBuffers = /* @__PURE__ */ new Map();
   for (const event of parseSseJsonEvents(body2)) {
-    const data = isRecord2(event.data) ? event.data : event;
-    const metadata2 = isRecord2(data.metadata) ? data.metadata : {};
+    const data = isRecord3(event.data) ? event.data : event;
+    const metadata2 = isRecord3(data.metadata) ? data.metadata : {};
     result.conversationId = stringValue2(event.conversationId) || stringValue2(metadata2.conversationId) || stringValue2(data.conversationId) || stringValue2(data.id) || result.conversationId;
     result.toolCallGroupId = stringValue2(event.toolCallGroupId) || stringValue2(metadata2.toolCallGroupId) || stringValue2(data.toolCallGroupId) || result.toolCallGroupId;
     const eventType = String(event.eventType || event.type || "");
@@ -108707,17 +108811,17 @@ function parseSseJsonEvents(body2) {
     const payload = normalized.slice("data:".length).trim();
     if (!payload || payload === "[DONE]") continue;
     const parsed = JSON.parse(payload);
-    if (isRecord2(parsed)) events.push(parsed);
+    if (isRecord3(parsed)) events.push(parsed);
   }
   return events;
 }
 function extractToolCallFragments(data) {
   const rawCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [data];
-  const metadata2 = isRecord2(data.metadata) ? data.metadata : {};
+  const metadata2 = isRecord3(data.metadata) ? data.metadata : {};
   const fragments = [];
   for (const rawCall of rawCalls) {
-    if (!isRecord2(rawCall)) continue;
-    const fn = isRecord2(rawCall.function) ? rawCall.function : {};
+    if (!isRecord3(rawCall)) continue;
+    const fn = isRecord3(rawCall.function) ? rawCall.function : {};
     const name = stringValue2(fn.name) || stringValue2(rawCall.name) || stringValue2(rawCall.toolName);
     const id = stringValue2(rawCall.id) || stringValue2(rawCall.toolCallId) || name;
     if (!id) continue;
@@ -108749,7 +108853,7 @@ function stringifyToolArguments(value) {
   return JSON.stringify(value);
 }
 function parseToolArguments(value) {
-  if (isRecord2(value)) return value;
+  if (isRecord3(value)) return value;
   if (typeof value !== "string" || !value.trim()) return {};
   return parseToolArgumentsMaybe(value) || {};
 }
@@ -108757,7 +108861,7 @@ function parseToolArgumentsMaybe(value) {
   if (!value.trim()) return void 0;
   try {
     const parsed = JSON.parse(value);
-    return isRecord2(parsed) ? parsed : void 0;
+    return isRecord3(parsed) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -108791,7 +108895,7 @@ function resolvePlatform() {
 function stringValue2(value) {
   return typeof value === "string" ? value.trim() : "";
 }
-function isRecord2(value) {
+function isRecord3(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
@@ -109141,15 +109245,15 @@ function validateRepairFailureContext(failure) {
   return void 0;
 }
 function isFailureEntry(value) {
-  return isRecord3(value) && isNonEmptyString(value.message);
+  return isRecord4(value) && isNonEmptyString(value.message);
 }
 function isImmutablePathHash(value) {
-  return isRecord3(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
+  return isRecord4(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
 }
 function isSuccessCriteria(value) {
-  return isRecord3(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
+  return isRecord4(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
 }
-function isRecord3(value) {
+function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isNonEmptyString(value) {
@@ -109255,6 +109359,7 @@ async function runOracle(options) {
         baseUrl: options.config.runtime.baseUrl,
         collectionName: options.assetNames.collectionName,
         commit: options.prHeadSha,
+        contractHints: buildContractHints(options.config.specPath, failures),
         failures,
         immutablePathHashes: options.immutableHashes,
         immutablePaths: options.immutablePaths,
@@ -109887,6 +109992,7 @@ async function runAction(options = {}) {
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
           commit: pr.sha,
+          contractHints: buildContractHints(config.specPath, failures),
           failures,
           immutablePathHashes,
           immutablePaths,
