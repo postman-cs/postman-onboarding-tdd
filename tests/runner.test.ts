@@ -8,6 +8,7 @@ describe('customer command environment', () => {
   it('strips action inputs and secret-like variables', () => {
     const env = createCustomerCommandEnv({
       ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'oidc-token',
+      ANTHROPIC_API_KEY: 'anthropic-key',
       AWS_ACCESS_KEY_ID: 'aws-access-key',
       DATABASE_PASSWORD: 'database-password',
       GH_TOKEN: 'gh-token',
@@ -36,7 +37,7 @@ describe('customer command environment', () => {
 
   it('runs commands with a sanitized environment when requested', async () => {
     const script = [
-      "const forbidden = ['INPUT_POSTMAN-API-KEY', 'GITHUB_TOKEN', 'OPENAI_API_KEY', 'POSTMAN_ACCESS_TOKEN'];",
+      "const forbidden = ['INPUT_POSTMAN-API-KEY', 'GITHUB_TOKEN', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'POSTMAN_ACCESS_TOKEN'];",
       'const leaked = forbidden.filter((name) => process.env[name]);',
       "if (leaked.length > 0) { console.error('leaked:' + leaked.join(',')); process.exit(2); }",
       "process.stdout.write(process.env.SAFE_VALUE || 'missing');"
@@ -45,6 +46,7 @@ describe('customer command environment', () => {
     const result = await runCommand(`node -e ${JSON.stringify(script)}`, {
       env: {
         GITHUB_TOKEN: 'github-token',
+        ANTHROPIC_API_KEY: 'anthropic-key',
         'INPUT_POSTMAN-API-KEY': 'postman-input',
         OPENAI_API_KEY: 'openai-key',
         POSTMAN_ACCESS_TOKEN: 'postman-access-token',

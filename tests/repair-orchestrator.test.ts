@@ -28,7 +28,7 @@ describe('repair orchestrator early guards', () => {
     dir = '';
   });
 
-  function createRepo(): string {
+  function createRepo(provider = 'openai-responses'): string {
     dir = mkdtempSync(join(tmpdir(), 'postman-tdd-repair-orchestrator-'));
     mkdirSync(join(dir, '.postman-template'), { recursive: true });
     writeFileSync(join(dir, '.postman-template', 'onboarding.yml'), `
@@ -45,6 +45,7 @@ tdd:
   startCommand: ./start.sh
   repair:
     enabled: true
+    provider: ${provider}
     allowedWritePaths:
       - src/**
 `, 'utf8');
@@ -215,5 +216,71 @@ tdd:
       blockedReason: 'unsupported_failure_phase',
       status: 'blocked'
     });
+  });
+
+  it('requires the OpenAI key when the OpenAI repair provider is selected', async () => {
+    createRepo('openai-responses');
+
+    await expect(runRepairMode({
+      endpointProfile: {
+        apiBaseUrl: 'https://api.getpostman.com',
+        cliInstallUrl: 'https://dl-cli.pstmn.io/install/unix.sh'
+      },
+      github: {} as never,
+      inputs: {
+        ...actionInputs(),
+        openaiApiKey: undefined
+      },
+      mask: (value) => value,
+      postman: {} as never,
+      pr: {
+        number: 123,
+        repository: 'postman-cs/pavan-test-TDD'
+      }
+    })).rejects.toThrow('openai-api-key is required when mode=repair and repair-provider=openai-responses');
+  });
+
+  it('requires the Anthropic key when the Anthropic repair provider is selected', async () => {
+    createRepo('anthropic-messages');
+
+    await expect(runRepairMode({
+      endpointProfile: {
+        apiBaseUrl: 'https://api.getpostman.com',
+        cliInstallUrl: 'https://dl-cli.pstmn.io/install/unix.sh'
+      },
+      github: {} as never,
+      inputs: {
+        ...actionInputs(),
+        anthropicApiKey: undefined,
+        openaiApiKey: undefined,
+        repairModel: 'claude-sonnet-5',
+        repairProvider: 'anthropic-messages'
+      },
+      mask: (value) => value,
+      postman: {} as never,
+      pr: {
+        number: 123,
+        repository: 'postman-cs/pavan-test-TDD'
+      }
+    })).rejects.toThrow('anthropic-api-key is required when mode=repair and repair-provider=anthropic-messages');
+  });
+
+  it('requires the action repair provider to match onboarding config', async () => {
+    createRepo('anthropic-messages');
+
+    await expect(runRepairMode({
+      endpointProfile: {
+        apiBaseUrl: 'https://api.getpostman.com',
+        cliInstallUrl: 'https://dl-cli.pstmn.io/install/unix.sh'
+      },
+      github: {} as never,
+      inputs: actionInputs(),
+      mask: (value) => value,
+      postman: {} as never,
+      pr: {
+        number: 123,
+        repository: 'postman-cs/pavan-test-TDD'
+      }
+    })).rejects.toThrow('repair-provider input (openai-responses) must match tdd.repair.provider (anthropic-messages)');
   });
 });

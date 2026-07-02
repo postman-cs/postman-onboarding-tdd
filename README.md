@@ -10,7 +10,7 @@ For each PR, the action:
 4. Runs the generated collection against your local CI service URL.
 5. Posts a sticky PR comment with a human-readable summary and compact JSON that coding agents can use.
 
-The optional repair worker can also call OpenAI, make implementation-only changes, run the same Postman collection locally, and push one repair commit only after the local TDD run passes.
+The optional repair worker can also call a configured AI repair provider, make implementation-only changes, run the same Postman collection locally, and push one repair commit only after the local TDD run passes.
 
 ## End-To-End Flow
 
@@ -39,7 +39,7 @@ flowchart TD
   P --> Q["Verify failure JSON matches latest PR head SHA"]
   Q --> R{"Repairable and same-repo PR?"}
   R -- "No" --> S["Post repair comment: blocked"]
-  R -- "Yes" --> T["OpenAI repair worker proposes implementation-only patch"]
+  R -- "Yes" --> T["Repair provider proposes implementation-only patch"]
   T --> U["Validate allowed write paths and immutable spec"]
   U --> V["Run local tests, start service, run Postman collection"]
   V --> W{"Local TDD passed?"}
@@ -109,7 +109,8 @@ Create these secrets in the customer service repository:
 | `POSTMAN_API_KEY` | yes | Creates/updates Postman workspace, spec, collection, and runs the collection. |
 | `POSTMAN_ACCESS_TOKEN` | no | Compatibility with broader Postman onboarding pipelines. |
 | `POSTMAN_TDD_SIGNING_KEY` | recommended | Signs the immutable-spec baseline so agents cannot tamper with sticky comment state. |
-| `OPENAI_API_KEY` | repair only | Used by the optional OpenAI repair worker. |
+| `OPENAI_API_KEY` | repair with OpenAI | Used when `repair-provider` is `openai-responses`. |
+| `ANTHROPIC_API_KEY` | repair with Claude | Used when `repair-provider` is `anthropic-messages`. |
 | `POSTMAN_TDD_REPAIR_TOKEN` | repair recommended | PAT or GitHub App token used to push repair commits and trigger the next preview run. |
 
 Use a long random value for `POSTMAN_TDD_SIGNING_KEY`. Implementation agents should not be able to read it.
@@ -295,7 +296,7 @@ Add repair settings to `.postman-template/onboarding.yml`:
 tdd:
   repair:
     enabled: true
-    provider: openai-responses
+    provider: openai-responses # or anthropic-messages
     maxAttempts: 3
     allowedWritePaths:
       - src/**
@@ -319,7 +320,7 @@ The worker will not write to:
 - generated Postman files,
 - secret-like files.
 
-The OpenAI model does not receive Postman secrets, GitHub tokens, the canonical spec file content, generated collection content, shell access, git access, or raw filesystem write tools.
+The selected repair model does not receive Postman secrets, GitHub tokens, the canonical spec file content, generated collection content, shell access, git access, or raw filesystem write tools. Claude repair mode uses the same guarded read/search/patch tools and the same allowed path policy as OpenAI repair mode.
 
 ### Repair Workflow
 
@@ -365,9 +366,25 @@ jobs:
           postman-access-token: ${{ secrets.POSTMAN_ACCESS_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repair-github-token: ${{ secrets.POSTMAN_TDD_REPAIR_TOKEN }}
+          repair-provider: openai-responses
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
           workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
+```
+
+To use Claude instead, set both the onboarding config and action input to `anthropic-messages`, pass `anthropic-api-key`, and use a Claude Messages model:
+
+```yaml
+        with:
+          mode: repair
+          pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
+          postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repair-github-token: ${{ secrets.POSTMAN_TDD_REPAIR_TOKEN }}
+          repair-provider: anthropic-messages
+          repair-model: claude-sonnet-5
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
 ```
 
 The repair worker:
@@ -377,7 +394,7 @@ The repair worker:
 3. Blocks fork PRs.
 4. Blocks unsupported phases such as config, workspace, immutable-state, or immutable-spec failures.
 5. Allows repair for `collection_run`, `service_startup`, and `health_check`.
-6. Lets OpenAI use guarded read/search/patch tools only.
+6. Lets the selected repair provider use guarded read/search/patch tools only.
 7. Runs `localTestCommand` when configured.
 8. Starts the service and runs the Postman TDD collection locally.
 9. Verifies immutable paths and allowed write paths.
@@ -406,10 +423,11 @@ When repair accepts one or more implementation patches, the repair comment also 
 | `committer-email` | no | `support@postman.com` | Commit author email for workspace ID writeback. |
 | `postman-region` | no | `us` | `us` or `eu`. |
 | `postman-stack` | no | `prod` | `prod` or `beta`. |
-| `openai-api-key` | repair only | | OpenAI API key for `mode: repair`. |
+| `openai-api-key` | repair with OpenAI | | OpenAI API key for `mode: repair` when `repair-provider` is `openai-responses`. |
+| `anthropic-api-key` | repair with Claude | | Anthropic API key for `mode: repair` when `repair-provider` is `anthropic-messages`. |
 | `repair-github-token` | repair recommended | `github-token` | Token used by `mode: repair` for pushing repair commits. Prefer a PAT or GitHub App token. |
-| `repair-provider` | no | `openai-responses` | Repair provider. V1 only accepts `openai-responses`. |
-| `repair-model` | no | `gpt-5.5` | OpenAI model used by `mode: repair`. |
+| `repair-provider` | no | `openai-responses` | Repair provider. One of `openai-responses` or `anthropic-messages`. Must match `tdd.repair.provider` when repair is enabled. |
+| `repair-model` | no | provider default | Model used by `mode: repair`. Defaults to `gpt-5.5` for OpenAI and `claude-sonnet-5` for Claude unless explicitly set. |
 | `repair-max-attempts` | no | `3` | Maximum accepted implementation patch attempts. |
 | `repair-commit-message` | no | `Postman TDD repair` | Commit message used for a passing repair commit. |
 

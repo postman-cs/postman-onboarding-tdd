@@ -18,7 +18,7 @@ import type { PostmanClient } from '../postman/client.js';
 import type { ActionInputs, AgentFailureDocument, PrMetadata, PreviewAssetState, RepairStatus } from '../types.js';
 import type { SecretMasker } from '../secrets.js';
 import { commitAndPushRepair, hashPaths, verifyChangedPaths, verifyPathHashes } from './git.js';
-import { runOpenAiRepairTurn } from './openai-responses-provider.js';
+import { assertMatchingRepairProvider, resolveRepairProviderApiKey, runRepairProviderTurn } from './provider-dispatcher.js';
 import type { PatchPolicy } from './patch.js';
 import { writeRepairSummary, type RepairAttemptDiagnostic, type RepairSummary } from './summary.js';
 
@@ -57,13 +57,8 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     return;
   }
 
-  if (!options.inputs.openaiApiKey) {
-    core.info('[postman-tdd] Repair cannot start because openai-api-key was not provided.');
-    throw new Error('openai-api-key is required when mode=repair');
-  }
-  if (options.inputs.repairProvider !== 'openai-responses' || config.repair.provider !== 'openai-responses') {
-    throw new Error('mode=repair v1 only supports repair-provider=openai-responses');
-  }
+  const repairProvider = assertMatchingRepairProvider(options.inputs.repairProvider, config.repair.provider);
+  resolveRepairProviderApiKey(options.inputs);
 
   core.info(`[postman-tdd] Fetching PR details for #${options.pr.number}.`);
   const prDetails = await options.github.getPullRequest(options.pr.number);
@@ -162,10 +157,10 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
   while (attempts < maxAttempts) {
     const attemptNumber = attempts + 1;
     core.info(`[postman-tdd] Repair attempt ${attemptNumber}/${maxAttempts}: asking provider for an implementation-only patch.`);
-    const repair = await runOpenAiRepairTurn({
-      apiKey: options.inputs.openaiApiKey,
+    const repair = await runRepairProviderTurn({
       failure: currentFailure,
-      model: options.inputs.repairModel,
+      inputs: options.inputs,
+      provider: repairProvider,
       repairContext: {
         allowedReadPaths: config.repair.allowedReadPaths,
         patchPolicy,
