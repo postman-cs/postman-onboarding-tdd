@@ -105873,10 +105873,10 @@ function stringArrayValue(value) {
 }
 function validateRepairProvider(value) {
   const normalized = stringValue(value || "openai-responses");
-  if (normalized === "openai-responses" || normalized === "anthropic-messages") {
+  if (normalized === "openai-responses" || normalized === "anthropic-messages" || normalized === "postman-agent-mode") {
     return normalized;
   }
-  throw new Error(`Unsupported repair-provider "${value}". Expected openai-responses or anthropic-messages`);
+  throw new Error(`Unsupported repair-provider "${value}". Expected openai-responses, anthropic-messages, or postman-agent-mode`);
 }
 function loadOnboardingConfig(options) {
   const configPath = options.configPath;
@@ -108363,9 +108363,285 @@ function extractText2(response) {
   return chunks.join("\n").trim();
 }
 
+// src/repair/postman-agent-mode-provider.ts
+var POSTMAN_AGENT_MODE_GATEWAY_URL = "https://gateway.postman.com/chat";
+var POSTMAN_AGENT_MODE_SERVICE = "agent-mode-service";
+var POSTMAN_AGENT_MODE_PRODUCT = "workspace_localmode_v12";
+async function runPostmanAgentModeRepairTurn(options) {
+  info(`[postman-tdd] Postman Agent Mode repair turn: model=${options.model}, failurePhase=${options.failure.phase}, failures=${options.failure.failures.length}.`);
+  const tools = createPostmanAgentModeTools(options.repairContext);
+  const state3 = {};
+  let body2 = createUserQueryBody({
+    model: options.model,
+    prompt: buildRepairPrompt(options.failure, options.repairContext),
+    tools
+  });
+  for (let round = 0; round < (options.maxToolRounds || 12); round += 1) {
+    info(`[postman-tdd] Postman Agent Mode round ${round + 1}: sending ${round === 0 ? "initial repair instructions" : "tool response(s)"}.`);
+    const turn = await sendAgentModeTurn({
+      apiKey: options.apiKey,
+      body: body2,
+      fetchImpl: options.fetchImpl,
+      secretMasker: options.secretMasker
+    });
+    state3.conversationId = turn.conversationId || state3.conversationId;
+    state3.toolCallGroupId = turn.toolCallGroupId || state3.toolCallGroupId;
+    info(`[postman-tdd] Postman Agent Mode round ${round + 1}: received ${turn.toolCalls.length} tool call(s).`);
+    if (turn.toolCalls.length === 0) {
+      return {
+        status: "no_change",
+        message: turn.text || "The repair agent did not call a patch or finish tool."
+      };
+    }
+    const toolResponses = [];
+    for (const call of turn.toolCalls) {
+      state3.toolCallGroupId = call.toolCallGroupId || state3.toolCallGroupId;
+      info(`[postman-tdd] Executing guarded repair tool: ${call.name}.`);
+      const result = executeRepairTool(call.name, call.input, options.repairContext);
+      logToolResult2(call.name, result);
+      toolResponses.push(createToolResponse(call, result));
+      if (call.name === "propose_patch" && result.appliedPatch) {
+        return {
+          status: "changed",
+          summary: result.summary || "Applied implementation repair patch.",
+          touchedPaths: result.touchedPaths || []
+        };
+      }
+      if (call.name === "finish") {
+        const status = String(call.input.status || "");
+        const message = String(call.input.message || result.summary || "").trim();
+        if (status === "blocked") {
+          return { status: "blocked", message: message || "Repair agent reported blocked." };
+        }
+        return { status: "no_change", message: message || "Repair agent reported ready without changes." };
+      }
+    }
+    if (!state3.conversationId || !state3.toolCallGroupId) {
+      return {
+        status: "no_change",
+        message: "Postman Agent Mode requested tool results without a conversationId and toolCallGroupId."
+      };
+    }
+    body2 = createToolResponseBody({
+      conversationId: state3.conversationId,
+      model: options.model,
+      toolCallGroupId: state3.toolCallGroupId,
+      toolResponses,
+      tools
+    });
+  }
+  info("[postman-tdd] Postman Agent Mode repair turn exhausted tool-call rounds without a patch.");
+  return {
+    status: "no_change",
+    message: "Repair agent exhausted tool-call rounds without proposing a patch."
+  };
+}
+function createPostmanAgentModeTools(context5) {
+  return createRepairTools(context5).map((tool) => ({
+    description: tool.description,
+    name: tool.name,
+    parameters: tool.parameters
+  }));
+}
+async function sendAgentModeTurn(options) {
+  if (!options.body) {
+    throw new Error("Postman Agent Mode request body is required.");
+  }
+  const fetchImpl = options.fetchImpl || fetch;
+  const response = await fetchImpl(POSTMAN_AGENT_MODE_GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      accept: "*/*",
+      "Content-Type": "application/json",
+      "x-access-token": options.apiKey,
+      "x-app-version": "postman-tdd-action",
+      "x-pstmn-req-service": POSTMAN_AGENT_MODE_SERVICE
+    },
+    body: JSON.stringify(options.body)
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Postman Agent Mode API failed (${response.status}): ${options.secretMasker(text).slice(0, 1e3)}`);
+  }
+  return parseAgentModeEvents(text, options.secretMasker);
+}
+function createUserQueryBody(options) {
+  return createAgentModeBody({
+    input: {
+      agent: null,
+      chatType: "USER_QUERY",
+      conversationId: null,
+      product: POSTMAN_AGENT_MODE_PRODUCT,
+      query: options.prompt,
+      skill: null,
+      startedFrom: "CHAT_INPUT",
+      toolResponse: "",
+      useCase: null
+    },
+    model: options.model,
+    tools: options.tools
+  });
+}
+function createToolResponseBody(options) {
+  return createAgentModeBody({
+    input: {
+      agent: null,
+      chatType: "TOOL_RESPONSE",
+      conversationId: options.conversationId,
+      product: POSTMAN_AGENT_MODE_PRODUCT,
+      skill: null,
+      startedFrom: "TOOL_RESPONSE",
+      toolCallGroupId: options.toolCallGroupId,
+      toolResponses: options.toolResponses,
+      useCase: null
+    },
+    model: options.model,
+    tools: options.tools
+  });
+}
+function createAgentModeBody(options) {
+  return {
+    backgroundContext: [],
+    clientKBTerms: {
+      excludedKBTerms: [],
+      nativeTermsHash: null
+    },
+    clientTools: {
+      excludedTools: [],
+      native: options.tools,
+      thirdParty: {}
+    },
+    devModeOptions: {
+      autoRun: true,
+      isParallelToolCallingSupported: true,
+      selectedModel: options.model
+    },
+    input: options.input,
+    mandatoryContext: {
+      workspaceId: ""
+    },
+    platform: resolvePlatform(),
+    selectedContext: []
+  };
+}
+function createToolResponse(call, result) {
+  const summary2 = result.error || result.summary || `Finished executing ${call.name}.`;
+  return {
+    content: JSON.stringify(result),
+    toolCallId: call.id,
+    toolResponseStatus: result.error ? "FAILED" : "SUCCESS",
+    toolResponseSummary: summary2.slice(0, 300),
+    ...result.error ? { toolResponseFailureType: "HANDLED_ERROR" } : {}
+  };
+}
+function parseAgentModeEvents(body2, secretMasker) {
+  const result = {
+    text: "",
+    toolCalls: []
+  };
+  for (const event of parseSseJsonEvents(body2)) {
+    const data = isRecord2(event.data) ? event.data : event;
+    result.conversationId = stringValue2(event.conversationId) || stringValue2(data.conversationId) || result.conversationId;
+    result.toolCallGroupId = stringValue2(event.toolCallGroupId) || stringValue2(data.toolCallGroupId) || result.toolCallGroupId;
+    const eventType = String(event.eventType || event.type || "");
+    if (eventType === "textChunk") {
+      result.text += stringValue2(data.textContent) || stringValue2(data.text) || "";
+    }
+    if (eventType === "failure") {
+      throw new Error(`Postman Agent Mode API failure: ${secretMasker(formatFailureEvent(data)).slice(0, 1e3)}`);
+    }
+    if (eventType === "toolCall" || eventType === "toolCallChunk") {
+      const calls = extractToolCalls(data);
+      for (const call of calls) {
+        result.toolCalls.push(call);
+        result.toolCallGroupId = call.toolCallGroupId || result.toolCallGroupId;
+      }
+    }
+  }
+  result.text = result.text.trim();
+  return result;
+}
+function parseSseJsonEvents(body2) {
+  const events = [];
+  const trimmed = body2.trim();
+  if (trimmed.startsWith("{")) {
+    const parsed = JSON.parse(trimmed);
+    events.push(parsed);
+    return events;
+  }
+  for (const line of body2.split(/\r?\n/)) {
+    const normalized = line.trim();
+    if (!normalized.startsWith("data:")) continue;
+    const payload = normalized.slice("data:".length).trim();
+    if (!payload || payload === "[DONE]") continue;
+    const parsed = JSON.parse(payload);
+    if (isRecord2(parsed)) events.push(parsed);
+  }
+  return events;
+}
+function extractToolCalls(data) {
+  const rawCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [data];
+  const calls = [];
+  for (const rawCall of rawCalls) {
+    if (!isRecord2(rawCall)) continue;
+    const fn = isRecord2(rawCall.function) ? rawCall.function : {};
+    const name = stringValue2(fn.name) || stringValue2(rawCall.name) || stringValue2(rawCall.toolName);
+    if (!name) continue;
+    const id = stringValue2(rawCall.id) || stringValue2(rawCall.toolCallId) || name;
+    const input = parseToolArguments(fn.arguments ?? rawCall.arguments ?? rawCall.args);
+    const toolCallGroupId = stringValue2(rawCall.toolCallGroupId) || stringValue2(data.toolCallGroupId) || void 0;
+    calls.push({ id, input, name, toolCallGroupId });
+  }
+  return calls;
+}
+function parseToolArguments(value) {
+  if (isRecord2(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return isRecord2(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+function formatFailureEvent(data) {
+  const parts = [
+    stringValue2(data.errorType),
+    stringValue2(data.userMessage),
+    stringValue2(data.message)
+  ].filter(Boolean);
+  return parts.join(": ") || JSON.stringify(data);
+}
+function logToolResult2(name, result) {
+  if (result.error) {
+    info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
+  } else if (name === "list_files") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
+  } else if (name === "search_files") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
+  } else if (name === "read_file") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
+  } else if (name === "propose_patch") {
+    info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(", ") || "(none)"}.`);
+  }
+}
+function resolvePlatform() {
+  if (process.platform === "darwin") return "DESKTOP_MACOS";
+  if (process.platform === "win32") return "DESKTOP_WINDOWS";
+  return "DESKTOP_LINUX";
+}
+function stringValue2(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+function isRecord2(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
 // src/repair/provider-dispatcher.ts
 function defaultRepairModel(provider) {
-  return provider === "anthropic-messages" ? "claude-sonnet-5" : "gpt-5.5";
+  if (provider === "anthropic-messages") return "claude-sonnet-5";
+  if (provider === "postman-agent-mode") return "GPT_54";
+  return "gpt-5.5";
 }
 function resolveRepairProviderApiKey(inputs) {
   if (inputs.repairProvider === "openai-responses") {
@@ -108379,6 +108655,12 @@ function resolveRepairProviderApiKey(inputs) {
       throw new Error("anthropic-api-key is required when mode=repair and repair-provider=anthropic-messages");
     }
     return inputs.anthropicApiKey;
+  }
+  if (inputs.repairProvider === "postman-agent-mode") {
+    if (!inputs.postmanAccessToken) {
+      throw new Error("postman-access-token is required when mode=repair and repair-provider=postman-agent-mode");
+    }
+    return inputs.postmanAccessToken;
   }
   assertNever(inputs.repairProvider);
 }
@@ -108403,6 +108685,17 @@ function runRepairProviderTurn(options) {
   }
   if (options.provider === "anthropic-messages") {
     return runAnthropicRepairTurn({
+      apiKey,
+      failure: options.failure,
+      fetchImpl: options.fetchImpl,
+      maxToolRounds: options.maxToolRounds,
+      model: options.inputs.repairModel,
+      repairContext: options.repairContext,
+      secretMasker: options.secretMasker
+    });
+  }
+  if (options.provider === "postman-agent-mode") {
+    return runPostmanAgentModeRepairTurn({
       apiKey,
       failure: options.failure,
       fetchImpl: options.fetchImpl,
@@ -108690,15 +108983,15 @@ function validateRepairFailureContext(failure) {
   return void 0;
 }
 function isFailureEntry(value) {
-  return isRecord2(value) && isNonEmptyString(value.message);
+  return isRecord3(value) && isNonEmptyString(value.message);
 }
 function isImmutablePathHash(value) {
-  return isRecord2(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
+  return isRecord3(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
 }
 function isSuccessCriteria(value) {
-  return isRecord2(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
+  return isRecord3(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
 }
-function isRecord2(value) {
+function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isNonEmptyString(value) {

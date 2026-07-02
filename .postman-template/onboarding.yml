@@ -32,6 +32,7 @@ tdd:
     # Choose one:
     # - openai-responses: pass openai-api-key in the repair workflow.
     # - anthropic-messages: pass anthropic-api-key in the repair workflow.
+    # - postman-agent-mode: pass postman-access-token in the repair workflow.
     provider: openai-responses
     maxAttempts: 3
     allowedWritePaths:

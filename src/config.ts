@@ -45,10 +45,10 @@ function stringArrayValue(value: unknown): string[] {
 
 export function validateRepairProvider(value: string | undefined): RepairProvider {
   const normalized = stringValue(value || 'openai-responses');
-  if (normalized === 'openai-responses' || normalized === 'anthropic-messages') {
+  if (normalized === 'openai-responses' || normalized === 'anthropic-messages' || normalized === 'postman-agent-mode') {
     return normalized;
   }
-  throw new Error(`Unsupported repair-provider "${value}". Expected openai-responses or anthropic-messages`);
+  throw new Error(`Unsupported repair-provider "${value}". Expected openai-responses, anthropic-messages, or postman-agent-mode`);
 }
 
 export function loadOnboardingConfig(options: ConfigLoadOptions): ResolvedOnboardingConfig {

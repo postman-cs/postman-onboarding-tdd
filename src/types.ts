@@ -16,7 +16,7 @@ export type FailurePhase =
 
 export type RepairStatus = 'repaired' | 'blocked' | 'skipped' | 'failed';
 
-export type RepairProvider = 'openai-responses' | 'anthropic-messages';
+export type RepairProvider = 'openai-responses' | 'anthropic-messages' | 'postman-agent-mode';
 
 export type ActionStatus = 'passed' | 'failed' | 'skipped' | 'cleaned-up';
 
