@@ -108398,6 +108398,25 @@ async function runPostmanAgentModeRepairTurn(options) {
     for (const call of turn.toolCalls) {
       state3.toolCallGroupId = call.toolCallGroupId || state3.toolCallGroupId;
       info(`[postman-tdd] Executing guarded repair tool: ${call.name}.`);
+      if (call.name === "finish") {
+        const status = String(call.input.status || "").trim();
+        const message = String(call.input.message || "").trim();
+        if (status !== "blocked" && status !== "ready" || !message) {
+          const result3 = {
+            error: 'finish requires status "blocked" or "ready" and a non-empty message.'
+          };
+          logToolResult2(call.name, result3);
+          toolResponses.push(createToolResponse(call, result3));
+          continue;
+        }
+        const result2 = executeRepairTool(call.name, call.input, options.repairContext);
+        logToolResult2(call.name, result2);
+        toolResponses.push(createToolResponse(call, result2));
+        if (status === "blocked") {
+          return { status: "blocked", message };
+        }
+        return { status: "no_change", message };
+      }
       const result = executeRepairTool(call.name, call.input, options.repairContext);
       logToolResult2(call.name, result);
       toolResponses.push(createToolResponse(call, result));
@@ -108407,14 +108426,6 @@ async function runPostmanAgentModeRepairTurn(options) {
           summary: result.summary || "Applied implementation repair patch.",
           touchedPaths: result.touchedPaths || []
         };
-      }
-      if (call.name === "finish") {
-        const status = String(call.input.status || "");
-        const message = String(call.input.message || result.summary || "").trim();
-        if (status === "blocked") {
-          return { status: "blocked", message: message || "Repair agent reported blocked." };
-        }
-        return { status: "no_change", message: message || "Repair agent reported ready without changes." };
       }
     }
     if (!state3.conversationId || !state3.toolCallGroupId) {

@@ -240,6 +240,63 @@ describe('Postman Agent Mode repair provider', () => {
     expect(String(toolResponses[0]?.content)).not.toContain('"tool_use"');
   });
 
+  it('treats malformed finish calls as handled tool errors before continuing', async () => {
+    const repoRoot = createRepo();
+    const patch = diffFor(repoRoot);
+    const requests: JsonRecord[] = [];
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const body = JSON.parse(String(init?.body || '{}')) as JsonRecord;
+      requests.push(body);
+      if (requests.length === 1) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => sse({
+            data: {
+              metadata: {
+                conversationId: 'conv-1',
+                toolCallGroupId: 'group-1'
+              },
+              toolCalls: [createMetadataToolCall('tool-finish', 'finish', {})]
+            },
+            eventType: 'toolCall'
+          })
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => sse(toolCallEvent(createToolCall('tool-patch', 'propose_patch', {
+          patch,
+          summary: 'Add the missing response field.'
+        })))
+      } as Response;
+    };
+
+    const result = await runPostmanAgentModeRepairTurn({
+      apiKey: 'postman-access-secret',
+      failure: failure(),
+      fetchImpl,
+      model: 'GPT_5',
+      repairContext: repairContext(repoRoot),
+      secretMasker: (value) => value.replace(/postman-access-secret/g, '***')
+    });
+
+    expect(result.status).toBe('changed');
+    expect(requests).toHaveLength(2);
+    const second = requests[1];
+    expect(second).toBeDefined();
+    if (!second) throw new Error('expected second request');
+    const input = second.input as JsonRecord;
+    const toolResponses = input.toolResponses as JsonRecord[];
+    expect(toolResponses[0]).toMatchObject({
+      toolCallId: 'tool-finish',
+      toolResponseFailureType: 'HANDLED_ERROR',
+      toolResponseStatus: 'FAILED'
+    });
+    expect(String(toolResponses[0]?.content)).toContain('finish requires status');
+  });
+
   it('returns blocked when the finish tool reports blocked', async () => {
     const repoRoot = createRepo();
     const fetchImpl = async (): Promise<Response> => ({

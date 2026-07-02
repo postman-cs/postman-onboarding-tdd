@@ -66,6 +66,27 @@ export async function runPostmanAgentModeRepairTurn(options: PostmanAgentModeRep
     for (const call of turn.toolCalls) {
       state.toolCallGroupId = call.toolCallGroupId || state.toolCallGroupId;
       core.info(`[postman-tdd] Executing guarded repair tool: ${call.name}.`);
+      if (call.name === 'finish') {
+        const status = String(call.input.status || '').trim();
+        const message = String(call.input.message || '').trim();
+        if ((status !== 'blocked' && status !== 'ready') || !message) {
+          const result: RepairToolResult = {
+            error: 'finish requires status "blocked" or "ready" and a non-empty message.'
+          };
+          logToolResult(call.name, result);
+          toolResponses.push(createToolResponse(call, result));
+          continue;
+        }
+
+        const result = executeRepairTool(call.name, call.input, options.repairContext);
+        logToolResult(call.name, result);
+        toolResponses.push(createToolResponse(call, result));
+        if (status === 'blocked') {
+          return { status: 'blocked', message };
+        }
+        return { status: 'no_change', message };
+      }
+
       const result = executeRepairTool(call.name, call.input, options.repairContext);
       logToolResult(call.name, result);
       toolResponses.push(createToolResponse(call, result));
@@ -76,14 +97,6 @@ export async function runPostmanAgentModeRepairTurn(options: PostmanAgentModeRep
           summary: result.summary || 'Applied implementation repair patch.',
           touchedPaths: result.touchedPaths || []
         };
-      }
-      if (call.name === 'finish') {
-        const status = String(call.input.status || '');
-        const message = String(call.input.message || result.summary || '').trim();
-        if (status === 'blocked') {
-          return { status: 'blocked', message: message || 'Repair agent reported blocked.' };
-        }
-        return { status: 'no_change', message: message || 'Repair agent reported ready without changes.' };
       }
     }
 
