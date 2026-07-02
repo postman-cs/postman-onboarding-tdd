@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import * as core from '@actions/core';
 
 import { buildRepairPrompt, type RepairProviderOptions, type RepairProviderResult } from './provider-common.js';
@@ -205,6 +207,7 @@ function createAgentModeBody(options: {
     clientTools: {
       excludedTools: [],
       native: options.tools,
+      nativeToolsHash: createNativeToolsHash(options.tools),
       thirdParty: {}
     },
     devModeOptions: {
@@ -219,6 +222,12 @@ function createAgentModeBody(options: {
     platform: resolvePlatform(),
     selectedContext: []
   };
+}
+
+function createNativeToolsHash(tools: JsonRecord[]): string {
+  return createHash('sha256')
+    .update(JSON.stringify(tools))
+    .digest('hex');
 }
 
 function createToolResponse(call: AgentModeToolCall, result: RepairToolResult): JsonRecord {
