@@ -108364,10 +108364,10 @@ function extractText2(response) {
 }
 
 // src/repair/postman-agent-mode-provider.ts
-import { createHash as createHash5 } from "node:crypto";
 var POSTMAN_AGENT_MODE_GATEWAY_URL = "https://gateway.postman.com/chat";
 var POSTMAN_AGENT_MODE_SERVICE = "agent-mode-service";
 var POSTMAN_AGENT_MODE_PRODUCT = "workspace_localmode_v12";
+var POSTMAN_TDD_TOOL_SERVER = "Postman TDD Repair";
 async function runPostmanAgentModeRepairTurn(options) {
   info(`[postman-tdd] Postman Agent Mode repair turn: model=${options.model}, failurePhase=${options.failure.phase}, failures=${options.failure.failures.length}.`);
   const tools = createPostmanAgentModeTools(options.repairContext);
@@ -108509,9 +108509,12 @@ function createAgentModeBody(options) {
     },
     clientTools: {
       excludedTools: [],
-      native: options.tools,
-      nativeToolsHash: createNativeToolsHash(options.tools),
-      thirdParty: {}
+      native: [],
+      thirdParty: {
+        [POSTMAN_TDD_TOOL_SERVER]: {
+          tools: options.tools
+        }
+      }
     },
     devModeOptions: {
       autoRun: true,
@@ -108525,9 +108528,6 @@ function createAgentModeBody(options) {
     platform: resolvePlatform(),
     selectedContext: []
   };
-}
-function createNativeToolsHash(tools) {
-  return createHash5("sha256").update(JSON.stringify(tools)).digest("hex");
 }
 function createToolResponse(call, result) {
   const summary2 = result.error || result.summary || `Finished executing ${call.name}.`;

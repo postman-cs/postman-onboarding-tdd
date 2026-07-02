@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import * as core from '@actions/core';
 
 import { buildRepairPrompt, type RepairProviderOptions, type RepairProviderResult } from './provider-common.js';
@@ -8,6 +6,7 @@ import { createRepairTools, executeRepairTool, type RepairToolResult } from './t
 const POSTMAN_AGENT_MODE_GATEWAY_URL = 'https://gateway.postman.com/chat';
 const POSTMAN_AGENT_MODE_SERVICE = 'agent-mode-service';
 const POSTMAN_AGENT_MODE_PRODUCT = 'workspace_localmode_v12';
+const POSTMAN_TDD_TOOL_SERVER = 'Postman TDD Repair';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -206,9 +205,12 @@ function createAgentModeBody(options: {
     },
     clientTools: {
       excludedTools: [],
-      native: options.tools,
-      nativeToolsHash: createNativeToolsHash(options.tools),
-      thirdParty: {}
+      native: [],
+      thirdParty: {
+        [POSTMAN_TDD_TOOL_SERVER]: {
+          tools: options.tools
+        }
+      }
     },
     devModeOptions: {
       autoRun: true,
@@ -222,12 +224,6 @@ function createAgentModeBody(options: {
     platform: resolvePlatform(),
     selectedContext: []
   };
-}
-
-function createNativeToolsHash(tools: JsonRecord[]): string {
-  return createHash('sha256')
-    .update(JSON.stringify(tools))
-    .digest('hex');
 }
 
 function createToolResponse(call: AgentModeToolCall, result: RepairToolResult): JsonRecord {

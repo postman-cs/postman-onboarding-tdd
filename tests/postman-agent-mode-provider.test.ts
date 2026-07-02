@@ -148,8 +148,9 @@ describe('Postman Agent Mode repair provider', () => {
     expect(first.headers['x-pstmn-req-service']).toBe('agent-mode-service');
     expect((first.body.devModeOptions as JsonRecord).selectedModel).toBe('GPT_54');
     const clientTools = first.body.clientTools as JsonRecord;
-    expect(clientTools.nativeToolsHash).toMatch(/^[a-f0-9]{64}$/);
-    const tools = clientTools.native as JsonRecord[];
+    expect(clientTools.native).toEqual([]);
+    const toolServer = (clientTools.thirdParty as JsonRecord)['Postman TDD Repair'] as JsonRecord;
+    const tools = toolServer.tools as JsonRecord[];
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       'finish',
       'list_files',
