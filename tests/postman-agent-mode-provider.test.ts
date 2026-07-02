@@ -130,7 +130,7 @@ describe('Postman Agent Mode repair provider', () => {
       apiKey: 'postman-access-secret',
       failure: failure(),
       fetchImpl,
-      model: 'GPT_54',
+      model: 'GPT_5',
       repairContext: repairContext(repoRoot),
       secretMasker: (value) => value.replace(/postman-access-secret/g, '***')
     });
@@ -146,7 +146,7 @@ describe('Postman Agent Mode repair provider', () => {
     expect(first.url).toBe('https://gateway.postman.com/chat');
     expect(first.headers['x-access-token']).toBe('postman-access-secret');
     expect(first.headers['x-pstmn-req-service']).toBe('agent-mode-service');
-    expect((first.body.devModeOptions as JsonRecord).selectedModel).toBe('GPT_54');
+    expect((first.body.devModeOptions as JsonRecord).selectedModel).toBe('GPT_5');
     const clientTools = first.body.clientTools as JsonRecord;
     expect(clientTools.native).toEqual([]);
     const toolServer = (clientTools.thirdParty as JsonRecord)['Postman TDD Repair'] as JsonRecord;
@@ -196,7 +196,7 @@ describe('Postman Agent Mode repair provider', () => {
       apiKey: 'postman-access-secret',
       failure: failure(),
       fetchImpl,
-      model: 'GPT_54',
+      model: 'GPT_5',
       repairContext: repairContext(repoRoot),
       secretMasker: (value) => value.replace(/postman-access-secret/g, '***')
     });
@@ -236,7 +236,7 @@ describe('Postman Agent Mode repair provider', () => {
       apiKey: 'postman-access-secret',
       failure: failure(),
       fetchImpl,
-      model: 'GPT_54',
+      model: 'GPT_5',
       repairContext: repairContext(repoRoot),
       secretMasker: (value) => value.replace(/postman-access-secret/g, '***')
     })).resolves.toEqual({
@@ -259,7 +259,7 @@ describe('Postman Agent Mode repair provider', () => {
         apiKey: 'postman-access-secret',
         failure: failure(),
         fetchImpl,
-        model: 'GPT_54',
+        model: 'GPT_5',
         repairContext: repairContext(repoRoot),
         secretMasker: (value) => value.replace(/postman-access-secret/g, '***')
       });
@@ -293,7 +293,7 @@ describe('Postman Agent Mode repair provider', () => {
         apiKey: 'postman-access-secret',
         failure: failure(),
         fetchImpl,
-        model: 'GPT_54',
+        model: 'GPT_5',
         repairContext: repairContext(repoRoot),
         secretMasker: (value) => value.replace(/postman-access-secret/g, '***')
       });
@@ -324,7 +324,7 @@ describe('Postman Agent Mode repair provider', () => {
       apiKey: 'postman-access-secret',
       failure: failure(),
       fetchImpl,
-      model: 'GPT_54',
+      model: 'GPT_5',
       repairContext: repairContext(repoRoot),
       secretMasker: (value) => value.replace(/postman-access-secret/g, '***')
     })).resolves.toEqual({

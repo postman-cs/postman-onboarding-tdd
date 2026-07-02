@@ -18,7 +18,7 @@ interface RepairProviderDispatchOptions {
 
 export function defaultRepairModel(provider: RepairProvider): string {
   if (provider === 'anthropic-messages') return 'claude-sonnet-5';
-  if (provider === 'postman-agent-mode') return 'GPT_54';
+  if (provider === 'postman-agent-mode') return 'GPT_5';
   return 'gpt-5.5';
 }
 

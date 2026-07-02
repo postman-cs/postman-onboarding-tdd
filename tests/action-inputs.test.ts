@@ -71,7 +71,7 @@ describe('action input parsing', () => {
 
     expect(readActionInputs()).toMatchObject({
       postmanAccessToken: 'postman-access-token',
-      repairModel: 'GPT_54',
+      repairModel: 'GPT_5',
       repairProvider: 'postman-agent-mode'
     });
   });

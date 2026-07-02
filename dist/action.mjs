@@ -108645,7 +108645,7 @@ function isRecord2(value) {
 // src/repair/provider-dispatcher.ts
 function defaultRepairModel(provider) {
   if (provider === "anthropic-messages") return "claude-sonnet-5";
-  if (provider === "postman-agent-mode") return "GPT_54";
+  if (provider === "postman-agent-mode") return "GPT_5";
   return "gpt-5.5";
 }
 function resolveRepairProviderApiKey(inputs) {

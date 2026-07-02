@@ -45,7 +45,7 @@ inputs:
     required: false
     default: openai-responses
   repair-model:
-    description: Model used by mode=repair. Defaults to gpt-5.5 for openai-responses, claude-sonnet-5 for anthropic-messages, and GPT_54 for postman-agent-mode.
+    description: Model used by mode=repair. Defaults to gpt-5.5 for openai-responses, claude-sonnet-5 for anthropic-messages, and GPT_5 for postman-agent-mode.
     required: false
   repair-max-attempts:
     description: Maximum accepted implementation patch attempts in mode=repair.

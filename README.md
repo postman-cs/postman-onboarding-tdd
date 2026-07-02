@@ -469,7 +469,7 @@ To use Claude instead, set both the onboarding config and action input to `anthr
           immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
 ```
 
-To use Postman Agent Mode instead, set both the onboarding config and action input to `postman-agent-mode` and pass `postman-access-token`. If `repair-model` is omitted, the action uses the Postman Agent Mode default `GPT_54`.
+To use Postman Agent Mode instead, set both the onboarding config and action input to `postman-agent-mode` and pass `postman-access-token`. If `repair-model` is omitted, the action uses the Postman Agent Mode default `GPT_5`.
 
 ```yaml
         with:
@@ -525,7 +525,7 @@ Postman Agent Mode repair receives the same guarded repair tool definitions as t
 | `anthropic-api-key` | repair with Claude | | Anthropic API key for `mode: repair` when `repair-provider` is `anthropic-messages`. |
 | `repair-github-token` | repair recommended | `github-token` | Token used by `mode: repair` for pushing repair commits. Prefer a PAT or GitHub App token. |
 | `repair-provider` | no | `openai-responses` | Repair provider. One of `openai-responses`, `anthropic-messages`, or `postman-agent-mode`. Must match `tdd.repair.provider` when repair is enabled. |
-| `repair-model` | no | provider default | Model used by `mode: repair`. Defaults to `gpt-5.5` for OpenAI, `claude-sonnet-5` for Claude, and `GPT_54` for Postman Agent Mode unless explicitly set. |
+| `repair-model` | no | provider default | Model used by `mode: repair`. Defaults to `gpt-5.5` for OpenAI, `claude-sonnet-5` for Claude, and `GPT_5` for Postman Agent Mode unless explicitly set. |
 | `repair-max-attempts` | no | `3` | Maximum accepted implementation patch attempts. |
 | `repair-commit-message` | no | `Postman TDD repair` | Commit message used for a passing repair commit. |
 

@@ -278,7 +278,7 @@ tdd:
         ...actionInputs(),
         openaiApiKey: undefined,
         postmanAccessToken: undefined,
-        repairModel: 'GPT_54',
+        repairModel: 'GPT_5',
         repairProvider: 'postman-agent-mode'
       },
       mask: (value) => value,
