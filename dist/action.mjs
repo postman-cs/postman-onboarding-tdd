@@ -108546,8 +108546,9 @@ function parseAgentModeEvents(body2, secretMasker) {
   };
   for (const event of parseSseJsonEvents(body2)) {
     const data = isRecord2(event.data) ? event.data : event;
-    result.conversationId = stringValue2(event.conversationId) || stringValue2(data.conversationId) || result.conversationId;
-    result.toolCallGroupId = stringValue2(event.toolCallGroupId) || stringValue2(data.toolCallGroupId) || result.toolCallGroupId;
+    const metadata2 = isRecord2(data.metadata) ? data.metadata : {};
+    result.conversationId = stringValue2(event.conversationId) || stringValue2(metadata2.conversationId) || stringValue2(data.conversationId) || stringValue2(data.id) || result.conversationId;
+    result.toolCallGroupId = stringValue2(event.toolCallGroupId) || stringValue2(metadata2.toolCallGroupId) || stringValue2(data.toolCallGroupId) || result.toolCallGroupId;
     const eventType = String(event.eventType || event.type || "");
     if (eventType === "textChunk") {
       result.text += stringValue2(data.textContent) || stringValue2(data.text) || "";
@@ -108586,6 +108587,7 @@ function parseSseJsonEvents(body2) {
 }
 function extractToolCalls(data) {
   const rawCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [data];
+  const metadata2 = isRecord2(data.metadata) ? data.metadata : {};
   const calls = [];
   for (const rawCall of rawCalls) {
     if (!isRecord2(rawCall)) continue;
@@ -108594,7 +108596,7 @@ function extractToolCalls(data) {
     if (!name) continue;
     const id = stringValue2(rawCall.id) || stringValue2(rawCall.toolCallId) || name;
     const input = parseToolArguments(fn.arguments ?? rawCall.arguments ?? rawCall.args);
-    const toolCallGroupId = stringValue2(rawCall.toolCallGroupId) || stringValue2(data.toolCallGroupId) || void 0;
+    const toolCallGroupId = stringValue2(rawCall.toolCallGroupId) || stringValue2(data.toolCallGroupId) || stringValue2(metadata2.toolCallGroupId) || void 0;
     calls.push({ id, input, name, toolCallGroupId });
   }
   return calls;

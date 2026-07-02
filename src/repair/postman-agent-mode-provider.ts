@@ -244,10 +244,14 @@ function parseAgentModeEvents(body: string, secretMasker: (value: string) => str
   };
   for (const event of parseSseJsonEvents(body)) {
     const data = isRecord(event.data) ? event.data : event;
+    const metadata = isRecord(data.metadata) ? data.metadata : {};
     result.conversationId = stringValue(event.conversationId)
+      || stringValue(metadata.conversationId)
       || stringValue(data.conversationId)
+      || stringValue(data.id)
       || result.conversationId;
     result.toolCallGroupId = stringValue(event.toolCallGroupId)
+      || stringValue(metadata.toolCallGroupId)
       || stringValue(data.toolCallGroupId)
       || result.toolCallGroupId;
 
@@ -291,6 +295,7 @@ function parseSseJsonEvents(body: string): JsonRecord[] {
 
 function extractToolCalls(data: JsonRecord): AgentModeToolCall[] {
   const rawCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [data];
+  const metadata = isRecord(data.metadata) ? data.metadata : {};
   const calls: AgentModeToolCall[] = [];
   for (const rawCall of rawCalls) {
     if (!isRecord(rawCall)) continue;
@@ -299,7 +304,10 @@ function extractToolCalls(data: JsonRecord): AgentModeToolCall[] {
     if (!name) continue;
     const id = stringValue(rawCall.id) || stringValue(rawCall.toolCallId) || name;
     const input = parseToolArguments(fn.arguments ?? rawCall.arguments ?? rawCall.args);
-    const toolCallGroupId = stringValue(rawCall.toolCallGroupId) || stringValue(data.toolCallGroupId) || undefined;
+    const toolCallGroupId = stringValue(rawCall.toolCallGroupId)
+      || stringValue(data.toolCallGroupId)
+      || stringValue(metadata.toolCallGroupId)
+      || undefined;
     calls.push({ id, input, name, toolCallGroupId });
   }
   return calls;

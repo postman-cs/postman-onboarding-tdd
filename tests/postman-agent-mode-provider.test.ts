@@ -106,6 +106,16 @@ describe('Postman Agent Mode repair provider', () => {
     };
   }
 
+  function createMetadataToolCall(id: string, name: string, input: JsonRecord): JsonRecord {
+    return {
+      function: {
+        arguments: JSON.stringify(input),
+        name
+      },
+      id
+    };
+  }
+
   it('applies a guarded propose_patch tool call from a toolCallChunk event', async () => {
     const repoRoot = createRepo();
     const patch = diffFor(repoRoot);
@@ -177,8 +187,17 @@ describe('Postman Agent Mode repair provider', () => {
           ok: true,
           status: 200,
           text: async () => sse(
-            { data: { textContent: 'Inspecting implementation first.', conversationId: 'conv-1' }, eventType: 'textChunk' },
-            toolCallEvent(createToolCall('tool-read', 'read_file', { path: 'src/app.js' }))
+            { data: { metadata: { conversationId: 'conv-1' }, textContent: 'Inspecting implementation first.' }, eventType: 'textChunk' },
+            {
+              data: {
+                metadata: {
+                  conversationId: 'conv-1',
+                  toolCallGroupId: 'group-1'
+                },
+                toolCalls: [createMetadataToolCall('tool-read', 'read_file', { path: 'src/app.js' })]
+              },
+              eventType: 'toolCall'
+            }
           )
         } as Response;
       }
