@@ -52,6 +52,22 @@ tdd:
     });
   });
 
+  it('loads the packaged onboarding sample', () => {
+    expect(loadOnboardingConfig({ configPath: join(process.cwd(), '.postman-template', 'onboarding.yml') })).toMatchObject({
+      projectName: 'reference-service',
+      repair: {
+        allowedReadPaths: ['src/**', 'test/**', 'package.json', 'package-lock.json'],
+        allowedWritePaths: ['src/**'],
+        enabled: false,
+        localTestCommand: 'npm test',
+        maxAttempts: 3,
+        provider: 'openai-responses'
+      },
+      specPath: 'api/openapi.yaml',
+      tddEnabled: true
+    });
+  });
+
   it('patches workspace id without removing unrelated config', () => {
     const path = writeConfig(`
 version: 1

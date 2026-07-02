@@ -1,0 +1,45 @@
+version: 1
+
+spec:
+  # Path to the OpenAPI file in the customer service repository.
+  path: api/openapi.yaml
+
+service:
+  # Used in PR-scoped Postman asset names.
+  name: reference-service
+
+tdd:
+  enabled: true
+  workspace:
+    # The action creates or finds this workspace on the first run.
+    name: Reference Service - TDD Preview
+    # After the first successful bootstrap, commit the workspace id here or
+    # keep config-write-mode enabled so the action writes it back.
+    # id: 00000000-0000-0000-0000-000000000000
+
+  # The service must be reachable from the GitHub runner at these URLs after
+  # startCommand runs.
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./scripts/postman-tdd-start.sh
+  # stopCommand is optional. When omitted, the action stops the started process.
+  # stopCommand: ./scripts/postman-tdd-stop.sh
+  timeoutSeconds: 90
+
+  repair:
+    # Set false until the preview workflow is stable, then enable repair.
+    enabled: false
+    # Choose one:
+    # - openai-responses: pass openai-api-key in the repair workflow.
+    # - anthropic-messages: pass anthropic-api-key in the repair workflow.
+    provider: openai-responses
+    maxAttempts: 3
+    allowedWritePaths:
+      - src/**
+    allowedReadPaths:
+      - src/**
+      - test/**
+      - package.json
+      - package-lock.json
+    # Optional command run after each proposed patch before the Postman oracle.
+    localTestCommand: npm test
