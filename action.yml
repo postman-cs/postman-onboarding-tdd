@@ -26,13 +26,13 @@ inputs:
     description: Postman API key used for workspace, spec, and collection operations.
     required: true
   postman-access-token:
-    description: Postman access token. Required by mode=repair when repair-provider=postman-agent-mode; optional otherwise.
+    description: Postman access token. Required by mode=repair when the resolved repair provider is postman-agent-mode; optional otherwise.
     required: false
   openai-api-key:
-    description: OpenAI API key used by mode=repair with repair-provider=openai-responses.
+    description: OpenAI API key used by mode=repair when the resolved repair provider is openai-responses.
     required: false
   anthropic-api-key:
-    description: Anthropic API key used by mode=repair with repair-provider=anthropic-messages.
+    description: Anthropic API key used by mode=repair when the resolved repair provider is anthropic-messages.
     required: false
   github-token:
     description: GitHub token used for PR comments and config writeback.
