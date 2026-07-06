@@ -265,6 +265,31 @@ tdd:
     })).rejects.toThrow('anthropic-api-key is required when mode=repair and repair-provider=anthropic-messages');
   });
 
+  it('inherits the Anthropic repair provider from onboarding config when the action input is omitted', async () => {
+    createRepo('anthropic-messages');
+
+    await expect(runRepairMode({
+      endpointProfile: {
+        apiBaseUrl: 'https://api.getpostman.com',
+        cliInstallUrl: 'https://dl-cli.pstmn.io/install/unix.sh'
+      },
+      github: {} as never,
+      inputs: {
+        ...actionInputs(),
+        anthropicApiKey: undefined,
+        openaiApiKey: undefined,
+        repairModel: undefined,
+        repairProvider: undefined
+      },
+      mask: (value) => value,
+      postman: {} as never,
+      pr: {
+        number: 123,
+        repository: 'postman-cs/pavan-test-TDD'
+      }
+    })).rejects.toThrow('anthropic-api-key is required when mode=repair and repair-provider=anthropic-messages');
+  });
+
   it('requires the Postman access token when the Postman Agent Mode repair provider is selected', async () => {
     createRepo('postman-agent-mode');
 
@@ -280,6 +305,31 @@ tdd:
         postmanAccessToken: undefined,
         repairModel: 'GPT_5',
         repairProvider: 'postman-agent-mode'
+      },
+      mask: (value) => value,
+      postman: {} as never,
+      pr: {
+        number: 123,
+        repository: 'postman-cs/pavan-test-TDD'
+      }
+    })).rejects.toThrow('postman-access-token is required when mode=repair and repair-provider=postman-agent-mode');
+  });
+
+  it('inherits the Postman Agent Mode repair provider from onboarding config when the action input is omitted', async () => {
+    createRepo('postman-agent-mode');
+
+    await expect(runRepairMode({
+      endpointProfile: {
+        apiBaseUrl: 'https://api.getpostman.com',
+        cliInstallUrl: 'https://dl-cli.pstmn.io/install/unix.sh'
+      },
+      github: {} as never,
+      inputs: {
+        ...actionInputs(),
+        openaiApiKey: undefined,
+        postmanAccessToken: undefined,
+        repairModel: undefined,
+        repairProvider: undefined
       },
       mask: (value) => value,
       postman: {} as never,

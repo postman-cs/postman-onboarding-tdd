@@ -193,7 +193,7 @@ Use this checklist after the preview workflow is already posting `Postman TDD Pr
 
 4. Add `POSTMAN_TDD_REPAIR_TOKEN` so pushed repair commits can trigger the next preview run.
 
-5. Add the repair workflow from [Repair Workflow](#repair-workflow). The action `repair-provider` input must match `tdd.repair.provider`.
+5. Add the repair workflow from [Repair Workflow](#repair-workflow). You can omit the action `repair-provider` input to use `tdd.repair.provider` from onboarding config. If you set the action input, it must match the config value.
 
 6. Test repair with a small implementation-only contract failure. Done means the PR shows both `Postman TDD Repair (REPAIRED)` and a later `Postman TDD Preview (PASSED)` on the repair commit.
 
@@ -378,7 +378,7 @@ Add or enable repair settings in `.postman-template/onboarding.yml`:
 tdd:
   repair:
     enabled: true
-    provider: openai-responses # or anthropic-messages
+    provider: openai-responses # or anthropic-messages or postman-agent-mode
     maxAttempts: 3
     allowedWritePaths:
       - src/**
@@ -448,13 +448,14 @@ jobs:
           postman-access-token: ${{ secrets.POSTMAN_ACCESS_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repair-github-token: ${{ secrets.POSTMAN_TDD_REPAIR_TOKEN }}
-          repair-provider: openai-responses
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
           workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
 ```
 
-To use Claude instead, set both the onboarding config and action input to `anthropic-messages`, pass `anthropic-api-key`, and use a Claude Messages model:
+The action uses `tdd.repair.provider` from onboarding config when `repair-provider` is omitted. You may still set `repair-provider` in the workflow as an explicit guard; when set, it must match the onboarding config value.
+
+To use Claude instead, set the onboarding config provider to `anthropic-messages`, pass `anthropic-api-key`, and use a Claude Messages model:
 
 ```yaml
         with:
@@ -463,13 +464,12 @@ To use Claude instead, set both the onboarding config and action input to `anthr
           postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repair-github-token: ${{ secrets.POSTMAN_TDD_REPAIR_TOKEN }}
-          repair-provider: anthropic-messages
           repair-model: claude-sonnet-5
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
 ```
 
-To use Postman Agent Mode instead, set both the onboarding config and action input to `postman-agent-mode` and pass `postman-access-token`. If `repair-model` is omitted, the action uses the Postman Agent Mode default `GPT_5`.
+To use Postman Agent Mode instead, set the onboarding config provider to `postman-agent-mode` and pass `postman-access-token`. If `repair-model` is omitted, the action uses the Postman Agent Mode default `GPT_5`.
 
 ```yaml
         with:
@@ -479,7 +479,6 @@ To use Postman Agent Mode instead, set both the onboarding config and action inp
           postman-access-token: ${{ secrets.POSTMAN_ACCESS_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repair-github-token: ${{ secrets.POSTMAN_TDD_REPAIR_TOKEN }}
-          repair-provider: postman-agent-mode
           immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
 ```
 
@@ -524,7 +523,7 @@ Postman Agent Mode repair receives the same guarded repair tool definitions as t
 | `openai-api-key` | repair with OpenAI | | OpenAI API key for `mode: repair` when `repair-provider` is `openai-responses`. |
 | `anthropic-api-key` | repair with Claude | | Anthropic API key for `mode: repair` when `repair-provider` is `anthropic-messages`. |
 | `repair-github-token` | repair recommended | `github-token` | Token used by `mode: repair` for pushing repair commits. Prefer a PAT or GitHub App token. |
-| `repair-provider` | no | `openai-responses` | Repair provider. One of `openai-responses`, `anthropic-messages`, or `postman-agent-mode`. Must match `tdd.repair.provider` when repair is enabled. |
+| `repair-provider` | no | `tdd.repair.provider` | Optional repair provider guard. One of `openai-responses`, `anthropic-messages`, or `postman-agent-mode`. When omitted, repair uses onboarding config. When set, it must match `tdd.repair.provider`. |
 | `repair-model` | no | provider default | Model used by `mode: repair`. Defaults to `gpt-5.5` for OpenAI, `claude-sonnet-5` for Claude, and `GPT_5` for Postman Agent Mode unless explicitly set. |
 | `repair-max-attempts` | no | `3` | Maximum accepted implementation patch attempts. |
 | `repair-commit-message` | no | `Postman TDD repair` | Commit message used for a passing repair commit. |

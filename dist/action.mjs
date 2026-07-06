@@ -109103,42 +109103,46 @@ function defaultRepairModel(provider) {
   if (provider === "postman-agent-mode") return "GPT_5";
   return "gpt-5.5";
 }
-function resolveRepairProviderApiKey(inputs) {
-  if (inputs.repairProvider === "openai-responses") {
+function resolveRepairProviderApiKey(inputs, provider) {
+  if (provider === "openai-responses") {
     if (!inputs.openaiApiKey) {
       throw new Error("openai-api-key is required when mode=repair and repair-provider=openai-responses");
     }
     return inputs.openaiApiKey;
   }
-  if (inputs.repairProvider === "anthropic-messages") {
+  if (provider === "anthropic-messages") {
     if (!inputs.anthropicApiKey) {
       throw new Error("anthropic-api-key is required when mode=repair and repair-provider=anthropic-messages");
     }
     return inputs.anthropicApiKey;
   }
-  if (inputs.repairProvider === "postman-agent-mode") {
+  if (provider === "postman-agent-mode") {
     if (!inputs.postmanAccessToken) {
       throw new Error("postman-access-token is required when mode=repair and repair-provider=postman-agent-mode");
     }
     return inputs.postmanAccessToken;
   }
-  assertNever(inputs.repairProvider);
+  assertNever(provider);
 }
 function assertMatchingRepairProvider(inputProvider, configProvider) {
+  if (!inputProvider) {
+    return configProvider;
+  }
   if (inputProvider !== configProvider) {
     throw new Error(`repair-provider input (${inputProvider}) must match tdd.repair.provider (${configProvider})`);
   }
   return inputProvider;
 }
 function runRepairProviderTurn(options) {
-  const apiKey = resolveRepairProviderApiKey(options.inputs);
+  const apiKey = resolveRepairProviderApiKey(options.inputs, options.provider);
+  const model = options.inputs.repairModel || defaultRepairModel(options.provider);
   if (options.provider === "openai-responses") {
     return runOpenAiRepairTurn({
       apiKey,
       failure: options.failure,
       fetchImpl: options.fetchImpl,
       maxToolRounds: options.maxToolRounds,
-      model: options.inputs.repairModel,
+      model,
       repairContext: options.repairContext,
       secretMasker: options.secretMasker
     });
@@ -109149,7 +109153,7 @@ function runRepairProviderTurn(options) {
       failure: options.failure,
       fetchImpl: options.fetchImpl,
       maxToolRounds: options.maxToolRounds,
-      model: options.inputs.repairModel,
+      model,
       repairContext: options.repairContext,
       secretMasker: options.secretMasker
     });
@@ -109160,7 +109164,7 @@ function runRepairProviderTurn(options) {
       failure: options.failure,
       fetchImpl: options.fetchImpl,
       maxToolRounds: options.maxToolRounds,
-      model: options.inputs.repairModel,
+      model,
       repairContext: options.repairContext,
       secretMasker: options.secretMasker
     });
@@ -109196,7 +109200,9 @@ async function runRepairMode(options) {
     return;
   }
   const repairProvider = assertMatchingRepairProvider(options.inputs.repairProvider, config.repair.provider);
-  resolveRepairProviderApiKey(options.inputs);
+  const repairModel = options.inputs.repairModel || defaultRepairModel(repairProvider);
+  resolveRepairProviderApiKey(options.inputs, repairProvider);
+  info(`[postman-tdd] Repair provider resolved: provider=${repairProvider}, model=${repairModel}.`);
   info(`[postman-tdd] Fetching PR details for #${options.pr.number}.`);
   const prDetails = await options.github.getPullRequest(options.pr.number);
   info(`[postman-tdd] PR details: head=${prDetails.headRepository}:${prDetails.headBranch}@${prDetails.headSha}, base=${prDetails.baseRepository}, fork=${prDetails.isFork}.`);
@@ -109291,7 +109297,11 @@ async function runRepairMode(options) {
     info(`[postman-tdd] Repair attempt ${attemptNumber}/${maxAttempts}: asking provider for an implementation-only patch.`);
     const repair = await runRepairProviderTurn({
       failure: currentFailure,
-      inputs: options.inputs,
+      inputs: {
+        ...options.inputs,
+        repairModel,
+        repairProvider
+      },
       provider: repairProvider,
       repairContext: {
         allowedReadPaths: config.repair.allowedReadPaths,
@@ -109493,9 +109503,9 @@ function logRepairConfig(config, options) {
   info(`specPath=${config.specPath}`);
   info(`tddEnabled=${config.tddEnabled}`);
   info(`repairEnabled=${config.repair.enabled}`);
-  info(`repairProviderInput=${options.inputs.repairProvider}`);
+  info(`repairProviderInput=${options.inputs.repairProvider || "(from config)"}`);
   info(`repairProviderConfig=${config.repair.provider}`);
-  info(`repairModel=${options.inputs.repairModel}`);
+  info(`repairModelInput=${options.inputs.repairModel || "(provider default)"}`);
   info(`repairMaxAttemptsInput=${options.inputs.repairMaxAttempts}`);
   info(`repairMaxAttemptsConfig=${config.repair.maxAttempts}`);
   info(`allowedWritePaths=${config.repair.allowedWritePaths.join(", ") || "(none)"}`);
@@ -109877,7 +109887,9 @@ function readActionInputs() {
   if (modeRaw !== "run" && modeRaw !== "cleanup" && modeRaw !== "repair") {
     throw new Error(`Unsupported mode "${modeRaw}". Expected run, cleanup, or repair`);
   }
-  const repairProvider = validateRepairProvider(getInput("repair-provider") || "openai-responses");
+  const repairProviderInput = getInput("repair-provider");
+  const repairProvider = repairProviderInput ? validateRepairProvider(repairProviderInput) : void 0;
+  const repairModelInput = getInput("repair-model") || void 0;
   const repairMaxAttempts = Number(getInput("repair-max-attempts") || "3");
   if (!Number.isFinite(repairMaxAttempts) || repairMaxAttempts <= 0) {
     throw new Error(`repair-max-attempts must be a positive number, got: ${getInput("repair-max-attempts")}`);
@@ -109901,7 +109913,7 @@ function readActionInputs() {
     repairCommitMessage: getInput("repair-commit-message") || "Postman TDD repair",
     repairGithubToken: getInput("repair-github-token") || void 0,
     repairMaxAttempts,
-    repairModel: getInput("repair-model") || defaultRepairModel(repairProvider),
+    repairModel: repairModelInput || (repairProvider ? defaultRepairModel(repairProvider) : void 0),
     repairProvider,
     specPath: getInput("spec-path") || void 0,
     workspaceTeamId: getInput("workspace-team-id") || void 0
@@ -110291,7 +110303,7 @@ function logActionContext(options) {
   info(`postmanStack=${options.inputs.postmanStack}`);
   info(`postmanApiBaseUrl=${options.endpointProfile.apiBaseUrl}`);
   info(`configWriteMode=${options.inputs.configWriteMode}`);
-  info(`repairProvider=${options.inputs.repairProvider}`);
+  info(`repairProviderInput=${options.inputs.repairProvider || "(from config)"}`);
   info(`repairMaxAttemptsInput=${options.inputs.repairMaxAttempts}`);
   endGroup();
 }

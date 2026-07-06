@@ -22,29 +22,32 @@ export function defaultRepairModel(provider: RepairProvider): string {
   return 'gpt-5.5';
 }
 
-export function resolveRepairProviderApiKey(inputs: ActionInputs): string {
-  if (inputs.repairProvider === 'openai-responses') {
+export function resolveRepairProviderApiKey(inputs: ActionInputs, provider: RepairProvider): string {
+  if (provider === 'openai-responses') {
     if (!inputs.openaiApiKey) {
       throw new Error('openai-api-key is required when mode=repair and repair-provider=openai-responses');
     }
     return inputs.openaiApiKey;
   }
-  if (inputs.repairProvider === 'anthropic-messages') {
+  if (provider === 'anthropic-messages') {
     if (!inputs.anthropicApiKey) {
       throw new Error('anthropic-api-key is required when mode=repair and repair-provider=anthropic-messages');
     }
     return inputs.anthropicApiKey;
   }
-  if (inputs.repairProvider === 'postman-agent-mode') {
+  if (provider === 'postman-agent-mode') {
     if (!inputs.postmanAccessToken) {
       throw new Error('postman-access-token is required when mode=repair and repair-provider=postman-agent-mode');
     }
     return inputs.postmanAccessToken;
   }
-  assertNever(inputs.repairProvider);
+  assertNever(provider);
 }
 
-export function assertMatchingRepairProvider(inputProvider: RepairProvider, configProvider: RepairProvider): RepairProvider {
+export function assertMatchingRepairProvider(inputProvider: RepairProvider | undefined, configProvider: RepairProvider): RepairProvider {
+  if (!inputProvider) {
+    return configProvider;
+  }
   if (inputProvider !== configProvider) {
     throw new Error(`repair-provider input (${inputProvider}) must match tdd.repair.provider (${configProvider})`);
   }
@@ -52,14 +55,15 @@ export function assertMatchingRepairProvider(inputProvider: RepairProvider, conf
 }
 
 export function runRepairProviderTurn(options: RepairProviderDispatchOptions): Promise<RepairProviderResult> {
-  const apiKey = resolveRepairProviderApiKey(options.inputs);
+  const apiKey = resolveRepairProviderApiKey(options.inputs, options.provider);
+  const model = options.inputs.repairModel || defaultRepairModel(options.provider);
   if (options.provider === 'openai-responses') {
     return runOpenAiRepairTurn({
       apiKey,
       failure: options.failure,
       fetchImpl: options.fetchImpl,
       maxToolRounds: options.maxToolRounds,
-      model: options.inputs.repairModel,
+      model,
       repairContext: options.repairContext,
       secretMasker: options.secretMasker
     });
@@ -70,7 +74,7 @@ export function runRepairProviderTurn(options: RepairProviderDispatchOptions): P
       failure: options.failure,
       fetchImpl: options.fetchImpl,
       maxToolRounds: options.maxToolRounds,
-      model: options.inputs.repairModel,
+      model,
       repairContext: options.repairContext,
       secretMasker: options.secretMasker
     });
@@ -81,7 +85,7 @@ export function runRepairProviderTurn(options: RepairProviderDispatchOptions): P
       failure: options.failure,
       fetchImpl: options.fetchImpl,
       maxToolRounds: options.maxToolRounds,
-      model: options.inputs.repairModel,
+      model,
       repairContext: options.repairContext,
       secretMasker: options.secretMasker
     });

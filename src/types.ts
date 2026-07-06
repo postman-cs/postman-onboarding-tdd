@@ -157,8 +157,8 @@ export interface ActionInputs {
   repairCommitMessage: string;
   repairGithubToken?: string;
   repairMaxAttempts: number;
-  repairModel: string;
-  repairProvider: RepairProvider;
+  repairModel?: string;
+  repairProvider?: RepairProvider;
   specPath?: string;
   workspaceTeamId?: string;
 }
