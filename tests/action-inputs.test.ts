@@ -49,6 +49,23 @@ describe('action input parsing', () => {
     });
   });
 
+  it('allows validate mode without GitHub or Postman credentials', () => {
+    setInput('mode', 'validate');
+
+    expect(readActionInputs()).toMatchObject({
+      githubToken: '',
+      mode: 'validate',
+      postmanApiKey: ''
+    });
+  });
+
+  it('requires GitHub and Postman credentials outside validate mode', () => {
+    expect(() => readActionInputs()).toThrow('github-token is required unless mode=validate');
+
+    setInput('github-token', 'github-token');
+    expect(() => readActionInputs()).toThrow('postman-api-key is required unless mode=validate');
+  });
+
   it('defaults to an OpenAI model when the OpenAI repair provider input is set', () => {
     setInput('github-token', 'github-token');
     setInput('postman-api-key', 'postman-token');

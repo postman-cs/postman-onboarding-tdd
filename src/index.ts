@@ -24,6 +24,7 @@ import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from './pr
 import { resolvePostmanEndpointProfile, parsePostmanRegion, parsePostmanStack } from './postman/base-urls.js';
 import type { PostmanEndpointProfile } from './postman/base-urls.js';
 import { PostmanClient } from './postman/client.js';
+import { runValidateMode } from './validation.js';
 import {
   ensurePostmanCli,
   runCommand,
@@ -62,8 +63,8 @@ export interface RunActionOptions {
 export function readActionInputs(): ActionInputs {
   const prNumberInput = core.getInput('pr-number');
   const modeRaw = core.getInput('mode') || 'run';
-  if (modeRaw !== 'run' && modeRaw !== 'cleanup' && modeRaw !== 'repair') {
-    throw new Error(`Unsupported mode "${modeRaw}". Expected run, cleanup, or repair`);
+  if (modeRaw !== 'run' && modeRaw !== 'cleanup' && modeRaw !== 'repair' && modeRaw !== 'validate') {
+    throw new Error(`Unsupported mode "${modeRaw}". Expected run, cleanup, repair, or validate`);
   }
   const repairProviderInput = core.getInput('repair-provider');
   const repairProvider = repairProviderInput ? validateRepairProvider(repairProviderInput) : undefined;
@@ -72,18 +73,26 @@ export function readActionInputs(): ActionInputs {
   if (!Number.isFinite(repairMaxAttempts) || repairMaxAttempts <= 0) {
     throw new Error(`repair-max-attempts must be a positive number, got: ${core.getInput('repair-max-attempts')}`);
   }
+  const githubToken = core.getInput('github-token') || '';
+  const postmanApiKey = core.getInput('postman-api-key') || '';
+  if (modeRaw !== 'validate' && !githubToken) {
+    throw new Error('github-token is required unless mode=validate');
+  }
+  if (modeRaw !== 'validate' && !postmanApiKey) {
+    throw new Error('postman-api-key is required unless mode=validate');
+  }
   return {
     anthropicApiKey: core.getInput('anthropic-api-key') || undefined,
     committerEmail: core.getInput('committer-email') || 'support@postman.com',
     committerName: core.getInput('committer-name') || 'Postman',
     configWriteMode: validateConfigWriteMode(core.getInput('config-write-mode') || 'commit-and-push'),
-    githubToken: core.getInput('github-token', { required: true }),
+    githubToken,
     immutableStateSigningKey: core.getInput('immutable-state-signing-key') || undefined,
     mode: modeRaw,
     onboardingConfigPath: core.getInput('onboarding-config-path') || '.postman-template/onboarding.yml',
     openaiApiKey: core.getInput('openai-api-key') || undefined,
     postmanAccessToken: core.getInput('postman-access-token') || undefined,
-    postmanApiKey: core.getInput('postman-api-key', { required: true }),
+    postmanApiKey,
     postmanRegion: parsePostmanRegion(core.getInput('postman-region') || 'us'),
     postmanStack: parsePostmanStack(core.getInput('postman-stack') || 'prod'),
     prNumber: prNumberInput ? Number(prNumberInput) : undefined,
@@ -100,8 +109,8 @@ export function readActionInputs(): ActionInputs {
 
 export async function runAction(options: RunActionOptions = {}): Promise<void> {
   const inputs = readActionInputs();
-  core.setSecret(inputs.postmanApiKey);
-  core.setSecret(inputs.githubToken);
+  if (inputs.postmanApiKey) core.setSecret(inputs.postmanApiKey);
+  if (inputs.githubToken) core.setSecret(inputs.githubToken);
   if (inputs.postmanAccessToken) core.setSecret(inputs.postmanAccessToken);
   if (inputs.immutableStateSigningKey) core.setSecret(inputs.immutableStateSigningKey);
   if (inputs.openaiApiKey) core.setSecret(inputs.openaiApiKey);
@@ -117,6 +126,10 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
     inputs.anthropicApiKey,
     inputs.repairGithubToken
   ]);
+  if (inputs.mode === 'validate') {
+    await runValidateMode({ inputs, mask });
+    return;
+  }
   const endpointProfile = resolvePostmanEndpointProfile(inputs.postmanStack, inputs.postmanRegion);
   const postman = options.postmanClient ?? new PostmanClient({
     apiKey: inputs.postmanApiKey,

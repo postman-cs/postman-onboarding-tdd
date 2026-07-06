@@ -6,7 +6,7 @@ branding:
   color: orange
 inputs:
   mode:
-    description: Action mode. Use run for PR preview, cleanup for PR close cleanup, or repair for automated implementation repair.
+    description: Action mode. Use validate for setup checks, run for PR preview, cleanup for PR close cleanup, or repair for automated implementation repair.
     required: false
     default: run
   onboarding-config-path:
@@ -23,8 +23,8 @@ inputs:
     description: Optional PR number override. Defaults to the pull_request event number.
     required: false
   postman-api-key:
-    description: Postman API key used for workspace, spec, and collection operations.
-    required: true
+    description: Postman API key used for workspace, spec, and collection operations. Required unless mode=validate.
+    required: false
   postman-access-token:
     description: Postman access token. Required by mode=repair when the resolved repair provider is postman-agent-mode; optional otherwise.
     required: false
@@ -35,8 +35,8 @@ inputs:
     description: Anthropic API key used by mode=repair when the resolved repair provider is anthropic-messages.
     required: false
   github-token:
-    description: GitHub token used for PR comments and config writeback.
-    required: true
+    description: GitHub token used for PR comments and config writeback. Required unless mode=validate.
+    required: false
   repair-github-token:
     description: Optional token used by mode=repair for pushing repair commits. Prefer a PAT or GitHub App token so pushed commits trigger follow-up workflows.
     required: false
@@ -117,6 +117,12 @@ outputs:
     description: Commit SHA pushed by the repair worker after a green local collection run.
   repair-summary-path:
     description: Path to the local repair summary JSON.
+  validation-error-count:
+    description: Number of setup validation errors found by mode=validate.
+  validation-warning-count:
+    description: Number of setup validation warnings found by mode=validate.
+  validation-summary:
+    description: Multiline setup validation summary from mode=validate.
 runs:
   using: node24
   main: dist/action.mjs
