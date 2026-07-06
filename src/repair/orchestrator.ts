@@ -19,7 +19,7 @@ import type { PostmanClient } from '../postman/client.js';
 import type { ActionInputs, AgentFailureDocument, PrMetadata, PreviewAssetState, RepairStatus } from '../types.js';
 import type { SecretMasker } from '../secrets.js';
 import { commitAndPushRepair, hashPaths, verifyChangedPaths, verifyPathHashes } from './git.js';
-import { assertMatchingRepairProvider, resolveRepairProviderApiKey, runRepairProviderTurn } from './provider-dispatcher.js';
+import { assertMatchingRepairProvider, defaultRepairModel, resolveRepairProviderApiKey, runRepairProviderTurn } from './provider-dispatcher.js';
 import type { PatchPolicy } from './patch.js';
 import { writeRepairSummary, type RepairAttemptDiagnostic, type RepairSummary } from './summary.js';
 
@@ -59,7 +59,9 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
   }
 
   const repairProvider = assertMatchingRepairProvider(options.inputs.repairProvider, config.repair.provider);
-  resolveRepairProviderApiKey(options.inputs);
+  const repairModel = options.inputs.repairModel || defaultRepairModel(repairProvider);
+  resolveRepairProviderApiKey(options.inputs, repairProvider);
+  core.info(`[postman-tdd] Repair provider resolved: provider=${repairProvider}, model=${repairModel}.`);
 
   core.info(`[postman-tdd] Fetching PR details for #${options.pr.number}.`);
   const prDetails = await options.github.getPullRequest(options.pr.number);
@@ -160,7 +162,11 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     core.info(`[postman-tdd] Repair attempt ${attemptNumber}/${maxAttempts}: asking provider for an implementation-only patch.`);
     const repair = await runRepairProviderTurn({
       failure: currentFailure,
-      inputs: options.inputs,
+      inputs: {
+        ...options.inputs,
+        repairModel,
+        repairProvider
+      },
       provider: repairProvider,
       repairContext: {
         allowedReadPaths: config.repair.allowedReadPaths,
@@ -383,9 +389,9 @@ function logRepairConfig(config: ReturnType<typeof loadOnboardingConfig>, option
   core.info(`specPath=${config.specPath}`);
   core.info(`tddEnabled=${config.tddEnabled}`);
   core.info(`repairEnabled=${config.repair.enabled}`);
-  core.info(`repairProviderInput=${options.inputs.repairProvider}`);
+  core.info(`repairProviderInput=${options.inputs.repairProvider || '(from config)'}`);
   core.info(`repairProviderConfig=${config.repair.provider}`);
-  core.info(`repairModel=${options.inputs.repairModel}`);
+  core.info(`repairModelInput=${options.inputs.repairModel || '(provider default)'}`);
   core.info(`repairMaxAttemptsInput=${options.inputs.repairMaxAttempts}`);
   core.info(`repairMaxAttemptsConfig=${config.repair.maxAttempts}`);
   core.info(`allowedWritePaths=${config.repair.allowedWritePaths.join(', ') || '(none)'}`);

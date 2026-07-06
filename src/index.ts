@@ -65,7 +65,9 @@ export function readActionInputs(): ActionInputs {
   if (modeRaw !== 'run' && modeRaw !== 'cleanup' && modeRaw !== 'repair') {
     throw new Error(`Unsupported mode "${modeRaw}". Expected run, cleanup, or repair`);
   }
-  const repairProvider = validateRepairProvider(core.getInput('repair-provider') || 'openai-responses');
+  const repairProviderInput = core.getInput('repair-provider');
+  const repairProvider = repairProviderInput ? validateRepairProvider(repairProviderInput) : undefined;
+  const repairModelInput = core.getInput('repair-model') || undefined;
   const repairMaxAttempts = Number(core.getInput('repair-max-attempts') || '3');
   if (!Number.isFinite(repairMaxAttempts) || repairMaxAttempts <= 0) {
     throw new Error(`repair-max-attempts must be a positive number, got: ${core.getInput('repair-max-attempts')}`);
@@ -89,7 +91,7 @@ export function readActionInputs(): ActionInputs {
     repairCommitMessage: core.getInput('repair-commit-message') || 'Postman TDD repair',
     repairGithubToken: core.getInput('repair-github-token') || undefined,
     repairMaxAttempts,
-    repairModel: core.getInput('repair-model') || defaultRepairModel(repairProvider),
+    repairModel: repairModelInput || (repairProvider ? defaultRepairModel(repairProvider) : undefined),
     repairProvider,
     specPath: core.getInput('spec-path') || undefined,
     workspaceTeamId: core.getInput('workspace-team-id') || undefined
@@ -506,7 +508,7 @@ function logActionContext(options: {
   core.info(`postmanStack=${options.inputs.postmanStack}`);
   core.info(`postmanApiBaseUrl=${options.endpointProfile.apiBaseUrl}`);
   core.info(`configWriteMode=${options.inputs.configWriteMode}`);
-  core.info(`repairProvider=${options.inputs.repairProvider}`);
+  core.info(`repairProviderInput=${options.inputs.repairProvider || '(from config)'}`);
   core.info(`repairMaxAttemptsInput=${options.inputs.repairMaxAttempts}`);
   core.endGroup();
 }

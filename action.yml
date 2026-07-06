@@ -41,9 +41,8 @@ inputs:
     description: Optional token used by mode=repair for pushing repair commits. Prefer a PAT or GitHub App token so pushed commits trigger follow-up workflows.
     required: false
   repair-provider:
-    description: Repair provider for mode=repair. One of openai-responses, anthropic-messages, or postman-agent-mode.
+    description: Optional repair provider guard for mode=repair. When omitted, tdd.repair.provider from onboarding config is used. If set, it must be one of openai-responses, anthropic-messages, or postman-agent-mode and must match onboarding config.
     required: false
-    default: openai-responses
   repair-model:
     description: Model used by mode=repair. Defaults to gpt-5.5 for openai-responses, claude-sonnet-5 for anthropic-messages, and GPT_5 for postman-agent-mode.
     required: false

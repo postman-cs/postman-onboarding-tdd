@@ -38,12 +38,23 @@ describe('action input parsing', () => {
     process.env[`INPUT_${name.toUpperCase()}`] = value;
   }
 
-  it('defaults to the OpenAI repair provider and model', () => {
+  it('leaves the repair provider and model unset when the action input is omitted', () => {
     setInput('github-token', 'github-token');
     setInput('postman-api-key', 'postman-token');
 
     expect(readActionInputs()).toMatchObject({
       openaiApiKey: undefined,
+      repairModel: undefined,
+      repairProvider: undefined
+    });
+  });
+
+  it('defaults to an OpenAI model when the OpenAI repair provider input is set', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+    setInput('repair-provider', 'openai-responses');
+
+    expect(readActionInputs()).toMatchObject({
       repairModel: 'gpt-5.5',
       repairProvider: 'openai-responses'
     });
