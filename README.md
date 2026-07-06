@@ -80,7 +80,15 @@ For most teams, start with the preview workflow first. Add the automated repair 
    - set `tdd.baseUrl`, `tdd.healthUrl`, and `tdd.startCommand`,
    - keep `tdd.repair.enabled: false` until the preview workflow is stable, then enable repair.
 
-3. Add the preview workflow from [Preview Workflow](#preview-workflow).
+3. Copy the packaged preview workflow:
+
+   ```bash
+   mkdir -p .github/workflows
+   curl -fsSL https://raw.githubusercontent.com/postman-cs/postman-onboarding-tdd/main/.postman-template/workflows/postman-tdd-preview.yml \
+     -o .github/workflows/postman-tdd-preview.yml
+   ```
+
+   Then adjust the workflow `paths` list for the service if needed.
 
 4. Add the required secrets from [GitHub Secrets](#github-secrets).
 
@@ -148,10 +156,10 @@ Create these secrets in the customer service repository:
 | Secret | Required | Purpose |
 | --- | --- | --- |
 | `POSTMAN_API_KEY` | yes | Creates/updates Postman workspace, spec, collection, and runs the collection. |
-| `POSTMAN_ACCESS_TOKEN` | repair with Postman Agent Mode | Used when `repair-provider` is `postman-agent-mode`. |
+| `POSTMAN_ACCESS_TOKEN` | repair with Postman Agent Mode | Used when the resolved repair provider is `postman-agent-mode`. |
 | `POSTMAN_TDD_SIGNING_KEY` | recommended | Signs the immutable-spec baseline so agents cannot tamper with sticky comment state. |
-| `OPENAI_API_KEY` | repair with OpenAI | Used when `repair-provider` is `openai-responses`. |
-| `ANTHROPIC_API_KEY` | repair with Claude | Used when `repair-provider` is `anthropic-messages`. |
+| `OPENAI_API_KEY` | repair with OpenAI | Used when the resolved repair provider is `openai-responses`. |
+| `ANTHROPIC_API_KEY` | repair with Claude | Used when the resolved repair provider is `anthropic-messages`. |
 | `POSTMAN_TDD_REPAIR_TOKEN` | repair recommended | PAT or GitHub App token used to push repair commits and trigger the next preview run. |
 
 Use a long random value for `POSTMAN_TDD_SIGNING_KEY`. Implementation agents should not be able to read it.
@@ -193,13 +201,23 @@ Use this checklist after the preview workflow is already posting `Postman TDD Pr
 
 4. Add `POSTMAN_TDD_REPAIR_TOKEN` so pushed repair commits can trigger the next preview run.
 
-5. Add the repair workflow from [Repair Workflow](#repair-workflow). You can omit the action `repair-provider` input to use `tdd.repair.provider` from onboarding config. If you set the action input, it must match the config value.
+5. Copy the packaged repair workflow from [Repair Workflow](#repair-workflow). You can omit the action `repair-provider` input to use `tdd.repair.provider` from onboarding config. If you set the action input, it must match the config value.
 
 6. Test repair with a small implementation-only contract failure. Done means the PR shows both `Postman TDD Repair (REPAIRED)` and a later `Postman TDD Preview (PASSED)` on the repair commit.
 
 ## Preview Workflow
 
-Add `.github/workflows/postman-tdd-preview.yml`:
+Copy the packaged preview workflow into the service repository:
+
+```bash
+mkdir -p .github/workflows
+curl -fsSL https://raw.githubusercontent.com/postman-cs/postman-onboarding-tdd/main/.postman-template/workflows/postman-tdd-preview.yml \
+  -o .github/workflows/postman-tdd-preview.yml
+```
+
+If you have this package checked out or installed locally, the same template is available at `.postman-template/workflows/postman-tdd-preview.yml`.
+
+The packaged template contains:
 
 ```yaml
 name: Postman TDD Preview
@@ -212,6 +230,7 @@ on:
       - src/**
       - scripts/postman-tdd-start.sh
       - .postman-template/onboarding.yml
+      - .github/workflows/postman-tdd-preview.yml
 
 permissions:
   contents: write
@@ -236,7 +255,6 @@ jobs:
         with:
           mode: ${{ github.event.action == 'closed' && 'cleanup' || 'run' }}
           postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
-          postman-access-token: ${{ secrets.POSTMAN_ACCESS_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
           workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
@@ -410,6 +428,18 @@ Add a second workflow, `.github/workflows/postman-tdd-repair.yml`:
 
 For `workflow_run` triggers, GitHub uses the workflow definition from the default branch. Merge this repair workflow to the default branch before expecting it to run automatically for PR failures.
 
+Copy the packaged repair workflow into the service repository:
+
+```bash
+mkdir -p .github/workflows
+curl -fsSL https://raw.githubusercontent.com/postman-cs/postman-onboarding-tdd/main/.postman-template/workflows/postman-tdd-repair.yml \
+  -o .github/workflows/postman-tdd-repair.yml
+```
+
+If you have this package checked out or installed locally, the same template is available at `.postman-template/workflows/postman-tdd-repair.yml`.
+
+The packaged template contains:
+
 ```yaml
 name: Postman TDD Repair
 
@@ -445,15 +475,17 @@ jobs:
           mode: repair
           pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
           postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
-          postman-access-token: ${{ secrets.POSTMAN_ACCESS_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repair-github-token: ${{ secrets.POSTMAN_TDD_REPAIR_TOKEN }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          postman-access-token: ${{ secrets.POSTMAN_ACCESS_TOKEN }}
           immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
+          repair-max-attempts: 3
           workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
 ```
 
-The action uses `tdd.repair.provider` from onboarding config when `repair-provider` is omitted. You may still set `repair-provider` in the workflow as an explicit guard; when set, it must match the onboarding config value.
+The action uses `tdd.repair.provider` from onboarding config when `repair-provider` is omitted. The packaged repair workflow wires all provider credential inputs to their matching GitHub secrets, but the selected repair provider still receives only guarded repair tools and no repository secrets. You may set `repair-provider` in the workflow as an explicit guard; when set, it must match the onboarding config value.
 
 To use Claude instead, set the onboarding config provider to `anthropic-messages`, pass `anthropic-api-key`, and use a Claude Messages model:
 
@@ -511,7 +543,7 @@ Postman Agent Mode repair receives the same guarded repair tool definitions as t
 | `spec-path` | no | `spec.path` | Optional OpenAPI spec path override. |
 | `pr-number` | no | pull request event number | Optional PR number override. Recommended for `workflow_run` repair workflows. |
 | `postman-api-key` | yes | | Postman API key. |
-| `postman-access-token` | repair with Postman Agent Mode | | Postman access token for `mode: repair` when `repair-provider` is `postman-agent-mode`. Optional otherwise. |
+| `postman-access-token` | repair with Postman Agent Mode | | Postman access token for `mode: repair` when the resolved repair provider is `postman-agent-mode`. Optional otherwise. |
 | `github-token` | yes | | Token for PR comments and workspace ID config writeback. |
 | `immutable-state-signing-key` | no | | HMAC key used to sign immutable spec baselines. Recommended value: `${{ secrets.POSTMAN_TDD_SIGNING_KEY }}`. |
 | `workspace-team-id` | no | | Numeric Postman sub-team ID for org-mode workspace creation. |
@@ -520,8 +552,8 @@ Postman Agent Mode repair receives the same guarded repair tool definitions as t
 | `committer-email` | no | `support@postman.com` | Commit author email for workspace ID writeback. |
 | `postman-region` | no | `us` | `us` or `eu`. |
 | `postman-stack` | no | `prod` | `prod` or `beta`. |
-| `openai-api-key` | repair with OpenAI | | OpenAI API key for `mode: repair` when `repair-provider` is `openai-responses`. |
-| `anthropic-api-key` | repair with Claude | | Anthropic API key for `mode: repair` when `repair-provider` is `anthropic-messages`. |
+| `openai-api-key` | repair with OpenAI | | OpenAI API key for `mode: repair` when the resolved repair provider is `openai-responses`. |
+| `anthropic-api-key` | repair with Claude | | Anthropic API key for `mode: repair` when the resolved repair provider is `anthropic-messages`. |
 | `repair-github-token` | repair recommended | `github-token` | Token used by `mode: repair` for pushing repair commits. Prefer a PAT or GitHub App token. |
 | `repair-provider` | no | `tdd.repair.provider` | Optional repair provider guard. One of `openai-responses`, `anthropic-messages`, or `postman-agent-mode`. When omitted, repair uses onboarding config. When set, it must match `tdd.repair.provider`. |
 | `repair-model` | no | provider default | Model used by `mode: repair`. Defaults to `gpt-5.5` for OpenAI, `claude-sonnet-5` for Claude, and `GPT_5` for Postman Agent Mode unless explicitly set. |

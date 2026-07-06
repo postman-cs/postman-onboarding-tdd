@@ -1,0 +1,38 @@
+name: Postman TDD Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - api/**
+      - src/**
+      - scripts/postman-tdd-start.sh
+      - .postman-template/onboarding.yml
+      - .github/workflows/postman-tdd-preview.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: postman-tdd-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  tdd:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.action == 'closed' && github.base_ref || github.head_ref }}
+          fetch-depth: 0
+
+      - uses: postman-cs/postman-onboarding-tdd@main
+        with:
+          mode: ${{ github.event.action == 'closed' && 'cleanup' || 'run' }}
+          postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
+          workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
