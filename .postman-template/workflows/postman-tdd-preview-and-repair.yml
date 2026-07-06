@@ -1,0 +1,62 @@
+name: Postman TDD Preview + Repair
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - api/**
+      - src/**
+      - scripts/postman-tdd-start.sh
+      - .postman-template/onboarding.yml
+      - .github/workflows/postman-tdd-preview-and-repair.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: postman-tdd-preview-repair-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  tdd:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.action == 'closed' && github.base_ref || github.head_ref }}
+          fetch-depth: 0
+
+      - uses: postman-cs/postman-onboarding-tdd@main
+        with:
+          mode: ${{ github.event.action == 'closed' && 'cleanup' || 'run' }}
+          postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
+          workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
+
+  repair:
+    needs: tdd
+    if: ${{ always() && github.event.action != 'closed' && needs.tdd.result == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - uses: postman-cs/postman-onboarding-tdd@main
+        with:
+          mode: repair
+          pr-number: ${{ github.event.pull_request.number }}
+          postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repair-github-token: ${{ secrets.POSTMAN_TDD_REPAIR_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          postman-access-token: ${{ secrets.POSTMAN_ACCESS_TOKEN }}
+          immutable-state-signing-key: ${{ secrets.POSTMAN_TDD_SIGNING_KEY }}
+          repair-max-attempts: 3
+          workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}

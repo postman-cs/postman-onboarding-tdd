@@ -56,7 +56,7 @@ You add three things to the service repository:
 
 1. `.postman-template/onboarding.yml`
 2. One script that starts the service for CI TDD
-3. One or two GitHub workflows
+3. One or two GitHub workflows, or the combined preview-plus-repair workflow while testing repair from a PR branch
 
 For most teams, start with the preview workflow first. Add the automated repair workflow after the preview check is stable.
 
@@ -176,7 +176,7 @@ Use this checklist after the preview workflow is already posting `Postman TDD Pr
    tdd:
      repair:
        enabled: true
-       provider: anthropic-messages # or openai-responses
+       provider: anthropic-messages # or openai-responses or postman-agent-mode
        maxAttempts: 3
        allowedWritePaths:
          - src/**
@@ -201,7 +201,7 @@ Use this checklist after the preview workflow is already posting `Postman TDD Pr
 
 4. Add `POSTMAN_TDD_REPAIR_TOKEN` so pushed repair commits can trigger the next preview run.
 
-5. Copy the packaged repair workflow from [Repair Workflow](#repair-workflow). You can omit the action `repair-provider` input to use `tdd.repair.provider` from onboarding config. If you set the action input, it must match the config value.
+5. Copy the packaged repair workflow from [Repair Workflow](#repair-workflow) for a default-branch production setup. To test repair before merging the production `workflow_run` workflow, use [Branch-Testable Preview + Repair Workflow](#branch-testable-preview--repair-workflow). You can omit the action `repair-provider` input to use `tdd.repair.provider` from onboarding config. If you set the action input, it must match the config value.
 
 6. Test repair with a small implementation-only contract failure. Done means the PR shows both `Postman TDD Repair (REPAIRED)` and a later `Postman TDD Preview (PASSED)` on the repair commit.
 
@@ -420,7 +420,7 @@ The worker will not write to:
 - generated Postman files,
 - secret-like files.
 
-The selected repair model does not receive Postman secrets, GitHub tokens, the canonical spec file content, generated collection content, shell access, git access, or raw filesystem write tools. Claude repair mode uses the same guarded read/search/patch tools and the same allowed path policy as OpenAI repair mode.
+The selected repair model does not receive Postman secrets, GitHub tokens, the canonical spec file content, generated collection content, shell access, git access, or raw filesystem write tools. Claude and Postman Agent Mode repair use the same guarded read/search/patch tools and the same allowed path policy as OpenAI repair mode.
 
 ### Repair Workflow
 
@@ -484,6 +484,29 @@ jobs:
           repair-max-attempts: 3
           workspace-team-id: ${{ vars.POSTMAN_WORKSPACE_TEAM_ID }}
 ```
+
+### Branch-Testable Preview + Repair Workflow
+
+Use this template when you want to test automated repair from a PR branch before merging the production `workflow_run` repair workflow to the default branch. It runs preview and repair in one `pull_request` workflow:
+
+- the `tdd` job runs the normal preview action,
+- the `repair` job runs only when `tdd` fails and the PR is not closing,
+- the repair job checks out `github.head_ref` so it can patch the PR branch,
+- the action still reads `tdd.repair.provider` from `.postman-template/onboarding.yml`.
+
+Copy the packaged combined workflow into the service repository:
+
+```bash
+mkdir -p .github/workflows
+curl -fsSL https://raw.githubusercontent.com/postman-cs/postman-onboarding-tdd/main/.postman-template/workflows/postman-tdd-preview-and-repair.yml \
+  -o .github/workflows/postman-tdd-preview-and-repair.yml
+```
+
+If you have this package checked out or installed locally, the same template is available at `.postman-template/workflows/postman-tdd-preview-and-repair.yml`.
+
+Do not run the combined workflow alongside the separate preview workflow for normal production use, or a failed PR can trigger duplicate preview runs. After branch testing succeeds, prefer the separate [Preview Workflow](#preview-workflow) plus default-branch [Repair Workflow](#repair-workflow).
+
+The combined workflow wires all provider credential inputs so you can switch providers by changing `tdd.repair.provider` in onboarding config. The selected provider still receives only guarded repair tools and no repository secrets, shell access, broad file writes, generated Postman assets, or Postman workspace mutation tools.
 
 The action uses `tdd.repair.provider` from onboarding config when `repair-provider` is omitted. The packaged repair workflow wires all provider credential inputs to their matching GitHub secrets, but the selected repair provider still receives only guarded repair tools and no repository secrets. You may set `repair-provider` in the workflow as an explicit guard; when set, it must match the onboarding config value.
 
