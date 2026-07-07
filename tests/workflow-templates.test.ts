@@ -10,6 +10,21 @@ function readWorkflow(name: string): string {
 }
 
 describe('packaged workflow templates', () => {
+  it('ships a valid no-secrets setup validation workflow template', () => {
+    const source = readWorkflow('postman-tdd-validate.yml');
+    const workflow = parse(source) as { name: string };
+
+    expect(workflow.name).toBe('Postman TDD Setup Check');
+    expect(source).toContain('postman-cs/postman-onboarding-tdd@main');
+    expect(source).toContain('mode: validate');
+    expect(source).toContain('contents: read');
+    expect(source).not.toContain('postman-api-key');
+    expect(source).not.toContain('github-token');
+    expect(source).not.toContain('openai-api-key');
+    expect(source).not.toContain('anthropic-api-key');
+    expect(source).not.toContain('postman-access-token');
+  });
+
   it('ships a valid preview workflow template', () => {
     const source = readWorkflow('postman-tdd-preview.yml');
     const workflow = parse(source) as { name: string };

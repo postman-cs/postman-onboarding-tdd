@@ -1,0 +1,30 @@
+name: Postman TDD Setup Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - api/**
+      - scripts/postman-tdd-start.sh
+      - scripts/postman-tdd-stop.sh
+      - .postman-template/onboarding.yml
+      - .github/workflows/postman-tdd-validate.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postman-tdd-validate-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+
+      - uses: postman-cs/postman-onboarding-tdd@main
+        with:
+          mode: validate

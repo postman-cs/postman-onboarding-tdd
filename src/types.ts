@@ -1,4 +1,4 @@
-export type ActionMode = 'run' | 'cleanup' | 'repair';
+export type ActionMode = 'run' | 'cleanup' | 'repair' | 'validate';
 
 export type ConfigWriteMode = 'commit-and-push' | 'commit-only' | 'none';
 

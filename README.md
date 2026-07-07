@@ -56,9 +56,9 @@ You add three things to the service repository:
 
 1. `.postman-template/onboarding.yml`
 2. One script that starts the service for CI TDD
-3. One or two GitHub workflows, or the combined preview-plus-repair workflow while testing repair from a PR branch
+3. Optional setup-check workflow plus one or two GitHub workflows, or the combined preview-plus-repair workflow while testing repair from a PR branch
 
-For most teams, start with the preview workflow first. Add the automated repair workflow after the preview check is stable.
+For most teams, start with the setup-check and preview workflows first. Add the automated repair workflow after the preview check is stable.
 
 ## Quick Start
 
@@ -80,7 +80,17 @@ For most teams, start with the preview workflow first. Add the automated repair 
    - set `tdd.baseUrl`, `tdd.healthUrl`, and `tdd.startCommand`,
    - keep `tdd.repair.enabled: false` until the preview workflow is stable, then enable repair.
 
-3. Copy the packaged preview workflow:
+3. Optionally copy the no-secrets setup-check workflow:
+
+   ```bash
+   mkdir -p .github/workflows
+   curl -fsSL https://raw.githubusercontent.com/postman-cs/postman-onboarding-tdd/main/.postman-template/workflows/postman-tdd-validate.yml \
+     -o .github/workflows/postman-tdd-validate.yml
+   ```
+
+   This workflow runs `mode: validate` and checks the onboarding config, OpenAPI spec, simple script paths, repair path policy, and obvious duplicate workflow choices without using Postman, GitHub, or AI provider secrets.
+
+4. Copy the packaged preview workflow:
 
    ```bash
    mkdir -p .github/workflows
@@ -90,11 +100,11 @@ For most teams, start with the preview workflow first. Add the automated repair 
 
    Then adjust the workflow `paths` list for the service if needed.
 
-4. Add the required secrets from [GitHub Secrets](#github-secrets).
+5. Add the required secrets from [GitHub Secrets](#github-secrets).
 
-5. Open a PR that changes the OpenAPI spec or implementation and confirm `Postman TDD Preview` posts a PR comment.
+6. Open a PR that changes the OpenAPI spec or implementation and confirm `Postman TDD Setup Check` and `Postman TDD Preview` pass or post actionable failures.
 
-6. Enable repair using [Repair Setup Checklist](#repair-setup-checklist).
+7. Enable repair using [Repair Setup Checklist](#repair-setup-checklist).
 
 ## Repository Config
 
@@ -204,6 +214,55 @@ Use this checklist after the preview workflow is already posting `Postman TDD Pr
 5. Copy the packaged repair workflow from [Repair Workflow](#repair-workflow) for a default-branch production setup. To test repair before merging the production `workflow_run` workflow, use [Branch-Testable Preview + Repair Workflow](#branch-testable-preview--repair-workflow). You can omit the action `repair-provider` input to use `tdd.repair.provider` from onboarding config. If you set the action input, it must match the config value.
 
 6. Test repair with a small implementation-only contract failure. Done means the PR shows both `Postman TDD Repair (REPAIRED)` and a later `Postman TDD Preview (PASSED)` on the repair commit.
+
+## Setup Validation Workflow
+
+Copy the packaged setup-check workflow into the service repository:
+
+```bash
+mkdir -p .github/workflows
+curl -fsSL https://raw.githubusercontent.com/postman-cs/postman-onboarding-tdd/main/.postman-template/workflows/postman-tdd-validate.yml \
+  -o .github/workflows/postman-tdd-validate.yml
+```
+
+If you have this package checked out or installed locally, the same template is available at `.postman-template/workflows/postman-tdd-validate.yml`.
+
+The packaged template contains:
+
+```yaml
+name: Postman TDD Setup Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - api/**
+      - scripts/postman-tdd-start.sh
+      - scripts/postman-tdd-stop.sh
+      - .postman-template/onboarding.yml
+      - .github/workflows/postman-tdd-validate.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postman-tdd-validate-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+
+      - uses: postman-cs/postman-onboarding-tdd@main
+        with:
+          mode: validate
+```
+
+`mode: validate` does not call Postman APIs, install or authenticate the Postman CLI, post GitHub comments, call AI providers, or require repository secrets. It checks the onboarding config, OpenAPI parseability and operations, simple script paths, repair read/write path safety, and obvious duplicate workflow choices. Complex shell commands such as `npm start` are reported as warnings rather than failures because the action cannot safely parse every customer shell command.
 
 ## Preview Workflow
 
@@ -560,14 +619,14 @@ Postman Agent Mode repair receives the same guarded repair tool definitions as t
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `mode` | no | `run` | `run`, `cleanup`, or `repair`. |
+| `mode` | no | `run` | `validate`, `run`, `cleanup`, or `repair`. |
 | `onboarding-config-path` | no | `.postman-template/onboarding.yml` | Service onboarding config path. |
 | `project-name` | no | `service.name` | Optional service name override. |
 | `spec-path` | no | `spec.path` | Optional OpenAPI spec path override. |
 | `pr-number` | no | pull request event number | Optional PR number override. Recommended for `workflow_run` repair workflows. |
-| `postman-api-key` | yes | | Postman API key. |
+| `postman-api-key` | run/cleanup/repair | | Postman API key. Not required for `mode: validate`. |
 | `postman-access-token` | repair with Postman Agent Mode | | Postman access token for `mode: repair` when the resolved repair provider is `postman-agent-mode`. Optional otherwise. |
-| `github-token` | yes | | Token for PR comments and workspace ID config writeback. |
+| `github-token` | run/cleanup/repair | | Token for PR comments and workspace ID config writeback. Not required for `mode: validate`. |
 | `immutable-state-signing-key` | no | | HMAC key used to sign immutable spec baselines. Recommended value: `${{ secrets.POSTMAN_TDD_SIGNING_KEY }}`. |
 | `workspace-team-id` | no | | Numeric Postman sub-team ID for org-mode workspace creation. |
 | `config-write-mode` | no | `commit-and-push` | `commit-and-push`, `commit-only`, or `none`. |
@@ -596,6 +655,14 @@ Important preview outputs:
 | `tdd-collection-id` | PR-scoped generated collection ID. |
 | `pr-comment-id` | Sticky preview PR comment ID. |
 | `agent-context-artifact` | Uploaded agent context artifact name, when available. |
+
+Important validation outputs:
+
+| Output | Description |
+| --- | --- |
+| `validation-error-count` | Number of setup validation errors found by `mode: validate`. |
+| `validation-warning-count` | Number of setup validation warnings found by `mode: validate`. |
+| `validation-summary` | Multiline setup validation summary from `mode: validate`. |
 
 Important repair outputs:
 
