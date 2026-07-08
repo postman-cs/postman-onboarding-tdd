@@ -59,6 +59,45 @@ export interface PrMetadata {
   sha?: string;
 }
 
+export interface LedgerAcceptance {
+  assertion: string;
+  criterion: string;
+}
+
+export interface LedgerPacket {
+  acceptance: LedgerAcceptance[];
+  attempts: number;
+  firstSeenCommit?: string;
+  key: string;
+  lastFailureFingerprint?: string;
+  lastVerifiedCommit?: string;
+  method: string;
+  operationId?: string;
+  passes: boolean;
+  path: string;
+  title: string;
+}
+
+export interface Ledger {
+  generatedAtCommit?: string;
+  packets: LedgerPacket[];
+  schemaVersion: 1;
+}
+
+export interface LedgerSummaryPacket {
+  key: string;
+  lastFailureFingerprint?: string;
+  passes: boolean;
+  title: string;
+}
+
+export interface LedgerSummary {
+  failing: number;
+  packets: LedgerSummaryPacket[];
+  passing: number;
+  total: number;
+}
+
 export interface PreviewAssetState {
   collectionId?: string;
   immutableState?: SignedImmutableState;
