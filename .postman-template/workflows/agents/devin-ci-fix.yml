@@ -1,0 +1,76 @@
+# Opt-in agent dispatch template: Devin CI fix.
+#
+# This file is OPT-IN. Copy it into .github/workflows/ in your repo only if you
+# want Devin to attempt automated contract-failure repair. It is never
+# auto-installed and the Postman TDD preview workflow does not reference it.
+#
+# Required secret (add under repo/org settings):
+#   DEVIN_API_KEY   - Devin API key (https://docs.devin.ai/api-reference)
+#
+# Budget: max-turns defaults to a conservative value (customer bears API cost).
+# Override via the MAX_TURNS environment variable below.
+#
+# Recursion guard: skips runs whose head_branch starts with 'postman-tdd-fix-'
+# (the D17 repair-branch prefix) so Devin never re-triggers on its own push.
+name: Postman TDD Devin CI Fix
+
+on:
+  workflow_run:
+    workflows: ['Postman TDD Preview']
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: postman-tdd-agent-devin-${{ github.event.workflow_run.pull_requests[0].number }}
+  cancel-in-progress: false
+
+jobs:
+  devin-fix:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      !startsWith(github.event.workflow_run.head_branch, 'postman-tdd-fix-') &&
+      github.event.workflow_run.actor != 'devin[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+
+      - name: Download agent context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: postman-tdd-agent-context
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Dispatch Devin session
+        env:
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+          MAX_TURNS: '12'
+        run: |
+          set -euo pipefail
+          FAILURE_JSON="$(cat .postman-tdd/failures.json 2>/dev/null || echo '{}')"
+          RESPONSE=$(curl -sS -X POST 'https://api.devin.ai/v1/sessions' \
+            -H "Authorization: Bearer ${DEVIN_API_KEY}" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -n \
+              --arg pr "postman-tdd-pr-${PR_NUMBER}" \
+              --arg url "${RUN_URL}" \
+              --argjson ctx "${FAILURE_JSON}" \
+              --argjson max_turns "${MAX_TURNS}" \
+              '{
+                prompt: ("Postman TDD contract failed. Failure context JSON:\n" + ($ctx | tostring) + "\nRun URL: " + $url + "\nFix the implementation so the contract passes. Do not edit the OpenAPI spec or generated assertions."),
+                tags: ["postman-tdd", $pr],
+                max_turns: $max_turns
+              }')")
+          echo "Devin session response: ${RESPONSE}"

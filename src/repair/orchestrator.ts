@@ -19,7 +19,7 @@ import type { PostmanEndpointProfile } from '../postman/base-urls.js';
 import type { PostmanClient } from '../postman/client.js';
 import type { ActionInputs, AgentFailureDocument, PrMetadata, PreviewAssetState, RepairCheckpointPayload, RepairProvider, RepairStatus, SignedRepairCheckpoint } from '../types.js';
 import type { SecretMasker } from '../secrets.js';
-import { commitAndPushRepair, hashPaths, verifyChangedPaths, verifyPathHashes } from './git.js';
+import { commitAndPushRepair, hashPaths, repairBranchName, repairCommitMessage, verifyChangedPaths, verifyPathHashes } from './git.js';
 import { assertMatchingRepairProvider, defaultRepairModel, resolveRepairProviderApiKey, runRepairProviderTurn } from './provider-dispatcher.js';
 import type { PatchPolicy } from './patch.js';
 import { writeRepairSummary, type RepairAttemptDiagnostic, type RepairSummary } from './summary.js';
@@ -308,10 +308,10 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       if (!options.inputs.repairGithubToken) {
         core.warning('repair-github-token was not set. Commits pushed with GITHUB_TOKEN may not trigger follow-up workflows.');
       }
-      core.info(`[postman-tdd] Committing and pushing repair to branch ${prDetails.headBranch}.`);
+      core.info(`[postman-tdd] Committing and pushing repair to branch ${repairBranchName(options.pr.number)}.`);
       const commitSha = commitAndPushRepair({
-        branch: prDetails.headBranch,
-        commitMessage: options.inputs.repairCommitMessage,
+        branch: repairBranchName(options.pr.number),
+        commitMessage: repairCommitMessage(options.pr.number),
         committerEmail: options.inputs.committerEmail,
         committerName: options.inputs.committerName,
         githubToken: token,
@@ -426,8 +426,8 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
         core.info(`[postman-tdd] Escalation diff validated: ${changedPaths.join(', ') || '(none)'}.`);
         const token = options.inputs.repairGithubToken || options.inputs.githubToken;
         const commitSha = commitAndPushRepair({
-          branch: prDetails.headBranch,
-          commitMessage: options.inputs.repairCommitMessage,
+          branch: repairBranchName(options.pr.number),
+          commitMessage: repairCommitMessage(options.pr.number),
           committerEmail: options.inputs.committerEmail,
           committerName: options.inputs.committerName,
           githubToken: token,

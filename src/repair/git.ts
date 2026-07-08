@@ -27,6 +27,28 @@ export function hashPaths(repoRoot: string, paths: string[]): Array<{ path: stri
   });
 }
 
+/**
+ * D17: deterministic repair branch name. The `postman-tdd-fix-` prefix is the
+ * exact prefix the dispatch-template recursion guards test via `startsWith`,
+ * so repair pushes to this branch never re-trigger the dispatch workflow.
+ */
+export function repairBranchName(prNumber: number): string {
+  return `postman-tdd-fix-${prNumber}`;
+}
+
+/**
+ * D17: idempotent repair commit message keyed to the PR number and optional
+ * check-run id. A re-run produces the same message, so it does not create
+ * duplicate-effect commits. When `checkRunId` is absent, the `[check:...]`
+ * segment is omitted.
+ */
+export function repairCommitMessage(prNumber: number, checkRunId?: string | number): string {
+  const base = `postman-tdd: repair contract for PR #${prNumber}`;
+  return checkRunId === undefined || checkRunId === null || checkRunId === ''
+    ? base
+    : `${base} [check:${checkRunId}]`;
+}
+
 export function verifyPathHashes(repoRoot: string, hashes: Array<{ path: string; sha256: string }>): void {
   for (const expected of hashes) {
     const normalized = repoRelativePath(repoRoot, expected.path);

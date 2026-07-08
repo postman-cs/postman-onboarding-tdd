@@ -40,7 +40,7 @@ jobs:
           run test       npm test
           run typecheck  npm run typecheck
           run dist       npm run check:dist
-          run actionlint "$ACTIONLINT_BIN" .github/workflows/*.yml .postman-template/workflows/*.yml
+          run actionlint "$ACTIONLINT_BIN" .github/workflows/*.yml .postman-template/workflows/*.yml .postman-template/workflows/agents/*.yml
 
           fail=0
           for n in "${!pid[@]}"; do

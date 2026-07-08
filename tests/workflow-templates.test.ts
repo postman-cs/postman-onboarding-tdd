@@ -4,9 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
 const workflowDir = join(process.cwd(), '.postman-template', 'workflows');
+const agentsDir = join(workflowDir, 'agents');
 
 function readWorkflow(name: string): string {
   return readFileSync(join(workflowDir, name), 'utf8');
+}
+
+function readAgent(name: string): string {
+  return readFileSync(join(agentsDir, name), 'utf8');
 }
 
 describe('packaged workflow templates', () => {
@@ -70,5 +75,38 @@ describe('packaged workflow templates', () => {
     expect(source).not.toContain('repair-provider:');
     expect(previewSource).not.toContain('postman-access-token');
     expect(repairSource).toContain('postman-access-token');
+  });
+});
+
+describe('opt-in agent dispatch templates', () => {
+  const agentFiles = [
+    { file: 'devin-ci-fix.yml', secret: 'DEVIN_API_KEY' },
+    { file: 'codex-ci-fix.yml', secret: 'OPENAI_API_KEY' },
+    { file: 'claude-ci-fix.yml', secret: 'ANTHROPIC_API_KEY' },
+    { file: 'cursor-ci-fix.yml', secret: 'CURSOR_API_KEY' }
+  ];
+
+  for (const { file, secret } of agentFiles) {
+    it(`${file} exists, parses as YAML, triggers on Postman TDD Preview, and documents ${secret}`, () => {
+      const source = readAgent(file);
+      const workflow = parse(source) as { on?: Record<string, unknown> };
+      expect(workflow.on).toBeDefined();
+      expect(workflow.on?.workflow_run).toBeDefined();
+      const workflowRun = workflow.on?.workflow_run as { workflows?: string[]; types?: string[] };
+      expect(workflowRun.workflows).toContain('Postman TDD Preview');
+      expect(workflowRun.types).toContain('completed');
+      // Recursion guard on postman-tdd-fix- prefix.
+      expect(source).toContain('postman-tdd-fix-');
+      // Documented required secret.
+      expect(source).toContain(secret);
+      // Concurrency group per PR.
+      expect(source).toMatch(/concurrency:/);
+      expect(source).toMatch(/cancel-in-progress: false/);
+    });
+  }
+
+  it('cursor template additionally guards on the cursor/ branch prefix', () => {
+    const source = readAgent('cursor-ci-fix.yml');
+    expect(source).toContain('cursor/');
   });
 });
