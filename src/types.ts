@@ -38,6 +38,7 @@ export interface TddRepairConfig {
   allowedReadPaths: string[];
   allowedWritePaths: string[];
   enabled: boolean;
+  escalationModel?: string;
   localTestCommand?: string;
   maxAttempts: number;
   provider: RepairProvider;
@@ -231,6 +232,7 @@ export interface ActionInputs {
   repairMaxAttempts: number;
   repairMaxToolRounds: number;
   repairBreakerThreshold: number;
+  repairEscalationModel?: string;
   repairModel?: string;
   repairProvider?: RepairProvider;
   specPath?: string;

@@ -642,6 +642,7 @@ Postman Agent Mode repair receives the same guarded repair tool definitions as t
 | `repair-max-attempts` | no | `3` | Maximum accepted implementation patch attempts. |
 | `repair-max-tool-rounds` | no | `12` | Per-attempt provider tool-round budget in `mode: repair`. Integer between 1 and 50. |
 | `repair-breaker-threshold` | no | `2` | Consecutive identical failure fingerprint count that triggers a `repeated_failure` circuit breaker in `mode: repair`. Integer >= 2. |
+| `repair-escalation-model` | no | `tdd.repair.escalationModel` | Optional stronger model for the escalation rung in `mode: repair`. Same provider, one extra attempt after budget exhaustion. |
 | `repair-commit-message` | no | `Postman TDD repair` | Commit message used for a passing repair commit. |
 
 ## Action Outputs

@@ -676,6 +676,7 @@ tdd:
   async function runResume(options: {
     stickyBody: string;
     signingKey?: string;
+    escalationModel?: string;
   }): Promise<{ providerCalls: number; checkpointWritten: boolean; blockedReason?: string }> {
     let capturedSummary: { blockedReason?: string } | undefined;
     const github = {
@@ -717,6 +718,7 @@ tdd:
         repairMaxAttempts: 3,
         repairMaxToolRounds: 12,
         repairBreakerThreshold: 2,
+        repairEscalationModel: options.escalationModel,
         repairModel: 'gpt-5.5',
         repairProvider: 'openai-responses'
       },
@@ -834,5 +836,43 @@ tdd:
 
     expect(blockedReason).toBe('budget_exhausted');
     expect(providerCalls).toBe(3);
+  });
+
+  it('escalates to a stronger model then blocks with owner_action_required on failure', async () => {
+    const { providerCalls, blockedReason } = await runResume({
+      stickyBody: failureBody(),
+      escalationModel: 'gpt-5.5-pro'
+    });
+
+    // 3 budget attempts + 1 escalation attempt = 4 provider turns.
+    expect(providerCalls).toBe(4);
+    expect(blockedReason).toBe('owner_action_required');
+  });
+
+  it('marks escalated=true on the checkpoint when escalation runs', async () => {
+    await runResume({
+      stickyBody: failureBody(),
+      escalationModel: 'gpt-5.5-pro'
+    });
+
+    const checkpoint = JSON.parse(readFileSync(join(dir, '.postman-tdd', 'checkpoint.json'), 'utf8'));
+    expect(checkpoint.escalated).toBe(true);
+  });
+
+  it('repaired via escalation when the escalation oracle passes', async () => {
+    // First 3 oracle calls fail (budget), then escalation oracle passes.
+    repairMocks.runTddCollection
+      .mockResolvedValueOnce({ exitCode: 1, logExcerpt: 'expected status 200 but got 404 for op1' })
+      .mockResolvedValueOnce({ exitCode: 1, logExcerpt: 'expected status 200 but got 404 for op2' })
+      .mockResolvedValueOnce({ exitCode: 1, logExcerpt: 'expected status 200 but got 404 for op3' })
+      .mockResolvedValueOnce({ exitCode: 0, logExcerpt: 'all passed' });
+
+    const { providerCalls, blockedReason } = await runResume({
+      stickyBody: failureBody(),
+      escalationModel: 'gpt-5.5-pro'
+    });
+
+    expect(providerCalls).toBe(4);
+    expect(blockedReason).toBeUndefined();
   });
 });

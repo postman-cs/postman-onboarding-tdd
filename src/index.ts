@@ -87,6 +87,7 @@ export function readActionInputs(): ActionInputs {
   if (!Number.isInteger(repairBreakerThreshold) || repairBreakerThreshold < 2) {
     throw new Error(`repair-breaker-threshold must be an integer >= 2, got: ${repairBreakerThresholdInput}`);
   }
+  const repairEscalationModel = core.getInput('repair-escalation-model') || undefined;
   const githubToken = core.getInput('github-token') || '';
   const postmanApiKey = core.getInput('postman-api-key') || '';
   if (modeRaw !== 'validate' && !githubToken) {
@@ -116,6 +117,7 @@ export function readActionInputs(): ActionInputs {
     repairMaxAttempts,
     repairMaxToolRounds,
     repairBreakerThreshold,
+    repairEscalationModel,
     repairModel: repairModelInput || (repairProvider ? defaultRepairModel(repairProvider) : undefined),
     repairProvider,
     specPath: core.getInput('spec-path') || undefined,

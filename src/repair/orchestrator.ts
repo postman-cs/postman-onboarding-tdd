@@ -191,7 +191,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
 
   let currentFailure: AgentFailureDocument = failure;
   let attempts = startAttempts;
-  const escalated = resumedEscalated;
+  let escalated = resumedEscalated;
   const attemptDetails: RepairAttemptDiagnostic[] = [];
 
   while (attempts < maxAttempts) {
@@ -368,7 +368,114 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
   }
 
   core.info(`[postman-tdd] Repair budget exhausted after ${attempts} accepted attempt(s).`);
-  await block(options, 'budget_exhausted', `Repair budget exhausted after ${attempts} attempt(s).`, attempts, attemptDetails, currentCheckpointRef);
+
+  // D11: Rung 2 — optional escalation model (same provider, one extra attempt).
+  const escalationModel = options.inputs.repairEscalationModel || config.repair.escalationModel;
+  if (escalationModel) {
+    escalated = true;
+    const escalationAttemptNumber = attempts + 1;
+    core.info(`[postman-tdd] Escalation rung: one extra turn with model=${escalationModel} (attempt ${escalationAttemptNumber}).`);
+    const escalationRepair = await runRepairProviderTurn({
+      failure: currentFailure,
+      inputs: {
+        ...options.inputs,
+        repairModel: escalationModel,
+        repairProvider
+      },
+      maxToolRounds: options.inputs.repairMaxToolRounds,
+      provider: repairProvider,
+      repairContext: {
+        allowedReadPaths: config.repair.allowedReadPaths,
+        patchPolicy,
+        repoRoot
+      },
+      secretMasker: options.mask
+    });
+    if (escalationRepair.status === 'blocked') {
+      attemptDetails.push(providerStoppedAttempt(escalationAttemptNumber, 'blocked', escalationRepair.message));
+    } else if (escalationRepair.status === 'no_change') {
+      attemptDetails.push(providerStoppedAttempt(escalationAttemptNumber, 'no_change', escalationRepair.message));
+    } else {
+      attempts += 1;
+      const escalationAttempt: RepairAttemptDiagnostic = {
+        attempt: attempts,
+        localTest: { status: 'skipped' },
+        oracle: { status: 'skipped' },
+        outcome: 'oracle_failed',
+        patchSummary: escalationRepair.summary,
+        providerStatus: 'changed',
+        touchedPaths: escalationRepair.touchedPaths
+      };
+      const escalationResult = await runOracle({
+        collectionId: state.collectionId || '',
+        config,
+        immutableHashes,
+        immutablePaths,
+        mask: options.mask,
+        prHeadSha: prDetails.headSha,
+        assetNames
+      });
+      if (escalationResult.ok) {
+        core.info('[postman-tdd] Escalation oracle passed.');
+        escalationAttempt.oracle = { status: 'passed' };
+        escalationAttempt.outcome = 'oracle_passed';
+        attemptDetails.push(escalationAttempt);
+        verifyPathHashes(repoRoot, immutableHashes);
+        const changedPaths = verifyChangedPaths(repoRoot, patchPolicy);
+        core.info(`[postman-tdd] Escalation diff validated: ${changedPaths.join(', ') || '(none)'}.`);
+        const token = options.inputs.repairGithubToken || options.inputs.githubToken;
+        const commitSha = commitAndPushRepair({
+          branch: prDetails.headBranch,
+          commitMessage: options.inputs.repairCommitMessage,
+          committerEmail: options.inputs.committerEmail,
+          committerName: options.inputs.committerName,
+          githubToken: token,
+          patchPolicy,
+          repoRoot,
+          repository: options.pr.repository
+        });
+        core.info(`[postman-tdd] Escalation repair commit pushed: ${commitSha}.`);
+        currentCheckpointRef = buildCheckpoint(
+          prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey
+        );
+        const summary = await publishRepair(options.github, options.pr.number, {
+          ...(currentCheckpointRef ? { checkpointRef: currentCheckpointRef } : {}),
+          attemptDetails,
+          attempts,
+          commitSha,
+          message: 'Postman TDD escalation repair produced an implementation-only commit after the collection passed.',
+          prNumber: options.pr.number,
+          schemaVersion: 2,
+          status: 'repaired'
+        });
+        setRepairOutputs({ attempts, commitSha, status: 'repaired', summaryPath: summary });
+        return;
+      }
+      core.info(`[postman-tdd] Escalation oracle still failed: phase=${escalationResult.failure.phase}.`);
+      escalationAttempt.oracle = failureDiagnostic(escalationResult.failure);
+      escalationAttempt.outcome = 'oracle_failed';
+      attemptDetails.push(escalationAttempt);
+      currentFailure = escalationResult.failure;
+      currentCheckpointRef = buildCheckpoint(
+        prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey
+      );
+    }
+  }
+
+  // D11: Rung 3 — terminal block.
+  if (escalationModel) {
+    const runUrl = process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID
+      ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+      : '(run URL unavailable)';
+    const firstFailure = currentFailure.failures[0];
+    const errorSummary = firstFailure
+      ? `${firstFailure.assertion || 'unknown assertion'}: ${firstFailure.message}`
+      : currentFailure.message;
+    const escalationMessage = `Owner action required: repair could not produce a passing local oracle after ${attempts} attempt(s) including escalation. Models tried: ${repairModel}${escalationModel ? ` → ${escalationModel}` : ''}. Last failure: ${errorSummary}. Recommended next step: inspect the failure context and run logs, then fix manually. Run URL: ${runUrl}`;
+    await block(options, 'owner_action_required', escalationMessage, attempts, attemptDetails, currentCheckpointRef);
+  } else {
+    await block(options, 'budget_exhausted', `Repair budget exhausted after ${attempts} attempt(s).`, attempts, attemptDetails, currentCheckpointRef);
+  }
 }
 
 function validateRepairFailureContext(failure: AgentFailureDocument): string | undefined {

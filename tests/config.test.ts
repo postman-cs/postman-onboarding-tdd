@@ -218,4 +218,51 @@ tdd:
       'Expected openai-responses, anthropic-messages, or postman-agent-mode'
     );
   });
+
+  it('reads tdd.repair.escalationModel when configured', () => {
+    const path = writeConfig(`
+spec:
+  path: api/openapi.yaml
+service:
+  name: reference-service
+tdd:
+  enabled: true
+  workspace:
+    name: Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  repair:
+    enabled: true
+    provider: openai-responses
+    escalationModel: gpt-5.5-pro
+    allowedWritePaths:
+      - src/**
+`);
+
+    expect(loadOnboardingConfig({ configPath: path }).repair.escalationModel).toBe('gpt-5.5-pro');
+  });
+
+  it('defaults escalationModel to undefined when not configured', () => {
+    const path = writeConfig(`
+spec:
+  path: api/openapi.yaml
+service:
+  name: reference-service
+tdd:
+  enabled: true
+  workspace:
+    name: Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  repair:
+    enabled: true
+    provider: openai-responses
+    allowedWritePaths:
+      - src/**
+`);
+
+    expect(loadOnboardingConfig({ configPath: path }).repair.escalationModel).toBeUndefined();
+  });
 });

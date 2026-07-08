@@ -159,6 +159,18 @@ function repairBlockedGuidance(reason: string | undefined): {
         nextAction: 'Review the latest preview failures and repair summary, then fix manually or raise the repair attempt budget for another run.',
         whatHappened: 'Repair used all accepted attempts without producing a passing local TDD oracle.'
       };
+    case 'owner_action_required':
+      return {
+        doneWhen: '`Postman TDD Preview` passes on the latest PR head commit after a manual fix.',
+        nextAction: 'Inspect the escalation payload (models tried, last failure, run URL) in the repair summary, then fix the implementation manually.',
+        whatHappened: 'Repair exhausted all attempts including the escalation model without producing a passing local TDD oracle.'
+      };
+    case 'repeated_failure':
+      return {
+        doneWhen: '`Postman TDD Preview` passes on the latest PR head commit after the failure is addressed.',
+        nextAction: 'The same failure fingerprint recurred consecutively. Inspect the normalized error and fix the root cause rather than retrying.',
+        whatHappened: 'Repair circuit breaker stopped the loop because the same failure recurred without progress.'
+      };
     case 'fork_pr':
       return {
         doneWhen: 'A maintainer applies the implementation fix on a trusted branch and preview passes.',

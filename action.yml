@@ -58,6 +58,9 @@ inputs:
     description: Consecutive identical failure fingerprint count that triggers a repeated_failure circuit breaker in mode=repair. Integer >= 2.
     required: false
     default: '2'
+  repair-escalation-model:
+    description: Optional stronger model for the escalation rung in mode=repair. Same provider, one extra attempt after budget exhaustion. Defaults to tdd.repair.escalationModel from onboarding config when unset.
+    required: false
   repair-commit-message:
     description: Commit message used when mode=repair pushes a passing implementation change.
     required: false
