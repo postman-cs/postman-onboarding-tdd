@@ -97,11 +97,98 @@ describe('validate mode', () => {
     expect(output).toContain('AGENTS.md');
   });
 
+  it('surfaces harness lint errors in validation-summary with failure-phase=config (D23)', async () => {
+    writeValidFixture();
+    writeHarnessFiles({ skipDoc: 'repair-loop' });
+
+    await expect(runAction()).rejects.toThrow('Postman TDD setup validation failed with 1 error');
+    const outputs = parseGitHubOutputs();
+    expect(outputs.get('validation-error-count')).toBe('1');
+    expect(outputs.get('failure-phase')).toBe('config');
+    const summary = outputs.get('validation-summary') ?? '';
+    expect(summary).toContain('To fix:');
+    expect(summary).toContain('.agents/references/repair-loop.md');
+  });
+
+  it('backward-compat: no harness opt-in produces byte-identical validate output to pre-P4', async () => {
+    writeValidFixture();
+
+    await expect(runAction()).resolves.toBeUndefined();
+    const outputs = parseGitHubOutputs();
+    expect(outputs.get('validation-error-count')).toBe('0');
+    expect(outputs.get('failure-phase')).toBe('none');
+    const summary = outputs.get('validation-summary') ?? '';
+    expect(summary).not.toContain('To fix:');
+  });
+
   function readGitHubOutput(): string {
     try {
       return readFileSync(join(dir, 'outputs.txt'), 'utf8');
     } catch {
       return '';
+    }
+  }
+
+  function parseGitHubOutputs(): Map<string, string> {
+    const outputs = new Map<string, string>();
+    const raw = readGitHubOutput();
+    const lines = raw.split('\n');
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line) { i++; continue; }
+      // @actions/core v3 always uses heredoc format: key<<ghadelimiter_<uuid>
+      const heredocIndex = line.indexOf('<<');
+      if (heredocIndex !== -1) {
+        const key = line.slice(0, heredocIndex);
+        const delimiter = line.slice(heredocIndex + 2);
+        const valueLines: string[] = [];
+        i++;
+        while (i < lines.length && lines[i] !== delimiter) {
+          valueLines.push(lines[i] ?? '');
+          i++;
+        }
+        outputs.set(key, valueLines.join('\n'));
+        i++; // skip delimiter line
+      } else {
+        // Fallback for simple key=value format (older @actions/core).
+        const eqIndex = line.indexOf('=');
+        if (eqIndex !== -1) {
+          outputs.set(line.slice(0, eqIndex), line.slice(eqIndex + 1));
+        }
+        i++;
+      }
+    }
+    return outputs;
+  }
+
+  function writeHarnessFiles(options: { skipDoc?: string } = {}): void {
+    const router = [
+      '# Router',
+      '| check | `.agents/references/tdd-check.md` |',
+      '| failure | `.agents/references/failure-document.md` |',
+      '| repair | `.agents/references/repair-loop.md` |',
+      '| spec | `.agents/references/immutable-spec-guard.md` |',
+      '| branch | `.agents/references/branch-and-commit.md` |',
+      '| execplan | `.agents/references/execplan-skeleton.md` |'
+    ].join('\n');
+    writeFileSync(join(dir, 'AGENTS.md'), router, 'utf8');
+
+    const refsDir = join(dir, '.agents', 'references');
+    mkdirSync(refsDir, { recursive: true });
+
+    const docs: Record<string, string> = {
+      'tdd-check': '# TDD Check\ncontent',
+      'failure-document': '# Failure Document\ncontent',
+      'repair-loop': '# Repair Loop\ncontent',
+      'immutable-spec-guard': '# Immutable Spec Guard\ncontent',
+      'branch-and-commit': '# Branch and Commit\ncontent',
+      'execplan-skeleton': '# ExecPlan Skeleton\ncontent'
+    };
+
+    for (const [name, content] of Object.entries(docs)) {
+      if (name === options.skipDoc) continue;
+      writeFileSync(join(refsDir, `${name}.md`), content, 'utf8');
     }
   }
 
