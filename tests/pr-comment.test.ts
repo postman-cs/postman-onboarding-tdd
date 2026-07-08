@@ -386,4 +386,111 @@ describe('PR sticky comment marker', () => {
     expect(parsed?.ledger?.packets).toHaveLength(20);
     expect(parsed?.ledger?.total).toBe(30);
   });
+
+  it('renders a packet status table when ledger is present on a failed comment', () => {
+    const body = renderStickyComment({
+      prNumber: 123,
+      schemaVersion: 1
+    }, {
+      failureDocument: {
+        commit: 'abc123',
+        failures: [{ message: 'Expected status 200', method: 'GET', operationId: 'getWidgets', path: '/v1/widgets' }],
+        immutablePathHashes: [],
+        immutablePaths: [],
+        message: 'failed',
+        phase: 'collection_run',
+        schemaVersion: 1,
+        status: 'failed',
+        successCriteria: {
+          doneWhen: 'requiredCheck passes on the latest PR head commit',
+          failureContextMustMatchPrHeadCommit: true,
+          latestHeadOnly: true,
+          requiredCheck: 'Postman TDD Preview'
+        }
+      },
+      ledger: {
+        failing: 1,
+        packets: [
+          { key: 'getWidgets', lastFailureFingerprint: 'abcdef1234567890', passes: false, title: 'getWidgets' },
+          { key: 'createWidget', passes: true, title: 'createWidget' }
+        ],
+        passing: 1,
+        total: 2
+      } satisfies LedgerSummary,
+      status: 'failed'
+    });
+
+    expect(body).toContain('## Packet Status');
+    expect(body).toContain('| getWidgets | fail | abcdef12 |');
+    expect(body).toContain('| createWidget | pass |');
+    expect(body.indexOf('## Current Failures')).toBeLessThan(body.indexOf('## Packet Status'));
+    expect(body.indexOf('## Packet Status')).toBeLessThan(body.indexOf('<summary>Agent failure JSON</summary>'));
+  });
+
+  it('omits the packet status table when ledger is absent', () => {
+    const body = renderStickyComment({
+      prNumber: 123,
+      schemaVersion: 1
+    }, {
+      failureDocument: {
+        commit: 'abc123',
+        failures: [{ message: 'Expected status 200' }],
+        immutablePathHashes: [],
+        immutablePaths: [],
+        message: 'failed',
+        phase: 'collection_run',
+        schemaVersion: 1,
+        status: 'failed',
+        successCriteria: {
+          doneWhen: 'requiredCheck passes on the latest PR head commit',
+          failureContextMustMatchPrHeadCommit: true,
+          latestHeadOnly: true,
+          requiredCheck: 'Postman TDD Preview'
+        }
+      },
+      status: 'failed'
+    });
+
+    expect(body).not.toContain('## Packet Status');
+  });
+
+  it('replaces the packet status table with a counts-only line when body exceeds 60000 chars (D8)', () => {
+    const largeHashes = Array.from({ length: 520 }, (_, i) => ({
+      path: `p${i}`,
+      sha256: 'a'.repeat(64)
+    }));
+    const body = renderStickyComment({
+      prNumber: 123,
+      schemaVersion: 1
+    }, {
+      failureDocument: {
+        commit: 'abc123',
+        failures: [{ message: 'Expected status 200' }],
+        immutablePathHashes: largeHashes,
+        immutablePaths: [],
+        message: 'failed',
+        phase: 'collection_run',
+        schemaVersion: 1,
+        status: 'failed',
+        successCriteria: {
+          doneWhen: 'requiredCheck passes on the latest PR head commit',
+          failureContextMustMatchPrHeadCommit: true,
+          latestHeadOnly: true,
+          requiredCheck: 'Postman TDD Preview'
+        }
+      },
+      ledger: {
+        failing: 1,
+        packets: [{ key: 'getWidgets', lastFailureFingerprint: 'abc123', passes: false, title: 'getWidgets' }],
+        passing: 0,
+        total: 1
+      } satisfies LedgerSummary,
+      status: 'failed'
+    });
+
+    expect(body).not.toContain('## Packet Status');
+    expect(body).toContain('**Packet Status:**');
+    expect(body).toContain('Full ledger in the `.postman-tdd/ledger.json` run artifact');
+    expect(body.length).toBeLessThanOrEqual(65536);
+  });
 });
