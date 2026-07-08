@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { parseAssetState, parseFailureDocument, renderStickyComment } from '../src/github/pr-comment.js';
 import { createImmutableStatePayload, signImmutableState } from '../src/immutable-state.js';
+import { toLedgerSummary } from '../src/ledger.js';
 import { isRepairComment, renderRepairComment } from '../src/repair/summary.js';
+import type { Ledger, LedgerSummary } from '../src/types.js';
 
 describe('PR sticky comment marker', () => {
   it('omits immutable state from passed hidden markers', () => {
@@ -274,5 +276,114 @@ describe('PR sticky comment marker', () => {
     expect(body).toContain('| 1 | Add the missing createServer export. | src/server.js | failed (1) | skipped | local test failed |');
     expect(body).toContain('| 2 | Add widget list and summary endpoints. | src/server.js | passed | collection_run, 1 failure(s) | oracle failed |');
     expect(body).not.toContain('Missing required property: generatedAt');
+  });
+
+  it('round-trips ledger summary through the marker on a failed comment', () => {
+    const ledger: LedgerSummary = {
+      failing: 1,
+      packets: [
+        { key: 'getWidgets', lastFailureFingerprint: 'abc123', passes: false, title: 'getWidgets' },
+        { key: 'createWidget', passes: true, title: 'createWidget' }
+      ],
+      passing: 1,
+      total: 2
+    };
+    const body = renderStickyComment({
+      ledger,
+      prNumber: 123,
+      schemaVersion: 1
+    }, {
+      failureDocument: {
+        commit: 'abc123',
+        failures: [{ message: 'Expected status 200' }],
+        immutablePathHashes: [],
+        immutablePaths: [],
+        message: 'failed',
+        phase: 'collection_run',
+        schemaVersion: 1,
+        status: 'failed',
+        successCriteria: {
+          doneWhen: 'requiredCheck passes on the latest PR head commit',
+          failureContextMustMatchPrHeadCommit: true,
+          latestHeadOnly: true,
+          requiredCheck: 'Postman TDD Preview'
+        }
+      },
+      status: 'failed'
+    });
+
+    const parsed = parseAssetState(body);
+    expect(parsed?.ledger).toEqual(ledger);
+  });
+
+  it('round-trips ledger summary through the marker on a passed comment', () => {
+    const ledger: LedgerSummary = {
+      failing: 0,
+      packets: [{ key: 'getWidgets', passes: true, title: 'getWidgets' }],
+      passing: 1,
+      total: 1
+    };
+    const body = renderStickyComment({
+      ledger,
+      prNumber: 123,
+      schemaVersion: 1
+    }, {
+      status: 'passed'
+    });
+
+    const parsed = parseAssetState(body);
+    expect(parsed?.ledger).toEqual(ledger);
+  });
+
+  it('parses a v1 marker without ledger unchanged (backward compat)', () => {
+    const body = renderStickyComment({
+      collectionId: 'col-1',
+      prNumber: 123,
+      schemaVersion: 1,
+      specId: 'spec-1',
+      workspaceId: 'ws-1'
+    }, {
+      status: 'passed'
+    });
+
+    const parsed = parseAssetState(body);
+    expect(parsed).toEqual({
+      collectionId: 'col-1',
+      prNumber: 123,
+      schemaVersion: 1,
+      specId: 'spec-1',
+      workspaceId: 'ws-1'
+    });
+    expect(parsed?.ledger).toBeUndefined();
+  });
+
+  it('caps embedded ledger summary at 20 packets from a 30-packet ledger (D8)', () => {
+    const ledger: Ledger = {
+      packets: Array.from({ length: 30 }, (_, i) => ({
+        acceptance: [],
+        attempts: 0,
+        key: `op${i}`,
+        method: 'GET',
+        passes: true,
+        path: `/v1/op${i}`,
+        title: `op${i}`
+      })),
+      schemaVersion: 1
+    };
+    const summary = toLedgerSummary(ledger);
+    expect(summary.packets).toHaveLength(20);
+    expect(summary.total).toBe(30);
+
+    const body = renderStickyComment({
+      ledger: summary,
+      prNumber: 123,
+      schemaVersion: 1
+    }, {
+      status: 'passed'
+    });
+
+    const parsed = parseAssetState(body);
+    expect(parsed?.ledger?.packets).toHaveLength(20);
+    expect(parsed?.ledger?.total).toBe(30);
   });
 });
