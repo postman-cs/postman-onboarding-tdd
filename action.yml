@@ -84,7 +84,7 @@ outputs:
   status:
     description: passed, failed, skipped, or cleaned-up.
   failure-phase:
-    description: none, config, workspace, asset_upsert, immutable_state_tampered, immutable_spec, service_startup, health_check, collection_run, test_ratchet, or cleanup.
+    description: 'none, config, workspace, asset_upsert, immutable_state_tampered, immutable_spec, service_startup, health_check, collection_run, test_ratchet, or cleanup. Add the `postman-tdd-allow-ratchet-removal` label to a PR to intentionally remove/weaken a previously-passing contract packet without a `test_ratchet` block.'
   workspace-id:
     description: Shared TDD preview workspace ID.
   spec-id:
@@ -97,6 +97,8 @@ outputs:
     description: Agent task markdown path.
   failures-json-path:
     description: Agent failure JSON path.
+  ledger-path:
+    description: Path to the local verification ledger JSON (.postman-tdd/ledger.json).
   agent-context-artifact:
     description: Workflow artifact containing agent-task.md, failures.json, and immutable-spec-guard.mjs.
   agent-context-artifact-id:

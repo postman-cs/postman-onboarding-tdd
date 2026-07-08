@@ -666,6 +666,7 @@ function setStandardOutputs(paths: { agentTaskPath: string; failuresJsonPath: st
   core.setOutput('agent-context-dir', AGENT_CONTEXT_DIR);
   core.setOutput('agent-task-path', paths.agentTaskPath);
   core.setOutput('failures-json-path', paths.failuresJsonPath);
+  core.setOutput('ledger-path', '.postman-tdd/ledger.json');
 }
 
 async function cleanupPreviewAssets(options: {
