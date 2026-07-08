@@ -6,15 +6,9 @@ import { loadOnboardingConfig } from './config.js';
 import { buildContractIndex, parseOpenApiDocument } from './contract.js';
 import { isPathDenied, type PatchPolicy } from './repair/patch.js';
 import type { ActionInputs, ResolvedOnboardingConfig } from './types.js';
+import type { ValidationState } from './validation-types.js';
 
-interface ValidationIssue {
-  message: string;
-}
-
-interface ValidationState {
-  errors: ValidationIssue[];
-  warnings: ValidationIssue[];
-}
+export type { ValidationIssue, ValidationState } from './validation-types.js';
 
 export interface ValidateModeOptions {
   inputs: ActionInputs;
