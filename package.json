@@ -20,6 +20,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
+    "lint:actions": "actionlint .github/workflows/*.yml .postman-template/workflows/*.yml .postman-template/workflows/agents/*.yml",
     "lint:fix": "eslint . --fix"
   },
   "keywords": [

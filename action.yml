@@ -1,5 +1,5 @@
 name: 'Postman Onboarding: TDD Preview'
-description: Generate a PR-scoped Postman TDD contract collection from a PR OpenAPI spec and run it against the PR implementation.
+description: Generate a PR-scoped Postman TDD contract collection from a PR OpenAPI spec and run it against the PR implementation. On failure, publishes a check-run with per-packet annotations, a JUnit XML report (.postman-tdd/junit.xml), and a machine-consumable AgentFailureDocument. Opt-in agent dispatch templates live under .postman-template/workflows/agents/. Repair pushes use the postman-tdd-fix-<pr-number> branch convention.
 author: Postman
 branding:
   icon: check-circle
@@ -110,6 +110,8 @@ outputs:
     description: Agent failure JSON path.
   ledger-path:
     description: Path to the local verification ledger JSON (.postman-tdd/ledger.json).
+  junit-path:
+    description: Path to the local JUnit XML report of the contract run (.postman-tdd/junit.xml).
   agent-context-artifact:
     description: Workflow artifact containing agent-task.md, failures.json, and immutable-spec-guard.mjs.
   agent-context-artifact-id:

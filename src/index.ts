@@ -687,6 +687,7 @@ function setStandardOutputs(paths: { agentTaskPath: string; failuresJsonPath: st
   core.setOutput('agent-task-path', paths.agentTaskPath);
   core.setOutput('failures-json-path', paths.failuresJsonPath);
   core.setOutput('ledger-path', '.postman-tdd/ledger.json');
+  core.setOutput('junit-path', '.postman-tdd/junit.xml');
 }
 
 /**
