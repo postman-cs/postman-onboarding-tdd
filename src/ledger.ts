@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import type { ContractIndex, ContractOperation } from './contract.js';
 import type { AgentFailure, Ledger, LedgerAcceptance, LedgerPacket, LedgerSummary } from './types.js';
+
+const DEFAULT_LEDGER_DIR = '.postman-tdd';
 
 const LEDGER_SUMMARY_PACKET_CAP = 20;
 
@@ -139,6 +143,52 @@ export function toLedgerSummary(ledger: Ledger): LedgerSummary {
 
 export function emptyLedger(): Ledger {
   return { packets: [], schemaVersion: 1 };
+}
+
+/**
+ * Merges persisted packet state from a previous {@link LedgerSummary} into
+ * freshly-built packets. Carries forward `passes` and `lastFailureFingerprint`
+ * for keys that existed previously; stamps `firstSeenCommit` on new packets.
+ *
+ * The compact summary does not carry `attempts`, `firstSeenCommit`, or
+ * `lastVerifiedCommit` (those live only in the full on-disk ledger), so those
+ * fields start fresh on every run. This is sufficient for P1: the ratchet
+ * only needs the previous `passes` set, and the circuit breaker (P2) will add
+ * checkpoint persistence for accumulated `attempts`.
+ */
+export function mergePersistedState(
+  packets: LedgerPacket[],
+  previous: LedgerSummary | undefined,
+  commit?: string
+): LedgerPacket[] {
+  if (!previous) {
+    return packets.map((packet) => ({ ...packet, firstSeenCommit: commit }));
+  }
+  const prevByKey = new Map(previous.packets.map((p) => [p.key, p]));
+  return packets.map((packet) => {
+    const prev = prevByKey.get(packet.key);
+    if (!prev) {
+      return { ...packet, firstSeenCommit: commit };
+    }
+    return {
+      ...packet,
+      lastFailureFingerprint: prev.lastFailureFingerprint,
+      passes: prev.passes
+    };
+  });
+}
+
+/**
+ * Writes the full ledger to `.postman-tdd/ledger.json`, mirroring the
+ * `writeAgentContext` mkdir pattern. The file is a run artifact (gitignored)
+ * kept alongside `failures.json`; cross-run persistence rides the sticky-comment
+ * marker summary, not this file.
+ */
+export function writeLedgerFile(ledger: Ledger, dir = DEFAULT_LEDGER_DIR): string {
+  mkdirSync(dir, { recursive: true });
+  const ledgerPath = join(dir, 'ledger.json');
+  writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, 'utf8');
+  return ledgerPath;
 }
 
 function failureMatchesPacket(failure: AgentFailure, packet: LedgerPacket): boolean {

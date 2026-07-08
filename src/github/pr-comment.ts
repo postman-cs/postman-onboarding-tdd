@@ -1,7 +1,7 @@
 import { context, getOctokit } from '@actions/github';
 
 import { isRepairComment, renderRepairComment, type RepairSummary } from '../repair/summary.js';
-import type { ActionStatus, AgentFailureDocument, FailurePhase, PreviewAssetState, PrMetadata } from '../types.js';
+import type { ActionStatus, AgentFailureDocument, FailurePhase, LedgerSummary, PreviewAssetState, PrMetadata } from '../types.js';
 
 const MARKER_START = '<!-- postman-tdd-preview';
 const MARKER_END = '-->';
@@ -22,6 +22,7 @@ export interface PrCommentSummary {
   commit?: string;
   failureDocument?: AgentFailureDocument;
   failurePhase?: string;
+  ledger?: LedgerSummary;
   specId?: string;
   status: ActionStatus;
   workspaceId?: string;

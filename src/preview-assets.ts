@@ -2,7 +2,7 @@ import * as core from '@actions/core';
 import { readFileSync } from 'node:fs';
 
 import { patchWorkspaceId, resolveWorkspacePath } from './config.js';
-import { buildContractIndex, instrumentContractCollection, parseOpenApiDocument } from './contract.js';
+import { buildContractIndex, instrumentContractCollection, parseOpenApiDocument, type ContractIndex } from './contract.js';
 import { commitConfigWriteback } from './github/repo-mutation.js';
 import type { PostmanClient } from './postman/client.js';
 import type { ActionInputs, PreviewAssetState, ResolvedOnboardingConfig } from './types.js';
@@ -72,7 +72,7 @@ export async function upsertPreviewAssets(options: {
   config: ResolvedOnboardingConfig;
   postman: PostmanClient;
   state: PreviewAssetState;
-}): Promise<{ collectionId: string; specId: string }> {
+}): Promise<{ collectionId: string; contractIndex: ContractIndex; specId: string }> {
   core.info(`[postman-tdd] Reading OpenAPI spec from ${options.config.specPath}.`);
   const specContent = readFileSync(resolveWorkspacePath(options.config.specPath), 'utf8');
   core.info(`[postman-tdd] Spec size: ${Buffer.byteLength(specContent, 'utf8')} bytes.`);
@@ -123,7 +123,7 @@ export async function upsertPreviewAssets(options: {
     await options.postman.updateCollection(collectionId, planned.collection);
   }
 
-  return { collectionId, specId };
+  return { collectionId, contractIndex, specId };
 }
 
 function parseWorkspaceTeamId(value: string | undefined): number | undefined {

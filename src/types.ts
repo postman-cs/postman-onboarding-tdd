@@ -101,6 +101,7 @@ export interface LedgerSummary {
 export interface PreviewAssetState {
   collectionId?: string;
   immutableState?: SignedImmutableState;
+  ledger?: LedgerSummary;
   prNumber: number;
   schemaVersion: 1;
   specId?: string;

@@ -19,6 +19,7 @@ import {
   resolveTrustedImmutableBaseline,
   signImmutableState
 } from './immutable-state.js';
+import { buildLedgerPackets, mergePersistedState, scoreLedger, toLedgerSummary, writeLedgerFile } from './ledger.js';
 import { runRepairMode } from './repair/orchestrator.js';
 import { defaultRepairModel } from './repair/provider-dispatcher.js';
 import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from './preview-assets.js';
@@ -39,6 +40,8 @@ import type {
   AgentFailureDocument,
   FailurePhase,
   ImmutablePathHash,
+  Ledger,
+  LedgerSummary,
   PreviewAssetState,
   ResolvedOnboardingConfig
 } from './types.js';
@@ -362,6 +365,12 @@ async function runActionInner(
     core.setOutput('tdd-collection-id', state.collectionId || '');
     core.info(`[postman-tdd] Asset upsert complete: workspace=${state.workspaceId}, spec=${state.specId}, collection=${state.collectionId}.`);
 
+    const ledger: Ledger = {
+      packets: mergePersistedState(buildLedgerPackets(assetResult.contractIndex), state.ledger, pr.sha),
+      schemaVersion: 1
+    };
+    core.info(`[postman-tdd] Built verification ledger with ${ledger.packets.length} packet(s) from contract index.`);
+
     core.info('[postman-tdd] Ensuring Postman CLI is available and authenticated.');
     await ensurePostmanCli(inputs.postmanApiKey, {
       cliInstallUrl: endpointProfile.cliInstallUrl,
@@ -436,6 +445,9 @@ async function runActionInner(
       if (collectionRun.exitCode !== 0) {
         const failures = extractCollectionFailures(collectionRun.logExcerpt);
         core.info(`[postman-tdd] Collection run failed with exit code ${collectionRun.exitCode}; normalized ${failures.length} failure(s).`);
+        const scoredLedger = scoreLedger(ledger, failures, pr.sha);
+        writeLedgerFile(scoredLedger);
+        state.ledger = toLedgerSummary(scoredLedger);
         const document = createFailureDocument({
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
@@ -460,13 +472,17 @@ async function runActionInner(
           state,
           summary: {
             collectionName: assetNames.collectionName,
-            failurePhase: 'collection_run'
+            failurePhase: 'collection_run',
+            ledger: state.ledger
           }
         }));
         failurePublished = true;
         throw new Error(document.message);
       }
       core.info('[postman-tdd] Collection run passed.');
+      const passedLedger = scoreLedger(ledger, [], pr.sha);
+      writeLedgerFile(passedLedger);
+      state.ledger = toLedgerSummary(passedLedger);
     } finally {
       if (config.runtime.stopCommand) {
         core.info(`[postman-tdd] Running stop command: ${mask(config.runtime.stopCommand)}`);
@@ -485,6 +501,7 @@ async function runActionInner(
       collectionId: state.collectionId,
       collectionName: assetNames.collectionName,
       commit: pr.sha,
+      ledger: state.ledger,
       specId: state.specId,
       status: 'passed',
       workspaceId: state.workspaceId
@@ -618,7 +635,7 @@ async function publishFailure(options: {
   github: GitHubPrClient;
   prNumber: number;
   state: PreviewAssetState;
-  summary: { collectionName: string; failurePhase: FailurePhase };
+  summary: { collectionName: string; failurePhase: FailurePhase; ledger?: LedgerSummary };
 }): Promise<number> {
   core.info(`[postman-tdd] Publishing failure context: phase=${options.document.phase}, failures=${options.document.failures.length}.`);
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
@@ -655,6 +672,7 @@ async function publishFailure(options: {
     collectionName: options.summary.collectionName,
     failureDocument: options.document,
     failurePhase: options.summary.failurePhase,
+    ledger: options.summary.ledger,
     specId: options.state.specId,
     status: 'failed',
     workspaceId: options.state.workspaceId
