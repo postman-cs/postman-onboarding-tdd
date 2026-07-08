@@ -333,6 +333,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       setRepairOutputs({
         attempts,
         commitSha,
+        escalated,
         status: 'repaired',
         summaryPath: summary
       });
@@ -448,7 +449,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
           schemaVersion: 2,
           status: 'repaired'
         });
-        setRepairOutputs({ attempts, commitSha, status: 'repaired', summaryPath: summary });
+        setRepairOutputs({ attempts, commitSha, escalated, status: 'repaired', summaryPath: summary });
         return;
       }
       core.info(`[postman-tdd] Escalation oracle still failed: phase=${escalationResult.failure.phase}.`);
@@ -472,9 +473,9 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       ? `${firstFailure.assertion || 'unknown assertion'}: ${firstFailure.message}`
       : currentFailure.message;
     const escalationMessage = `Owner action required: repair could not produce a passing local oracle after ${attempts} attempt(s) including escalation. Models tried: ${repairModel}${escalationModel ? ` → ${escalationModel}` : ''}. Last failure: ${errorSummary}. Recommended next step: inspect the failure context and run logs, then fix manually. Run URL: ${runUrl}`;
-    await block(options, 'owner_action_required', escalationMessage, attempts, attemptDetails, currentCheckpointRef);
+    await block(options, 'owner_action_required', escalationMessage, attempts, attemptDetails, currentCheckpointRef, escalated);
   } else {
-    await block(options, 'budget_exhausted', `Repair budget exhausted after ${attempts} attempt(s).`, attempts, attemptDetails, currentCheckpointRef);
+    await block(options, 'budget_exhausted', `Repair budget exhausted after ${attempts} attempt(s).`, attempts, attemptDetails, currentCheckpointRef, escalated);
   }
 }
 
@@ -664,7 +665,8 @@ async function block(
   message: string,
   attempts: number,
   attemptDetails: RepairAttemptDiagnostic[] = [],
-  checkpointRef?: SignedRepairCheckpoint | RepairCheckpointPayload
+  checkpointRef?: SignedRepairCheckpoint | RepairCheckpointPayload,
+  escalated: boolean = false
 ): Promise<void> {
   core.info(`[postman-tdd] Repair blocked: reason=${reason}, attempts=${attempts}, message=${message}`);
   const summaryPath = await publishRepair(options.github, options.pr.number, {
@@ -680,6 +682,7 @@ async function block(
   setRepairOutputs({
     attempts,
     blockedReason: reason,
+    escalated,
     status: 'blocked',
     summaryPath
   });
@@ -700,6 +703,7 @@ function setRepairOutputs(options: {
   attempts: number;
   blockedReason?: string;
   commitSha?: string;
+  escalated?: boolean;
   status: RepairStatus;
   summaryPath?: string;
 }): void {
@@ -707,6 +711,7 @@ function setRepairOutputs(options: {
   core.setOutput('repair-attempts', String(options.attempts));
   core.setOutput('repair-blocked-reason', options.blockedReason || '');
   core.setOutput('repair-commit-sha', options.commitSha || '');
+  core.setOutput('repair-escalated', String(options.escalated || false));
   core.setOutput('repair-summary-path', options.summaryPath || '');
   core.setOutput('status', options.status === 'repaired' ? 'passed' : options.status === 'skipped' ? 'skipped' : 'failed');
   core.setOutput('failure-phase', 'none');

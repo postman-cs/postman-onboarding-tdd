@@ -123,7 +123,9 @@ outputs:
   repair-status:
     description: repaired, blocked, skipped, or failed.
   repair-blocked-reason:
-    description: Machine-readable reason when repair-status is blocked.
+    description: Machine-readable reason when repair-status is blocked. Includes budget_exhausted, repeated_failure, owner_action_required, agent_blocked, agent_no_change, stale_failure, fork_pr, and others.
+  repair-escalated:
+    description: Whether the escalation model rung was attempted (true or false).
   repair-attempts:
     description: Number of accepted implementation patch attempts.
   repair-commit-sha:

@@ -645,6 +645,18 @@ Postman Agent Mode repair receives the same guarded repair tool definitions as t
 | `repair-escalation-model` | no | `tdd.repair.escalationModel` | Optional stronger model for the escalation rung in `mode: repair`. Same provider, one extra attempt after budget exhaustion. |
 | `repair-commit-message` | no | `Postman TDD repair` | Commit message used for a passing repair commit. |
 
+### Repair Loop Mechanics (P2)
+
+The repair loop (`mode: repair`) has four anti-thrash and budget mechanics:
+
+1. **Checkpoint resume (D9).** After each attempt, a signed `RepairCheckpointPayload` is written to `.postman-tdd/checkpoint.json` and embedded as `checkpointRef` on the sticky-comment failure document and repair summary. When `immutable-state-signing-key` is set, the checkpoint is HMAC-signed using the same seam as the immutable-state baseline; a signed checkpoint whose `commit` matches the PR head is **authoritative** (the loop resumes budget accounting from `checkpoint.attempts`). An unsigned checkpoint (no signing key) is **advisory only** — resume is allowed, but `attempts` is recomputed from the visible `attemptFingerprints` history, not trusted from the payload. A tampered signature causes a restart from `attempts=0`.
+
+2. **Fingerprint circuit breaker (D10).** Each post-oracle failure is fingerprinted (`sha256(assertion + message)` via the P1 ledger). When the same fingerprint recurs `repair-breaker-threshold` (default 2) consecutive times, the loop blocks with `blockedReason: repeated_failure` before spending the next attempt. This prevents burning budget on an identical failure.
+
+3. **Escalation ladder (D11).** When the budget is exhausted (not by breaker or provider block), the loop optionally runs one extra attempt with a stronger model (`repair-escalation-model` or `tdd.repair.escalationModel`, same provider). If that attempt also fails, the loop blocks with `blockedReason: owner_action_required` and an actionable payload (models tried, last failure, run URL). Without an escalation model, the terminal reason stays `budget_exhausted` (backward compatible).
+
+4. **Per-attempt tool-round budget (D12).** `repair-max-tool-rounds` (default 12, range 1–50) caps the inner tool loop per provider attempt. This was previously a hidden default; it is now a validated, documented input.
+
 ## Action Outputs
 
 Important preview outputs:
