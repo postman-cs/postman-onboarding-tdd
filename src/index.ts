@@ -471,6 +471,7 @@ async function runActionInner(
             immutablePathHashes,
             immutablePaths,
             immutableState,
+            ledger: state.ledger,
             message: 'Previously-passing contract assertions were removed or weakened in this PR.',
             phase: 'test_ratchet',
             specPath: config.specPath
@@ -512,6 +513,7 @@ async function runActionInner(
           immutablePathHashes,
           immutablePaths,
           immutableState,
+          ledger: state.ledger,
           message: `Postman TDD collection failed with exit code ${collectionRun.exitCode}`,
           phase: 'collection_run',
           specPath: config.specPath

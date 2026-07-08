@@ -164,9 +164,16 @@ export interface AgentFailureDocument {
   immutablePathHashes: ImmutablePathHash[];
   immutablePaths: string[];
   immutableState?: SignedImmutableState;
+  /**
+   * Compact per-packet verification ledger, ≤20 packets (`toLedgerSummary`
+   * cap, D8). Packet `key` is `operationId` when present else `method+path`;
+   * an `operationId` rename is non-breaking metadata per oasdiff, so
+   * `method+path` is the stable identity (D1).
+   */
+  ledger?: LedgerSummary;
   message: string;
   phase: FailurePhase;
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   specPath?: string;
   startCommand?: string;
   status: 'failed';

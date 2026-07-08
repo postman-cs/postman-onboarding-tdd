@@ -187,7 +187,7 @@ export function parseFailureDocument(body: string): AgentFailureDocument | undef
   const raw = body.slice(jsonStart, fenceEnd).trim();
   try {
     const parsed = JSON.parse(raw) as AgentFailureDocument;
-    return parsed.schemaVersion === 1 && parsed.status === 'failed' && Array.isArray(parsed.failures)
+    return (parsed.schemaVersion === 1 || parsed.schemaVersion === 2) && parsed.status === 'failed' && Array.isArray(parsed.failures)
       ? parsed
       : undefined;
   } catch {
