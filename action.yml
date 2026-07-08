@@ -84,7 +84,7 @@ outputs:
   status:
     description: passed, failed, skipped, or cleaned-up.
   failure-phase:
-    description: none, config, workspace, asset_upsert, immutable_state_tampered, immutable_spec, service_startup, health_check, collection_run, or cleanup.
+    description: none, config, workspace, asset_upsert, immutable_state_tampered, immutable_spec, service_startup, health_check, collection_run, test_ratchet, or cleanup.
   workspace-id:
     description: Shared TDD preview workspace ID.
   spec-id:

@@ -12,6 +12,7 @@ export type FailurePhase =
   | 'service_startup'
   | 'health_check'
   | 'collection_run'
+  | 'test_ratchet'
   | 'cleanup';
 
 export type RepairStatus = 'repaired' | 'blocked' | 'skipped' | 'failed';

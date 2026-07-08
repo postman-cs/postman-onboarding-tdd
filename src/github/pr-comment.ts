@@ -34,6 +34,7 @@ export interface PullRequestDetails {
   headRepository: string;
   headSha: string;
   isFork: boolean;
+  labels: string[];
   number: number;
 }
 
@@ -79,12 +80,16 @@ export class GitHubPrClient {
     const data = response.data;
     const headRepository = data.head.repo?.full_name || '';
     const baseRepository = data.base.repo?.full_name || `${this.owner}/${this.repo}`;
+    const labels = Array.isArray(data.labels)
+      ? data.labels.map((label) => (typeof label === 'string' ? label : label.name)).filter((label): label is string => Boolean(label))
+      : [];
     return {
       baseRepository,
       headBranch: data.head.ref,
       headRepository,
       headSha: data.head.sha,
       isFork: headRepository !== baseRepository,
+      labels,
       number: data.number
     };
   }
@@ -344,6 +349,7 @@ function normalizeFailurePhase(value: string | undefined): FailurePhase | 'unkno
     case 'immutable_state_tampered':
     case 'none':
     case 'service_startup':
+    case 'test_ratchet':
     case 'workspace':
       return value;
     default:
@@ -436,6 +442,13 @@ function failureGuidance(
         nextAction: 'Wait for a fresh preview run or ask a maintainer to inspect the sticky comment state and signing key configuration.',
         repairEligibility: 'Not eligible for automated implementation repair until the signed immutable baseline can be trusted.',
         whatHappened: 'The signed immutable-state marker could not be verified, so the failure context is treated as tampered.'
+      };
+    case 'test_ratchet':
+      return {
+        doneWhen,
+        nextAction: 'Restore the removed or weakened contract assertions, or — for a deliberate removal — add the `postman-tdd-allow-ratchet-removal` label to the PR and re-run. Alternatively, open a separate contract-change PR.',
+        repairEligibility: 'Not eligible for automated implementation repair because previously-passing contract assertions were removed or weakened.',
+        whatHappened: 'Previously-passing contract assertions were removed or weakened in this PR.'
       };
     case 'cleanup':
       return {

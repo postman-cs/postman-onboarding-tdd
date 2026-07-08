@@ -80,6 +80,7 @@ tdd:
       headRepository: 'postman-cs/pavan-test-TDD',
       headSha: 'head-sha',
       isFork: false,
+      labels: [],
       number: 123,
       ...overrides
     };
@@ -209,6 +210,18 @@ tdd:
   it('blocks unsupported failure phases before asset or model work starts', async () => {
     const summary = await runGuard({
       stickyBody: failureBody({ phase: 'config' })
+    });
+
+    expect(summary).toMatchObject({
+      attempts: 0,
+      blockedReason: 'unsupported_failure_phase',
+      status: 'blocked'
+    });
+  });
+
+  it('blocks test_ratchet phase as non-repairable', async () => {
+    const summary = await runGuard({
+      stickyBody: failureBody({ phase: 'test_ratchet' })
     });
 
     expect(summary).toMatchObject({

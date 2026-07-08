@@ -19,7 +19,7 @@ import {
   resolveTrustedImmutableBaseline,
   signImmutableState
 } from './immutable-state.js';
-import { buildLedgerPackets, mergePersistedState, scoreLedger, toLedgerSummary, writeLedgerFile } from './ledger.js';
+import { buildLedgerPackets, mergePersistedState, ratchetLedger, scoreLedger, toLedgerSummary, writeLedgerFile } from './ledger.js';
 import { runRepairMode } from './repair/orchestrator.js';
 import { defaultRepairModel } from './repair/provider-dispatcher.js';
 import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from './preview-assets.js';
@@ -365,6 +365,15 @@ async function runActionInner(
     core.setOutput('tdd-collection-id', state.collectionId || '');
     core.info(`[postman-tdd] Asset upsert complete: workspace=${state.workspaceId}, spec=${state.specId}, collection=${state.collectionId}.`);
 
+    let allowRatchetRemoval = false;
+    try {
+      const prDetails = await github.getPullRequest(pr.number);
+      allowRatchetRemoval = prDetails.labels.includes('postman-tdd-allow-ratchet-removal');
+      core.info(`[postman-tdd] Ratchet escape-hatch label: ${allowRatchetRemoval ? 'present' : 'absent'}.`);
+    } catch (error) {
+      core.warning(`[postman-tdd] Could not fetch PR labels for ratchet check: ${formatUnknownError(error)}`);
+    }
+
     const ledger: Ledger = {
       packets: mergePersistedState(buildLedgerPackets(assetResult.contractIndex), state.ledger, pr.sha),
       schemaVersion: 1
@@ -445,9 +454,55 @@ async function runActionInner(
       if (collectionRun.exitCode !== 0) {
         const failures = extractCollectionFailures(collectionRun.logExcerpt);
         core.info(`[postman-tdd] Collection run failed with exit code ${collectionRun.exitCode}; normalized ${failures.length} failure(s).`);
+        const previousLedgerSummary = state.ledger;
         const scoredLedger = scoreLedger(ledger, failures, pr.sha);
-        writeLedgerFile(scoredLedger);
-        state.ledger = toLedgerSummary(scoredLedger);
+
+        const ratchetResult = ratchetLedger(previousLedgerSummary, scoredLedger, { allowRemoval: allowRatchetRemoval });
+        if (ratchetResult.violated) {
+          const ratchetFailures = [...ratchetResult.missingKeys, ...ratchetResult.weakenedKeys].map((key) => ({
+            message: `Packet ${key} was previously passing but is missing or weakened in this PR.`
+          }));
+          writeLedgerFile(scoredLedger);
+          state.ledger = toLedgerSummary(scoredLedger);
+          const ratchetDocument = createFailureDocument({
+            collectionName: assetNames.collectionName,
+            commit: pr.sha,
+            failures: ratchetFailures,
+            immutablePathHashes,
+            immutablePaths,
+            immutableState,
+            message: 'Previously-passing contract assertions were removed or weakened in this PR.',
+            phase: 'test_ratchet',
+            specPath: config.specPath
+          });
+          if (immutableState) {
+            state.immutableState = immutableState;
+          }
+          prCommentId = String(await publishFailure({
+            artifactClient,
+            document: ratchetDocument,
+            github,
+            prNumber: pr.number,
+            state,
+            summary: {
+              collectionName: assetNames.collectionName,
+              failurePhase: 'test_ratchet',
+              ledger: state.ledger
+            }
+          }));
+          failurePublished = true;
+          throw new Error(ratchetDocument.message);
+        }
+
+        let finalLedger = scoredLedger;
+        if (allowRatchetRemoval && (ratchetResult.missingKeys.length > 0 || ratchetResult.weakenedKeys.length > 0)) {
+          const keysToDrop = new Set([...ratchetResult.missingKeys, ...ratchetResult.weakenedKeys]);
+          finalLedger = { ...scoredLedger, packets: scoredLedger.packets.filter((packet) => !keysToDrop.has(packet.key)) };
+          core.info(`[postman-tdd] Ratchet escape hatch: dropped ${keysToDrop.size} previously-passing packet(s) from the ledger.`);
+        }
+
+        writeLedgerFile(finalLedger);
+        state.ledger = toLedgerSummary(finalLedger);
         const document = createFailureDocument({
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,

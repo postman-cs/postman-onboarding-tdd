@@ -454,6 +454,36 @@ describe('PR sticky comment marker', () => {
     expect(body).not.toContain('## Packet Status');
   });
 
+  it('renders test_ratchet guidance naming the escape-hatch label', () => {
+    const body = renderStickyComment({
+      prNumber: 123,
+      schemaVersion: 1
+    }, {
+      failureDocument: {
+        commit: 'abc123',
+        failures: [{ message: 'Packet getWidgets was previously passing but is missing or weakened in this PR.' }],
+        immutablePathHashes: [],
+        immutablePaths: [],
+        message: 'Previously-passing contract assertions were removed or weakened in this PR.',
+        phase: 'test_ratchet',
+        schemaVersion: 1,
+        status: 'failed',
+        successCriteria: {
+          doneWhen: 'requiredCheck passes on the latest PR head commit',
+          failureContextMustMatchPrHeadCommit: true,
+          latestHeadOnly: true,
+          requiredCheck: 'Postman TDD Preview'
+        }
+      },
+      status: 'failed'
+    });
+
+    expect(body).toContain('**Failure phase:** test_ratchet');
+    expect(body).toContain('postman-tdd-allow-ratchet-removal');
+    expect(body).toContain('Not eligible for automated implementation repair because previously-passing contract assertions were removed or weakened.');
+    expect(body).toContain('Previously-passing contract assertions were removed or weakened in this PR.');
+  });
+
   it('replaces the packet status table with a counts-only line when body exceeds 60000 chars (D8)', () => {
     const largeHashes = Array.from({ length: 520 }, (_, i) => ({
       path: `p${i}`,

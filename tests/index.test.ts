@@ -11,7 +11,7 @@ import {
   type PrCommentSummary
 } from '../src/github/pr-comment.js';
 import { runAction } from '../src/index.js';
-import type { PreviewAssetState } from '../src/types.js';
+import type { LedgerSummary, PreviewAssetState } from '../src/types.js';
 
 const runnerMocks = vi.hoisted(() => ({
   ensurePostmanCli: vi.fn(),
@@ -344,5 +344,149 @@ paths:
       failing: 0
     });
     expect(markerState?.ledger?.packets[0]?.passes).toBe(true);
+  });
+
+  function setupRatchetRepo(): string {
+    dir = mkdtempSync(join(tmpdir(), 'postman-tdd-ratchet-'));
+    mkdirSync(join(dir, '.postman-template'), { recursive: true });
+    mkdirSync(join(dir, 'api'), { recursive: true });
+    writeFileSync(join(dir, '.postman-template', 'onboarding.yml'), `
+spec:
+  path: api/openapi.yaml
+service:
+  name: ratchet-service
+tdd:
+  enabled: true
+  workspace:
+    id: ws-1
+    name: Ratchet Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+`, 'utf8');
+    writeFileSync(join(dir, 'api', 'openapi.yaml'), `
+openapi: 3.0.3
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /v1/widgets:
+    get:
+      operationId: getWidgets
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+`, 'utf8');
+    process.chdir(dir);
+    process.env.GITHUB_WORKSPACE = dir;
+    process.env.GITHUB_REPOSITORY = 'postman-cs/ratchet-service';
+    process.env.GITHUB_SHA = 'head-sha';
+    const outputPath = join(dir, 'outputs.txt');
+    writeFileSync(outputPath, '', 'utf8');
+    process.env.GITHUB_OUTPUT = outputPath;
+    setInput('mode', 'run');
+    setInput('pr-number', '42');
+    setInput('postman-api-key', 'postman-token');
+    setInput('github-token', 'github-token');
+    setInput('config-write-mode', 'none');
+    setInput('onboarding-config-path', '.postman-template/onboarding.yml');
+    return dir;
+  }
+
+  const previousLedger: LedgerSummary = {
+    failing: 0,
+    packets: [{ key: 'oldOp', passes: true, title: 'oldOp' }],
+    passing: 1,
+    total: 1
+  };
+
+  function createRatchetGithubClient(labels: string[], summaries: PrCommentSummary[]): GitHubPrClient {
+    return {
+      findStickyComment: async () => ({
+        assetState: { prNumber: 42, schemaVersion: 1, ledger: previousLedger },
+        body: '',
+        id: 100
+      }),
+      getPullRequest: async () => ({
+        baseRepository: 'postman-cs/ratchet-service',
+        headBranch: 'feature',
+        headRepository: 'postman-cs/ratchet-service',
+        headSha: 'head-sha',
+        isFork: false,
+        labels,
+        number: 42
+      }),
+      upsertStickyComment: async (
+        _prNumber: number,
+        state: PreviewAssetState,
+        summary: PrCommentSummary
+      ) => {
+        summaries.push(summary);
+        return 200;
+      }
+    } as unknown as GitHubPrClient;
+  }
+
+  it('publishes test_ratchet failure when a previously-passing packet is removed without the escape-hatch label', async () => {
+    setupRatchetRepo();
+    runnerMocks.ensurePostmanCli.mockResolvedValue(undefined);
+    runnerMocks.startBackgroundCommand.mockReturnValue({ kill: () => {}, pid: 12345 });
+    runnerMocks.waitForHealth.mockResolvedValue({ ok: true, phase: 'health_check' });
+    runnerMocks.runTddCollection.mockResolvedValue({
+      exitCode: 1,
+      logExcerpt: '[Postman TDD] getWidgets GET /v1/widgets :: status code is defined by OpenAPI\nAssertionError: Expected 200'
+    });
+
+    const summaries: PrCommentSummary[] = [];
+    const github = createRatchetGithubClient([], summaries);
+    const artifactClient = {
+      uploadArtifact: async () => ({ digest: 'sha256:abc', id: 123 })
+    };
+
+    await expect(runAction({
+      artifactClient: artifactClient as never,
+      githubClient: github,
+      postmanClient: createMockPostmanClient() as never
+    })).rejects.toThrow('Previously-passing contract assertions');
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]?.failurePhase).toBe('test_ratchet');
+    expect(summaries[0]?.failureDocument?.phase).toBe('test_ratchet');
+    expect(summaries[0]?.failureDocument?.failures[0]?.message).toContain('oldOp');
+  });
+
+  it('drops the removed packet and falls through to collection_run when the escape-hatch label is present', async () => {
+    setupRatchetRepo();
+    runnerMocks.ensurePostmanCli.mockResolvedValue(undefined);
+    runnerMocks.startBackgroundCommand.mockReturnValue({ kill: () => {}, pid: 12345 });
+    runnerMocks.waitForHealth.mockResolvedValue({ ok: true, phase: 'health_check' });
+    runnerMocks.runTddCollection.mockResolvedValue({
+      exitCode: 1,
+      logExcerpt: '[Postman TDD] getWidgets GET /v1/widgets :: status code is defined by OpenAPI\nAssertionError: Expected 200'
+    });
+
+    const summaries: PrCommentSummary[] = [];
+    const github = createRatchetGithubClient(['postman-tdd-allow-ratchet-removal'], summaries);
+    const artifactClient = {
+      uploadArtifact: async () => ({ digest: 'sha256:abc', id: 123 })
+    };
+
+    await expect(runAction({
+      artifactClient: artifactClient as never,
+      githubClient: github,
+      postmanClient: createMockPostmanClient() as never
+    })).rejects.toThrow('Postman TDD collection failed');
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]?.failurePhase).toBe('collection_run');
+
+    const ledger = JSON.parse(readFileSync(join(dir, '.postman-tdd', 'ledger.json'), 'utf8'));
+    const keys = ledger.packets.map((p: { key: string }) => p.key);
+    expect(keys).not.toContain('oldOp');
+    expect(keys).toContain('getWidgets');
   });
 });
