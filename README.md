@@ -674,6 +674,10 @@ Important repair outputs:
 | `repair-commit-sha` | Commit SHA pushed by the repair worker after a passing local collection run. |
 | `repair-summary-path` | Local JSON summary path. |
 
+## Telemetry
+
+The action sends one anonymous usage event per run (action name/version, outcome, coarse CI metadata; never secrets, spec content, or repo names). Disable with `POSTMAN_ACTIONS_TELEMETRY=off` or `DO_NOT_TRACK=1`; route events to your own collector with `POSTMAN_ACTIONS_TELEMETRY_ENDPOINT`.
+
 ## Development
 
 For contributors to this action:

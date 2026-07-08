@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import { DefaultArtifactClient } from '@actions/artifact';
+import { createTelemetryContext } from '@postman-cse/automation-telemetry-core';
 
 import {
   createFailureDocument,
@@ -107,7 +108,32 @@ export function readActionInputs(): ActionInputs {
   };
 }
 
+// Injected by esbuild --define at build time; undefined under vitest/tsc.
+declare const __ACTION_VERSION__: string | undefined;
+
+function resolveActionVersion(): string {
+  return typeof __ACTION_VERSION__ === 'string' && __ACTION_VERSION__ ? __ACTION_VERSION__ : 'unknown';
+}
+
 export async function runAction(options: RunActionOptions = {}): Promise<void> {
+  const telemetry = createTelemetryContext({
+    action: 'postman-onboarding-tdd',
+    actionVersion: resolveActionVersion(),
+    logger: core
+  });
+  try {
+    await runActionInner(options, telemetry);
+    telemetry.emitCompletion('success');
+  } catch (error) {
+    telemetry.emitCompletion('failure');
+    throw error;
+  }
+}
+
+async function runActionInner(
+  options: RunActionOptions,
+  telemetry: ReturnType<typeof createTelemetryContext>
+): Promise<void> {
   const inputs = readActionInputs();
   if (inputs.postmanApiKey) core.setSecret(inputs.postmanApiKey);
   if (inputs.githubToken) core.setSecret(inputs.githubToken);
@@ -126,6 +152,7 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
     inputs.anthropicApiKey,
     inputs.repairGithubToken
   ]);
+  if (inputs.workspaceTeamId) telemetry.setTeamId(inputs.workspaceTeamId);
   if (inputs.mode === 'validate') {
     await runValidateMode({ inputs, mask });
     return;

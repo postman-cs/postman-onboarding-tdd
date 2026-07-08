@@ -33,7 +33,8 @@
     "@actions/artifact": "^6.2.1",
     "@actions/core": "^3.0.1",
     "@actions/github": "^9.1.1",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "@postman-cse/automation-telemetry-core": "^0.2.0"
   },
   "devDependencies": {
     "@types/node": "^24.12.4",
