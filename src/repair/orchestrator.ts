@@ -167,6 +167,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
         repairModel,
         repairProvider
       },
+      maxToolRounds: options.inputs.repairMaxToolRounds,
       provider: repairProvider,
       repairContext: {
         allowedReadPaths: config.repair.allowedReadPaths,

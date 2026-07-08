@@ -1,11 +1,46 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type GitHubPrClient, type PullRequestDetails } from '../src/github/pr-comment.js';
 import { runRepairMode } from '../src/repair/orchestrator.js';
 import type { ActionInputs, AgentFailureDocument } from '../src/types.js';
+
+// Partial mocks that preserve real helper functions while stubbing the
+// side-effectful seams (provider turn, preview assets, runner, git hashing).
+// Guard tests block before reaching any of these, so the mocks are inert there.
+const repairMocks = vi.hoisted(() => ({
+  ensurePostmanCli: vi.fn(),
+  hashPaths: vi.fn(),
+  resolveTddWorkspace: vi.fn(),
+  runRepairProviderTurn: vi.fn(),
+  upsertPreviewAssets: vi.fn()
+}));
+
+vi.mock('../src/repair/provider-dispatcher.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/repair/provider-dispatcher.js')>();
+  return { ...actual, runRepairProviderTurn: repairMocks.runRepairProviderTurn };
+});
+
+vi.mock('../src/preview-assets.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/preview-assets.js')>();
+  return {
+    ...actual,
+    resolveTddWorkspace: repairMocks.resolveTddWorkspace,
+    upsertPreviewAssets: repairMocks.upsertPreviewAssets
+  };
+});
+
+vi.mock('../src/runner.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/runner.js')>();
+  return { ...actual, ensurePostmanCli: repairMocks.ensurePostmanCli };
+});
+
+vi.mock('../src/repair/git.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/repair/git.js')>();
+  return { ...actual, hashPaths: repairMocks.hashPaths };
+});
 
 describe('repair orchestrator early guards', () => {
   let dir = '';
@@ -371,5 +406,145 @@ tdd:
         repository: 'postman-cs/pavan-test-TDD'
       }
     })).rejects.toThrow('repair-provider input (openai-responses) must match tdd.repair.provider (anthropic-messages)');
+  });
+});
+
+describe('repair orchestrator maxToolRounds threading', () => {
+  let dir = '';
+  let previousCwd = '';
+  let previousWorkspace: string | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    previousCwd = process.cwd();
+    previousWorkspace = process.env.GITHUB_WORKSPACE;
+    dir = mkdtempSync(join(tmpdir(), 'postman-tdd-repair-rounds-'));
+    mkdirSync(join(dir, '.postman-template'), { recursive: true });
+    writeFileSync(join(dir, '.postman-template', 'onboarding.yml'), `
+spec:
+  path: api/openapi.yaml
+service:
+  name: repair-test
+tdd:
+  enabled: true
+  workspace:
+    name: Repair Test
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  repair:
+    enabled: true
+    provider: openai-responses
+    allowedWritePaths:
+      - src/**
+`, 'utf8');
+    process.chdir(dir);
+    process.env.GITHUB_WORKSPACE = dir;
+    repairMocks.ensurePostmanCli.mockResolvedValue(undefined);
+    repairMocks.resolveTddWorkspace.mockResolvedValue({ workspaceId: 'ws-1' });
+    repairMocks.upsertPreviewAssets.mockResolvedValue({
+      collectionId: 'col-1',
+      contractIndex: { operations: [], openapiVersion: '3.0' } as never,
+      specId: 'spec-1'
+    });
+    repairMocks.hashPaths.mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    process.chdir(previousCwd);
+    if (previousWorkspace === undefined) {
+      delete process.env.GITHUB_WORKSPACE;
+    } else {
+      process.env.GITHUB_WORKSPACE = previousWorkspace;
+    }
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = '';
+  });
+
+  function failureBody(): string {
+    const failure: AgentFailureDocument = {
+      commit: 'head-sha',
+      failures: [{ message: 'Synthetic failure.' }],
+      immutablePathHashes: [{ path: 'api/openapi.yaml', sha256: 'abc123' }],
+      immutablePaths: ['api/openapi.yaml'],
+      message: 'Synthetic failure.',
+      phase: 'collection_run',
+      schemaVersion: 1,
+      specPath: 'api/openapi.yaml',
+      status: 'failed',
+      successCriteria: {
+        doneWhen: 'requiredCheck passes on the latest PR head commit',
+        failureContextMustMatchPrHeadCommit: true,
+        latestHeadOnly: true,
+        requiredCheck: 'Postman TDD Preview'
+      }
+    };
+    return [
+      '# Postman TDD Preview (FAILED)',
+      '',
+      '<details>',
+      '<summary>Agent failure JSON</summary>',
+      '',
+      '```json',
+      JSON.stringify(failure, null, 2),
+      '```',
+      '</details>'
+    ].join('\n');
+  }
+
+  it('passes repairMaxToolRounds from inputs into runRepairProviderTurn', async () => {
+    repairMocks.runRepairProviderTurn.mockResolvedValue({
+      status: 'no_change',
+      message: 'provider reported no change'
+    });
+    const github = {
+      findStickyComment: async () => ({ body: failureBody(), id: 1 }),
+      getPullRequest: async () => ({
+        baseRepository: 'postman-cs/pavan-test-TDD',
+        headBranch: 'repair-branch',
+        headRepository: 'postman-cs/pavan-test-TDD',
+        headSha: 'head-sha',
+        isFork: false,
+        labels: [],
+        number: 123
+      }),
+      upsertRepairComment: async () => 1
+    } as unknown as GitHubPrClient;
+
+    await runRepairMode({
+      endpointProfile: {
+        apiBaseUrl: 'https://api.getpostman.com',
+        cliInstallUrl: 'https://dl-cli.pstmn.io/install/unix.sh'
+      },
+      github,
+      inputs: {
+        committerEmail: 'support@postman.com',
+        committerName: 'Postman',
+        configWriteMode: 'none',
+        githubToken: 'github-token',
+        mode: 'repair',
+        onboardingConfigPath: '.postman-template/onboarding.yml',
+        openaiApiKey: 'openai-token',
+        postmanApiKey: 'postman-token',
+        postmanRegion: 'us',
+        postmanStack: 'prod',
+        repairCommitMessage: 'Postman TDD repair',
+        repairMaxAttempts: 3,
+        repairMaxToolRounds: 5,
+        repairModel: 'gpt-5.5',
+        repairProvider: 'openai-responses'
+      },
+      mask: (value) => value,
+      postman: {} as never,
+      pr: {
+        number: 123,
+        repository: 'postman-cs/pavan-test-TDD'
+      }
+    });
+
+    expect(repairMocks.runRepairProviderTurn).toHaveBeenCalledTimes(1);
+    expect(repairMocks.runRepairProviderTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ maxToolRounds: 5 })
+    );
   });
 });
