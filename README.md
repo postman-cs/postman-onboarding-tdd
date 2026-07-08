@@ -264,6 +264,52 @@ jobs:
 
 `mode: validate` does not call Postman APIs, install or authenticate the Postman CLI, post GitHub comments, call AI providers, or require repository secrets. It checks the onboarding config, OpenAPI parseability and operations, simple script paths, repair read/write path safety, and obvious duplicate workflow choices. Complex shell commands such as `npm start` are reported as warnings rather than failures because the action cannot safely parse every customer shell command.
 
+When the agent harness is opted in (see [Agent Harness](#agent-harness-ws4) below), `mode: validate` additionally lints the copied harness for internal consistency and surfaces every issue as an imperative `To fix:` remediation instruction in the `validation-summary` output and the GitHub Actions step summary.
+
+## Agent Harness (WS4)
+
+The action ships a copyable agent harness under `.postman-template/` that gives coding agents a routing table over focused boundary docs. Copy it into the service repository so agents working on a failing `Postman TDD Preview` check have a single entry point:
+
+```bash
+cp .postman-template/AGENTS.md AGENTS.md
+cp -r .postman-template/agents .agents
+```
+
+The harness consists of:
+
+- **`AGENTS.md`** — a router (≤100 lines) with a routing table mapping situations to reference docs under `.agents/references/`.
+- **`.agents/references/tdd-check.md`** — how the Postman TDD Preview check works; the oracle is the only judge.
+- **`.agents/references/failure-document.md`** — the sticky-comment inline failure JSON and its fields.
+- **`.agents/references/repair-loop.md`** — the preview→repair contract; only latest-head-commit failures are actionable.
+- **`.agents/references/immutable-spec-guard.md`** — `spec.path` is immutable during repair; never edit it.
+- **`.agents/references/branch-and-commit.md`** — the `postman-tdd-fix-` branch prefix and commit hygiene.
+- **`.agents/references/execplan-skeleton.md`** — a fill-in progress-ledger template.
+
+### Opt-in
+
+The harness lint is **opt-in and inert by default** — repos without the harness validate byte-for-byte as before. The lint runs when either condition is true:
+
+1. `tdd.harness.enabled: true` in `.postman-template/onboarding.yml`, or
+2. a root `AGENTS.md` file exists in the workspace (presence-based opt-in — copying the harness in is enough).
+
+```yaml
+# .postman-template/onboarding.yml
+tdd:
+  harness:
+    enabled: true
+```
+
+### Lint rules
+
+When opted in, `mode: validate` checks that:
+
+- `AGENTS.md` exists and contains a routing table with at least one `.agents/references/<doc>.md` path.
+- Every required reference doc is routed by the router.
+- Every routed reference file exists on disk, is non-empty, and starts with an `#` heading.
+- `AGENTS.md` stays at or under 100 non-empty lines (warning, not error).
+
+Every harness lint error is an imperative remediation instruction prefixed `To fix:` (e.g. `To fix: create AGENTS.md at the repository root by copying .postman-template/AGENTS.md.`) and flows through the existing `validation-summary`, `validation-error-count`, and `failure-phase=config` path — no new outputs.
+
 ## Preview Workflow
 
 Copy the packaged preview workflow into the service repository:

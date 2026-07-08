@@ -28369,7 +28369,7 @@ var require_BufferList = __commonJS({
         this.head = this.tail = null;
         this.length = 0;
       };
-      BufferList.prototype.join = function join11(s) {
+      BufferList.prototype.join = function join12(s) {
         if (this.length === 0) return "";
         var p = this.head;
         var ret = "" + p.data;
@@ -107281,7 +107281,7 @@ function createTelemetryContext(options) {
 
 // src/index.ts
 import { mkdirSync as mkdirSync5, writeFileSync as writeFileSync7 } from "node:fs";
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 
 // src/agent-context.ts
 import { createHash as createHash4 } from "node:crypto";
@@ -107379,6 +107379,8 @@ function loadOnboardingConfig(options) {
   if (repair.enabled && repair.allowedWritePaths.length === 0) {
     throw new Error("tdd.repair.allowedWritePaths is required when tdd.repair.enabled=true");
   }
+  const harnessBlock = asRecord(tdd.harness);
+  const harnessEnabled = harnessBlock.enabled === true || stringValue(harnessBlock.enabled).toLowerCase() === "true";
   return {
     configPath,
     projectName,
@@ -107389,7 +107391,8 @@ function loadOnboardingConfig(options) {
       name: workspaceName
     },
     runtime,
-    repair
+    repair,
+    harness: { enabled: harnessEnabled }
   };
 }
 function patchWorkspaceId(configPath, workspaceId) {
@@ -111855,8 +111858,109 @@ function renderJUnit(ledger, opts) {
 }
 
 // src/validation.ts
-import { existsSync as existsSync8, readdirSync, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
-import { basename as basename5, join as join9, resolve as resolve8 } from "node:path";
+import { existsSync as existsSync9, readdirSync as readdirSync2, readFileSync as readFileSync10, statSync as statSync3 } from "node:fs";
+import { basename as basename5, join as join10, resolve as resolve8 } from "node:path";
+
+// src/harness-lint.ts
+import { existsSync as existsSync8, readFileSync as readFileSync9, readdirSync } from "node:fs";
+import { join as join9 } from "node:path";
+function requiredReferenceDocs() {
+  return [
+    "tdd-check",
+    "failure-document",
+    "repair-loop",
+    "immutable-spec-guard",
+    "branch-and-commit",
+    "execplan-skeleton"
+  ];
+}
+function harnessRemediation(instruction) {
+  return `To fix: ${instruction}`;
+}
+function parseRouterReferences(routerSource) {
+  const seen = /* @__PURE__ */ new Set();
+  const stems = [];
+  const pattern = /\.agents\/references\/([^\s)/]+)\.md/g;
+  let match;
+  while ((match = pattern.exec(routerSource)) !== null) {
+    const stem = match[1];
+    if (stem !== void 0 && !seen.has(stem)) {
+      seen.add(stem);
+      stems.push(stem);
+    }
+  }
+  return stems;
+}
+function harnessOptIn(config, workspaceRoot) {
+  if (config?.harness?.enabled === true) return true;
+  return existsSync8(join9(workspaceRoot, "AGENTS.md"));
+}
+function validateHarness(config, state3, workspaceRoot) {
+  if (!harnessOptIn(config, workspaceRoot)) return;
+  const agentsPath = join9(workspaceRoot, "AGENTS.md");
+  if (!existsSync8(agentsPath)) {
+    state3.errors.push({
+      message: harnessRemediation("create AGENTS.md at the repository root by copying .postman-template/AGENTS.md.")
+    });
+    return;
+  }
+  const routerSource = readFileSync9(agentsPath, "utf8");
+  const referenced = parseRouterReferences(routerSource);
+  const required = requiredReferenceDocs();
+  const referencesDir = join9(workspaceRoot, ".agents", "references");
+  if (referenced.length === 0) {
+    state3.errors.push({
+      message: harnessRemediation("add a routing-table row that references at least one .agents/references/<name>.md path to AGENTS.md.")
+    });
+  }
+  for (const stem of required) {
+    if (!referenced.includes(stem)) {
+      state3.errors.push({
+        message: harnessRemediation(`add a routing-table row that references .agents/references/${stem}.md to AGENTS.md, or create that reference file.`)
+      });
+    }
+  }
+  for (const stem of referenced) {
+    const docPath = join9(referencesDir, `${stem}.md`);
+    if (!existsSync8(docPath)) {
+      state3.errors.push({
+        message: harnessRemediation(`create .agents/references/${stem}.md (referenced by AGENTS.md) at the repository root.`)
+      });
+      continue;
+    }
+    if (!required.includes(stem)) continue;
+    const content = readFileSync9(docPath, "utf8");
+    if (content.trim().length === 0) {
+      state3.errors.push({
+        message: harnessRemediation(`populate .agents/references/${stem}.md with content starting with an # heading.`)
+      });
+      continue;
+    }
+    if (!content.trimStart().startsWith("#")) {
+      state3.errors.push({
+        message: harnessRemediation(`start .agents/references/${stem}.md with an # heading.`)
+      });
+    }
+  }
+  const nonEmptyLines = routerSource.split("\n").filter((line) => line.trim().length > 0);
+  if (nonEmptyLines.length > 100) {
+    state3.warnings.push({
+      message: `AGENTS.md has ${nonEmptyLines.length} non-empty lines; keep it at or under 100 for agent readability.`
+    });
+  }
+  if (existsSync8(referencesDir)) {
+    const onDisk = readdirSync(referencesDir).filter((file) => file.endsWith(".md")).map((file) => file.slice(0, -3));
+    for (const stem of onDisk) {
+      if (!referenced.includes(stem)) {
+        state3.warnings.push({
+          message: `.agents/references/${stem}.md exists but is not routed by AGENTS.md; either route it or remove it.`
+        });
+      }
+    }
+  }
+}
+
+// src/validation.ts
 async function runValidateMode(options) {
   const state3 = {
     errors: [],
@@ -111884,6 +111988,7 @@ async function runValidateMode(options) {
     validateRepairConfig(config, options.inputs, state3);
     validateWorkflowSelection(state3);
   }
+  validateHarness(config, state3, resolveWorkspacePath2("."));
   for (const warning2 of state3.warnings) {
     warning(`[postman-tdd] ${warning2.message}`);
   }
@@ -111904,7 +112009,7 @@ async function runValidateMode(options) {
 }
 function validateSpec(config, state3) {
   const specPath = resolveWorkspacePath2(config.specPath);
-  if (!existsSync8(specPath)) {
+  if (!existsSync9(specPath)) {
     state3.errors.push({ message: `OpenAPI spec path does not exist: ${config.specPath}` });
     return;
   }
@@ -111913,7 +112018,7 @@ function validateSpec(config, state3) {
     return;
   }
   try {
-    const document2 = parseOpenApiDocument(readFileSync9(specPath, "utf8"));
+    const document2 = parseOpenApiDocument(readFileSync10(specPath, "utf8"));
     const index = buildContractIndex(document2);
     for (const warning2 of index.warnings) {
       state3.warnings.push({ message: warning2 });
@@ -111945,7 +112050,7 @@ function validateCommandPath(label, command, state3, mask) {
     return;
   }
   const absolutePath = resolveWorkspacePath2(path9);
-  if (!existsSync8(absolutePath)) {
+  if (!existsSync9(absolutePath)) {
     state3.errors.push({ message: `${label} references a path that does not exist: ${mask(path9)}` });
     return;
   }
@@ -111981,8 +112086,8 @@ function validateRepairConfig(config, inputs, state3) {
 }
 function validateWorkflowSelection(state3) {
   const workflowDir = resolveWorkspacePath2(".github/workflows");
-  if (!existsSync8(workflowDir)) return;
-  const workflowFiles = readdirSync(workflowDir).filter((entry) => /\.ya?ml$/i.test(entry));
+  if (!existsSync9(workflowDir)) return;
+  const workflowFiles = readdirSync2(workflowDir).filter((entry) => /\.ya?ml$/i.test(entry));
   const hasPreview = workflowFiles.includes("postman-tdd-preview.yml");
   const hasRepair = workflowFiles.includes("postman-tdd-repair.yml");
   const hasCombined = workflowFiles.includes("postman-tdd-preview-and-repair.yml");
@@ -111997,8 +112102,8 @@ function validateWorkflowSelection(state3) {
     });
   }
   for (const file of workflowFiles) {
-    const path9 = join9(workflowDir, file);
-    const source = readFileSync9(path9, "utf8");
+    const path9 = join10(workflowDir, file);
+    const source = readFileSync10(path9, "utf8");
     if (source.includes("postman-access-token:") && !source.includes("mode: repair")) {
       state3.warnings.push({
         message: `${basename5(file)} passes postman-access-token outside a repair workflow; preview-only jobs do not need that secret.`
@@ -112620,7 +112725,7 @@ function resolveRunUrl() {
 }
 function writeJUnitReport(summary2, dir = AGENT_CONTEXT_DIR) {
   mkdirSync5(dir, { recursive: true });
-  const junitPath = join10(dir, "junit.xml");
+  const junitPath = join11(dir, "junit.xml");
   writeFileSync7(junitPath, renderJUnit(summary2), "utf8");
   return junitPath;
 }

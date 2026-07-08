@@ -6,7 +6,7 @@ branding:
   color: orange
 inputs:
   mode:
-    description: Action mode. Use validate for setup checks, run for PR preview, cleanup for PR close cleanup, or repair for automated implementation repair.
+    description: Action mode. Use validate for setup checks, run for PR preview, cleanup for PR close cleanup, or repair for automated implementation repair. In validate mode, an optional agent harness lint runs when opted in via tdd.harness.enabled or a root AGENTS.md file; harness lint errors are imperative 'To fix:' remediation instructions surfaced in validation-summary.
     required: false
     default: run
   onboarding-config-path:
