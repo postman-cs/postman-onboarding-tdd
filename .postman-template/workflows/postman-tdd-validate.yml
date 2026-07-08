@@ -25,6 +25,6 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
-      - uses: postman-cs/postman-onboarding-tdd@main
+      - uses: postman-cs/postman-onboarding-tdd@v0
         with:
           mode: validate

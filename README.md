@@ -257,7 +257,7 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
-      - uses: postman-cs/postman-onboarding-tdd@main
+      - uses: postman-cs/postman-onboarding-tdd@v0
         with:
           mode: validate
 ```
@@ -310,7 +310,7 @@ jobs:
           ref: ${{ github.event.action == 'closed' && github.base_ref || github.head_ref }}
           fetch-depth: 0
 
-      - uses: postman-cs/postman-onboarding-tdd@main
+      - uses: postman-cs/postman-onboarding-tdd@v0
         with:
           mode: ${{ github.event.action == 'closed' && 'cleanup' || 'run' }}
           postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
@@ -529,7 +529,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
 
-      - uses: postman-cs/postman-onboarding-tdd@main
+      - uses: postman-cs/postman-onboarding-tdd@v0
         with:
           mode: repair
           pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
