@@ -7,6 +7,7 @@ import { buildContractIndex, parseOpenApiDocument } from './contract.js';
 import { isPathDenied, type PatchPolicy } from './repair/patch.js';
 import type { ActionInputs, ResolvedOnboardingConfig } from './types.js';
 import type { ValidationState } from './validation-types.js';
+import { validateHarness } from './harness-lint.js';
 
 export type { ValidationIssue, ValidationState } from './validation-types.js';
 
@@ -45,6 +46,11 @@ export async function runValidateMode(options: ValidateModeOptions): Promise<voi
     validateRepairConfig(config, options.inputs, state);
     validateWorkflowSelection(state);
   }
+
+  // P4 (D22): harness lint runs after the config-driven checks so it executes
+  // even when config failed to load (undefined). The opt-in gate inside
+  // validateHarness handles undefined config safely (D19).
+  validateHarness(config, state, resolveWorkspacePath('.'));
 
   for (const warning of state.warnings) {
     core.warning(`[postman-tdd] ${warning.message}`);

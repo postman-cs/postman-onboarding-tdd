@@ -1,5 +1,8 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+
+import type { ResolvedOnboardingConfig } from './types.js';
+import type { ValidationState } from './validation-types.js';
 
 /**
  * The six required reference docs every shipped/copyed harness router must
@@ -58,4 +61,97 @@ export function harnessOptIn(
 ): boolean {
   if (config?.harness?.enabled === true) return true;
   return existsSync(join(workspaceRoot, 'AGENTS.md'));
+}
+
+/**
+ * D22/D24: the harness lint pass. Opt-in gated (D19) — if the customer has
+ * not opted in via `tdd.harness.enabled` or a root `AGENTS.md`, this pushes
+ * nothing to `state` and validation-error-count/summary are byte-identical to
+ * pre-P4. When opted in, it enforces the D24 router internal-consistency
+ * rules, pushing every issue as an imperative `To fix:` remediation (D21) to
+ * the SAME `state.errors`/`state.warnings` arrays the other validate checks
+ * feed, so the existing summary/throw machinery surfaces them unchanged (D23).
+ */
+export function validateHarness(
+  config: ResolvedOnboardingConfig | undefined,
+  state: ValidationState,
+  workspaceRoot: string
+): void {
+  if (!harnessOptIn(config, workspaceRoot)) return;
+
+  const agentsPath = join(workspaceRoot, 'AGENTS.md');
+  if (!existsSync(agentsPath)) {
+    state.errors.push({
+      message: harnessRemediation('create AGENTS.md at the repository root by copying .postman-template/AGENTS.md.')
+    });
+    return;
+  }
+
+  const routerSource = readFileSync(agentsPath, 'utf8');
+  const referenced = parseRouterReferences(routerSource);
+  const required = requiredReferenceDocs();
+  const referencesDir = join(workspaceRoot, '.agents', 'references');
+
+  // D24 rule 2: routing table must contain at least one reference path.
+  if (referenced.length === 0) {
+    state.errors.push({
+      message: harnessRemediation('add a routing-table row that references at least one .agents/references/<name>.md path to AGENTS.md.')
+    });
+  }
+
+  // D24 rule 4: every required doc must be routed.
+  for (const stem of required) {
+    if (!referenced.includes(stem)) {
+      state.errors.push({
+        message: harnessRemediation(`add a routing-table row that references .agents/references/${stem}.md to AGENTS.md, or create that reference file.`)
+      });
+    }
+  }
+
+  // D24 rule 3: every routed doc must exist; rule 5: required docs, when
+  // present, must be non-empty with an H1 first line.
+  for (const stem of referenced) {
+    const docPath = join(referencesDir, `${stem}.md`);
+    if (!existsSync(docPath)) {
+      state.errors.push({
+        message: harnessRemediation(`create .agents/references/${stem}.md (referenced by AGENTS.md) at the repository root.`)
+      });
+      continue;
+    }
+    if (!required.includes(stem)) continue;
+    const content = readFileSync(docPath, 'utf8');
+    if (content.trim().length === 0) {
+      state.errors.push({
+        message: harnessRemediation(`populate .agents/references/${stem}.md with content starting with an # heading.`)
+      });
+      continue;
+    }
+    if (!content.trimStart().startsWith('#')) {
+      state.errors.push({
+        message: harnessRemediation(`start .agents/references/${stem}.md with an # heading.`)
+      });
+    }
+  }
+
+  // D24 rule 1: AGENTS.md <=100 non-empty lines is a design target (WARNING).
+  const nonEmptyLines = routerSource.split('\n').filter((line) => line.trim().length > 0);
+  if (nonEmptyLines.length > 100) {
+    state.warnings.push({
+      message: `AGENTS.md has ${nonEmptyLines.length} non-empty lines; keep it at or under 100 for agent readability.`
+    });
+  }
+
+  // D24: orphan reference files (present on disk but not routed) => WARNING.
+  if (existsSync(referencesDir)) {
+    const onDisk = readdirSync(referencesDir)
+      .filter((file) => file.endsWith('.md'))
+      .map((file) => file.slice(0, -3));
+    for (const stem of onDisk) {
+      if (!referenced.includes(stem)) {
+        state.warnings.push({
+          message: `.agents/references/${stem}.md exists but is not routed by AGENTS.md; either route it or remove it.`
+        });
+      }
+    }
+  }
 }

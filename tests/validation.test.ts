@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -33,6 +33,8 @@ describe('validate mode', () => {
     dir = mkdtempSync(join(tmpdir(), 'postman-tdd-validate-'));
     process.chdir(dir);
     process.env.GITHUB_WORKSPACE = dir;
+    process.env.GITHUB_OUTPUT = join(dir, 'outputs.txt');
+    writeFileSync(process.env.GITHUB_OUTPUT, '', 'utf8');
     process.env.INPUT_MODE = 'validate';
     process.env['INPUT_ONBOARDING-CONFIG-PATH'] = '.postman-template/onboarding.yml';
   });
@@ -78,9 +80,35 @@ describe('validate mode', () => {
     await expect(runAction()).rejects.toThrow('Postman TDD setup validation failed with 2 error');
   });
 
+  it('produces no harness lint messages when no AGENTS.md and no tdd.harness (backward compat)', async () => {
+    writeValidFixture();
+
+    await expect(runAction()).resolves.toBeUndefined();
+    const output = readGitHubOutput();
+    expect(output).not.toContain('To fix:');
+  });
+
+  it('emits exactly one harness error when tdd.harness.enabled is true but AGENTS.md is missing', async () => {
+    writeValidFixture({ harness: true });
+
+    await expect(runAction()).rejects.toThrow('Postman TDD setup validation failed with 1 error');
+    const output = readGitHubOutput();
+    expect(output).toContain('To fix:');
+    expect(output).toContain('AGENTS.md');
+  });
+
+  function readGitHubOutput(): string {
+    try {
+      return readFileSync(join(dir, 'outputs.txt'), 'utf8');
+    } catch {
+      return '';
+    }
+  }
+
   function writeValidFixture(options: {
     repair?: string;
     writeSpec?: boolean;
+    harness?: boolean;
   } = {}): void {
     mkdirSync(join(dir, '.postman-template'), { recursive: true });
     mkdirSync(join(dir, 'api'), { recursive: true });
@@ -88,6 +116,7 @@ describe('validate mode', () => {
     mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
     writeFileSync(join(dir, 'scripts', 'postman-tdd-start.sh'), '#!/usr/bin/env bash\nnpm start\n', 'utf8');
     writeFileSync(join(dir, '.github', 'workflows', 'postman-tdd-preview.yml'), 'name: Postman TDD Preview\n', 'utf8');
+    const harnessBlock = options.harness ? '  harness:\n    enabled: true\n' : '';
     writeFileSync(join(dir, '.postman-template', 'onboarding.yml'), `
 version: 1
 spec:
@@ -102,7 +131,7 @@ tdd:
   healthUrl: http://127.0.0.1:4010/v1/health
   startCommand: ./scripts/postman-tdd-start.sh
   timeoutSeconds: 30
-${options.repair || ''}
+${harnessBlock}${options.repair || ''}
 `, 'utf8');
     if (options.writeSpec !== false) {
       writeFileSync(join(dir, 'api', 'openapi.yaml'), `
