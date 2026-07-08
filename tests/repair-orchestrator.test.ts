@@ -68,6 +68,7 @@ tdd:
       postmanStack: 'prod',
       repairCommitMessage: 'Postman TDD repair',
       repairMaxAttempts: 3,
+      repairMaxToolRounds: 12,
       repairModel: 'gpt-5.5',
       repairProvider: 'openai-responses'
     };

@@ -205,6 +205,7 @@ export interface ActionInputs {
   repairCommitMessage: string;
   repairGithubToken?: string;
   repairMaxAttempts: number;
+  repairMaxToolRounds: number;
   repairModel?: string;
   repairProvider?: RepairProvider;
   specPath?: string;

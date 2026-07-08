@@ -50,6 +50,10 @@ inputs:
     description: Maximum accepted implementation patch attempts in mode=repair.
     required: false
     default: '3'
+  repair-max-tool-rounds:
+    description: Per-attempt provider tool-round budget in mode=repair. Integer between 1 and 50.
+    required: false
+    default: '12'
   repair-commit-message:
     description: Commit message used when mode=repair pushes a passing implementation change.
     required: false
