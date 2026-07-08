@@ -15,7 +15,7 @@ describe('packaged workflow templates', () => {
     const workflow = parse(source) as { name: string };
 
     expect(workflow.name).toBe('Postman TDD Setup Check');
-    expect(source).toContain('postman-cs/postman-onboarding-tdd@main');
+    expect(source).toContain('postman-cs/postman-onboarding-tdd@v0');
     expect(source).toContain('mode: validate');
     expect(source).toContain('contents: read');
     expect(source).not.toContain('postman-api-key');
@@ -30,7 +30,7 @@ describe('packaged workflow templates', () => {
     const workflow = parse(source) as { name: string };
 
     expect(workflow.name).toBe('Postman TDD Preview');
-    expect(source).toContain('postman-cs/postman-onboarding-tdd@main');
+    expect(source).toContain('postman-cs/postman-onboarding-tdd@v0');
     expect(source).toContain("mode: ${{ github.event.action == 'closed' && 'cleanup' || 'run' }}");
     expect(source).toContain('postman-api-key: ${{ secrets.POSTMAN_API_KEY }}');
     expect(source).not.toContain('postman-access-token');
@@ -57,7 +57,7 @@ describe('packaged workflow templates', () => {
     const [previewSource, repairSource] = source.split('mode: repair');
 
     expect(workflow.name).toBe('Postman TDD Preview + Repair');
-    expect(source).toContain('postman-cs/postman-onboarding-tdd@main');
+    expect(source).toContain('postman-cs/postman-onboarding-tdd@v0');
     expect(source).toContain("mode: ${{ github.event.action == 'closed' && 'cleanup' || 'run' }}");
     expect(source).toContain('needs: tdd');
     expect(source).toContain("needs.tdd.result == 'failure'");
