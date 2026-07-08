@@ -154,6 +154,23 @@ export interface SignedImmutableState {
   signature: string;
 }
 
+export interface RepairCheckpointPayload {
+  attempts: number;
+  attemptFingerprints: string[];
+  breakerReason?: string;
+  commit: string;
+  escalated: boolean;
+  provider: RepairProvider;
+  schemaVersion: 1;
+}
+
+export interface SignedRepairCheckpoint {
+  algorithm: 'hmac-sha256';
+  payload: RepairCheckpointPayload;
+  schemaVersion: 1;
+  signature: string;
+}
+
 export interface AgentFailureDocument {
   baseUrl?: string;
   collectionName?: string;
