@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 
-import { buildRepairPrompt, type RepairProviderOptions, type RepairProviderResult } from './provider-common.js';
+import { buildRepairPrompt, isRecord, logToolResult, type RepairProviderOptions, type RepairProviderResult } from './provider-common.js';
 import { createRepairTools, executeRepairTool, type RepairToolResult } from './tools.js';
 
 const POSTMAN_AGENT_MODE_GATEWAY_URL = 'https://gateway.postman.com/chat';
@@ -427,20 +427,6 @@ function formatFailureEvent(data: JsonRecord): string {
   return parts.join(': ') || JSON.stringify(data);
 }
 
-function logToolResult(name: string, result: RepairToolResult): void {
-  if (result.error) {
-    core.info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
-  } else if (name === 'list_files') {
-    core.info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
-  } else if (name === 'search_files') {
-    core.info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
-  } else if (name === 'read_file') {
-    core.info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
-  } else if (name === 'propose_patch') {
-    core.info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(', ') || '(none)'}.`);
-  }
-}
-
 function resolvePlatform(): string {
   if (process.platform === 'darwin') return 'DESKTOP_MACOS';
   if (process.platform === 'win32') return 'DESKTOP_WINDOWS';
@@ -451,6 +437,3 @@ function stringValue(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function isRecord(value: unknown): value is JsonRecord {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}

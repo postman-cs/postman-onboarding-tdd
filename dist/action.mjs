@@ -109743,6 +109743,19 @@ function omitUndefined(input) {
 function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+function logToolResult(name, result) {
+  if (result.error) {
+    info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
+  } else if (name === "list_files") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
+  } else if (name === "search_files") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
+  } else if (name === "read_file") {
+    info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
+  } else if (name === "propose_patch") {
+    info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(", ") || "(none)"}.`);
+  }
+}
 
 // src/repair/tools.ts
 import { execFileSync as execFileSync3 } from "node:child_process";
@@ -109941,7 +109954,7 @@ async function runAnthropicRepairTurn(options) {
       secretMasker: options.secretMasker,
       tools
     });
-    const content = Array.isArray(response.content) ? response.content.filter(isRecord3) : [];
+    const content = Array.isArray(response.content) ? response.content.filter(isRecord2) : [];
     const calls = content.filter(isToolUseBlock);
     info(`[postman-tdd] Anthropic Messages round ${round + 1}: received ${calls.length} tool use block(s).`);
     if (calls.length === 0) {
@@ -110021,24 +110034,8 @@ async function createMessage(options) {
   }
   return JSON.parse(text);
 }
-function logToolResult(name, result) {
-  if (result.error) {
-    info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
-  } else if (name === "list_files") {
-    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
-  } else if (name === "search_files") {
-    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
-  } else if (name === "read_file") {
-    info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
-  } else if (name === "propose_patch") {
-    info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(", ") || "(none)"}.`);
-  }
-}
 function isToolUseBlock(value) {
-  return value.type === "tool_use" && typeof value.id === "string" && typeof value.name === "string" && isRecord3(value.input);
-}
-function isRecord3(value) {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+  return value.type === "tool_use" && typeof value.id === "string" && typeof value.name === "string" && isRecord2(value.input);
 }
 function extractText(response) {
   const content = Array.isArray(response.content) ? response.content : [];
@@ -110227,12 +110224,12 @@ async function runPostmanAgentModeRepairTurn(options) {
           const result3 = {
             error: 'finish requires status "blocked" or "ready" and a non-empty message.'
           };
-          logToolResult2(call.name, result3);
+          logToolResult(call.name, result3);
           toolResponses.push(createToolResponse(call, result3));
           continue;
         }
         const result2 = executeRepairTool(call.name, call.input, options.repairContext);
-        logToolResult2(call.name, result2);
+        logToolResult(call.name, result2);
         toolResponses.push(createToolResponse(call, result2));
         if (status === "blocked") {
           return { status: "blocked", message };
@@ -110240,7 +110237,7 @@ async function runPostmanAgentModeRepairTurn(options) {
         return { status: "no_change", message };
       }
       const result = executeRepairTool(call.name, call.input, options.repairContext);
-      logToolResult2(call.name, result);
+      logToolResult(call.name, result);
       toolResponses.push(createToolResponse(call, result));
       if (call.name === "propose_patch" && result.appliedPatch) {
         return {
@@ -110379,8 +110376,8 @@ function parseAgentModeEvents(body2, secretMasker) {
   };
   const chunkBuffers = /* @__PURE__ */ new Map();
   for (const event of parseSseJsonEvents(body2)) {
-    const data = isRecord4(event.data) ? event.data : event;
-    const metadata2 = isRecord4(data.metadata) ? data.metadata : {};
+    const data = isRecord2(event.data) ? event.data : event;
+    const metadata2 = isRecord2(data.metadata) ? data.metadata : {};
     result.conversationId = stringValue2(event.conversationId) || stringValue2(metadata2.conversationId) || stringValue2(data.conversationId) || stringValue2(data.id) || result.conversationId;
     result.toolCallGroupId = stringValue2(event.toolCallGroupId) || stringValue2(metadata2.toolCallGroupId) || stringValue2(data.toolCallGroupId) || result.toolCallGroupId;
     const eventType = String(event.eventType || event.type || "");
@@ -110445,17 +110442,17 @@ function parseSseJsonEvents(body2) {
     const payload = normalized.slice("data:".length).trim();
     if (!payload || payload === "[DONE]") continue;
     const parsed = JSON.parse(payload);
-    if (isRecord4(parsed)) events2.push(parsed);
+    if (isRecord2(parsed)) events2.push(parsed);
   }
   return events2;
 }
 function extractToolCallFragments(data) {
   const rawCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [data];
-  const metadata2 = isRecord4(data.metadata) ? data.metadata : {};
+  const metadata2 = isRecord2(data.metadata) ? data.metadata : {};
   const fragments = [];
   for (const rawCall of rawCalls) {
-    if (!isRecord4(rawCall)) continue;
-    const fn = isRecord4(rawCall.function) ? rawCall.function : {};
+    if (!isRecord2(rawCall)) continue;
+    const fn = isRecord2(rawCall.function) ? rawCall.function : {};
     const name = stringValue2(fn.name) || stringValue2(rawCall.name) || stringValue2(rawCall.toolName);
     const id = stringValue2(rawCall.id) || stringValue2(rawCall.toolCallId) || name;
     if (!id) continue;
@@ -110487,7 +110484,7 @@ function stringifyToolArguments(value) {
   return JSON.stringify(value);
 }
 function parseToolArguments(value) {
-  if (isRecord4(value)) return value;
+  if (isRecord2(value)) return value;
   if (typeof value !== "string" || !value.trim()) return {};
   return parseToolArgumentsMaybe(value) || {};
 }
@@ -110495,7 +110492,7 @@ function parseToolArgumentsMaybe(value) {
   if (!value.trim()) return void 0;
   try {
     const parsed = JSON.parse(value);
-    return isRecord4(parsed) ? parsed : void 0;
+    return isRecord2(parsed) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -110508,19 +110505,6 @@ function formatFailureEvent(data) {
   ].filter(Boolean);
   return parts.join(": ") || JSON.stringify(data);
 }
-function logToolResult2(name, result) {
-  if (result.error) {
-    info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
-  } else if (name === "list_files") {
-    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
-  } else if (name === "search_files") {
-    info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
-  } else if (name === "read_file") {
-    info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
-  } else if (name === "propose_patch") {
-    info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(", ") || "(none)"}.`);
-  }
-}
 function resolvePlatform() {
   if (process.platform === "darwin") return "DESKTOP_MACOS";
   if (process.platform === "win32") return "DESKTOP_WINDOWS";
@@ -110528,9 +110512,6 @@ function resolvePlatform() {
 }
 function stringValue2(value) {
   return typeof value === "string" ? value.trim() : "";
-}
-function isRecord4(value) {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 // src/repair/provider-dispatcher.ts
@@ -110889,15 +110870,15 @@ function validateRepairFailureContext(failure) {
   return void 0;
 }
 function isFailureEntry(value) {
-  return isRecord5(value) && isNonEmptyString(value.message);
+  return isRecord3(value) && isNonEmptyString(value.message);
 }
 function isImmutablePathHash(value) {
-  return isRecord5(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
+  return isRecord3(value) && isNonEmptyString(value.path) && isNonEmptyString(value.sha256);
 }
 function isSuccessCriteria(value) {
-  return isRecord5(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
+  return isRecord3(value) && isNonEmptyString(value.doneWhen) && typeof value.failureContextMustMatchPrHeadCommit === "boolean" && typeof value.latestHeadOnly === "boolean" && isNonEmptyString(value.requiredCheck);
 }
-function isRecord5(value) {
+function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isNonEmptyString(value) {
