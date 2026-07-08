@@ -54,6 +54,10 @@ inputs:
     description: Per-attempt provider tool-round budget in mode=repair. Integer between 1 and 50.
     required: false
     default: '12'
+  repair-breaker-threshold:
+    description: Consecutive identical failure fingerprint count that triggers a repeated_failure circuit breaker in mode=repair. Integer >= 2.
+    required: false
+    default: '2'
   repair-commit-message:
     description: Commit message used when mode=repair pushes a passing implementation change.
     required: false

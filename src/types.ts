@@ -230,6 +230,7 @@ export interface ActionInputs {
   repairGithubToken?: string;
   repairMaxAttempts: number;
   repairMaxToolRounds: number;
+  repairBreakerThreshold: number;
   repairModel?: string;
   repairProvider?: RepairProvider;
   specPath?: string;

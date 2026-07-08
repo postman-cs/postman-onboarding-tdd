@@ -5,6 +5,7 @@ import { createFailureDocument } from '../agent-context.js';
 import { loadOnboardingConfig } from '../config.js';
 import { buildContractHints } from '../contract-hints.js';
 import { extractCollectionFailures } from '../failure-normalizer.js';
+import { failureFingerprint } from '../ledger.js';
 import { GitHubPrClient, parseFailureDocument } from '../github/pr-comment.js';
 import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from '../preview-assets.js';
 import {
@@ -342,6 +343,24 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     attempt.outcome = 'oracle_failed';
     attemptDetails.push(attempt);
     currentFailure = result.failure;
+
+    // D10: Fingerprint circuit breaker — track consecutive identical post-oracle
+    // failure fingerprints and block before spending the next attempt.
+    if (result.failure.failures.length > 0) {
+      const fp = failureFingerprint(result.failure.failures[0]!);
+      attemptFingerprints.push(fp);
+      const consecutive = countTrailingConsecutive(attemptFingerprints);
+      if (consecutive >= options.inputs.repairBreakerThreshold) {
+        const breakerReason = 'repeated_failure';
+        const breakerMessage = `Repair circuit breaker: same failure fingerprint (${fp.slice(0, 8)}) recurred ${consecutive} consecutive time(s) (threshold=${options.inputs.repairBreakerThreshold}) after ${attempts} attempt(s).`;
+        currentCheckpointRef = buildCheckpoint(
+          prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey, breakerReason
+        );
+        await block(options, breakerReason, breakerMessage, attempts, attemptDetails, currentCheckpointRef);
+        return;
+      }
+    }
+
     currentCheckpointRef = buildCheckpoint(
       prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey
     );
@@ -584,6 +603,20 @@ function setRepairOutputs(options: {
   core.setOutput('repair-summary-path', options.summaryPath || '');
   core.setOutput('status', options.status === 'repaired' ? 'passed' : options.status === 'skipped' ? 'skipped' : 'failed');
   core.setOutput('failure-phase', 'none');
+}
+
+/**
+ * Counts the trailing run of consecutive identical fingerprints at the end of
+ * the array (D10 circuit breaker signal). Returns 0 for an empty array.
+ */
+function countTrailingConsecutive(fingerprints: string[]): number {
+  if (fingerprints.length === 0) return 0;
+  const last = fingerprints[fingerprints.length - 1]!;
+  let count = 0;
+  for (let i = fingerprints.length - 1; i >= 0 && fingerprints[i] === last; i--) {
+    count++;
+  }
+  return count;
 }
 
 /**

@@ -82,6 +82,11 @@ export function readActionInputs(): ActionInputs {
   if (!Number.isInteger(repairMaxToolRounds) || repairMaxToolRounds < 1 || repairMaxToolRounds > 50) {
     throw new Error(`repair-max-tool-rounds must be an integer between 1 and 50, got: ${repairMaxToolRoundsInput}`);
   }
+  const repairBreakerThresholdInput = core.getInput('repair-breaker-threshold') || '2';
+  const repairBreakerThreshold = Number(repairBreakerThresholdInput);
+  if (!Number.isInteger(repairBreakerThreshold) || repairBreakerThreshold < 2) {
+    throw new Error(`repair-breaker-threshold must be an integer >= 2, got: ${repairBreakerThresholdInput}`);
+  }
   const githubToken = core.getInput('github-token') || '';
   const postmanApiKey = core.getInput('postman-api-key') || '';
   if (modeRaw !== 'validate' && !githubToken) {
@@ -110,6 +115,7 @@ export function readActionInputs(): ActionInputs {
     repairGithubToken: core.getInput('repair-github-token') || undefined,
     repairMaxAttempts,
     repairMaxToolRounds,
+    repairBreakerThreshold,
     repairModel: repairModelInput || (repairProvider ? defaultRepairModel(repairProvider) : undefined),
     repairProvider,
     specPath: core.getInput('spec-path') || undefined,

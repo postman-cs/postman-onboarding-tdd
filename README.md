@@ -641,6 +641,7 @@ Postman Agent Mode repair receives the same guarded repair tool definitions as t
 | `repair-model` | no | provider default | Model used by `mode: repair`. Defaults to `gpt-5.5` for OpenAI, `claude-sonnet-5` for Claude, and `GPT_5` for Postman Agent Mode unless explicitly set. |
 | `repair-max-attempts` | no | `3` | Maximum accepted implementation patch attempts. |
 | `repair-max-tool-rounds` | no | `12` | Per-attempt provider tool-round budget in `mode: repair`. Integer between 1 and 50. |
+| `repair-breaker-threshold` | no | `2` | Consecutive identical failure fingerprint count that triggers a `repeated_failure` circuit breaker in `mode: repair`. Integer >= 2. |
 | `repair-commit-message` | no | `Postman TDD repair` | Commit message used for a passing repair commit. |
 
 ## Action Outputs

@@ -11,6 +11,7 @@ describe('action input parsing', () => {
     'INPUT_POSTMAN-ACCESS-TOKEN',
     'INPUT_POSTMAN-API-KEY',
     'INPUT_REPAIR-MAX-TOOL-ROUNDS',
+    'INPUT_REPAIR-BREAKER-THRESHOLD',
     'INPUT_REPAIR-MODEL',
     'INPUT_REPAIR-PROVIDER'
   ];
@@ -110,6 +111,34 @@ describe('action input parsing', () => {
     setInput('postman-api-key', 'postman-token');
 
     expect(readActionInputs().repairMaxToolRounds).toBe(12);
+  });
+
+  it('defaults repair-breaker-threshold to 2 when the action input is omitted', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+
+    expect(readActionInputs().repairBreakerThreshold).toBe(2);
+  });
+
+  it('accepts valid repair-breaker-threshold values >= 2', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+
+    setInput('repair-breaker-threshold', '2');
+    expect(readActionInputs().repairBreakerThreshold).toBe(2);
+
+    setInput('repair-breaker-threshold', '5');
+    expect(readActionInputs().repairBreakerThreshold).toBe(5);
+  });
+
+  it('throws on repair-breaker-threshold below 2, non-integer, or non-numeric', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+
+    for (const value of ['1', '0', 'abc', '1.5']) {
+      setInput('repair-breaker-threshold', value);
+      expect(() => readActionInputs()).toThrow('repair-breaker-threshold must be an integer >= 2');
+    }
   });
 
   it('accepts valid repair-max-tool-rounds values at the range edges', () => {

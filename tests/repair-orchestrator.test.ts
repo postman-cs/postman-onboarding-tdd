@@ -125,6 +125,7 @@ tdd:
       repairCommitMessage: 'Postman TDD repair',
       repairMaxAttempts: 3,
       repairMaxToolRounds: 12,
+      repairBreakerThreshold: 2,
       repairModel: 'gpt-5.5',
       repairProvider: 'openai-responses'
     };
@@ -552,6 +553,7 @@ tdd:
         repairCommitMessage: 'Postman TDD repair',
         repairMaxAttempts: 3,
         repairMaxToolRounds: 5,
+        repairBreakerThreshold: 2,
         repairModel: 'gpt-5.5',
         repairProvider: 'openai-responses'
       },
@@ -617,7 +619,10 @@ tdd:
     repairMocks.commitAndPushRepair.mockReturnValue('commit-sha');
     repairMocks.startBackgroundCommand.mockReturnValue({ kill: vi.fn() });
     repairMocks.waitForHealth.mockResolvedValue({ ok: true });
-    repairMocks.runTddCollection.mockResolvedValue({ exitCode: 1, logExcerpt: 'collection failed' });
+    repairMocks.runTddCollection.mockImplementation(async () => {
+      const n = repairMocks.runTddCollection.mock.calls.length + 1;
+      return { exitCode: 1, logExcerpt: `expected status 200 but got ${400 + n} for op${n}` };
+    });
     repairMocks.runRepairProviderTurn.mockResolvedValue({
       status: 'changed',
       summary: 'patch',
@@ -671,7 +676,8 @@ tdd:
   async function runResume(options: {
     stickyBody: string;
     signingKey?: string;
-  }): Promise<{ providerCalls: number; checkpointWritten: boolean }> {
+  }): Promise<{ providerCalls: number; checkpointWritten: boolean; blockedReason?: string }> {
+    let capturedSummary: { blockedReason?: string } | undefined;
     const github = {
       findStickyComment: async () => ({ body: options.stickyBody, id: 1 }),
       getPullRequest: async () => ({
@@ -683,7 +689,10 @@ tdd:
         labels: [],
         number: 123
       }),
-      upsertRepairComment: async () => 1
+      upsertRepairComment: async (_prNumber: number, nextSummary: unknown) => {
+        capturedSummary = nextSummary as { blockedReason?: string };
+        return 1;
+      }
     } as unknown as GitHubPrClient;
 
     await runRepairMode({
@@ -707,6 +716,7 @@ tdd:
         repairCommitMessage: 'Postman TDD repair',
         repairMaxAttempts: 3,
         repairMaxToolRounds: 12,
+        repairBreakerThreshold: 2,
         repairModel: 'gpt-5.5',
         repairProvider: 'openai-responses'
       },
@@ -720,7 +730,8 @@ tdd:
 
     return {
       providerCalls: repairMocks.runRepairProviderTurn.mock.calls.length,
-      checkpointWritten: existsSync(join(dir, '.postman-tdd', 'checkpoint.json'))
+      checkpointWritten: existsSync(join(dir, '.postman-tdd', 'checkpoint.json')),
+      blockedReason: capturedSummary?.blockedReason
     };
   }
 
@@ -797,5 +808,31 @@ tdd:
     expect(checkpoint.schemaVersion).toBe(1);
     expect(checkpoint.commit).toBe('head-sha');
     expect(checkpoint.provider).toBe('openai-responses');
+  });
+
+  it('blocks with repeated_failure when the same fingerprint recurs threshold times', async () => {
+    repairMocks.runTddCollection.mockResolvedValue({
+      exitCode: 1,
+      logExcerpt: 'expected status 200 but got 404 for getUsers'
+    });
+
+    const { providerCalls, blockedReason } = await runResume({
+      stickyBody: failureBody()
+    });
+
+    expect(blockedReason).toBe('repeated_failure');
+    // 2 identical failures with threshold 2 → block after 2 attempts (< maxAttempts=3).
+    expect(providerCalls).toBe(2);
+  });
+
+  it('falls through to budget_exhausted when failures are distinct each attempt', async () => {
+    // The beforeEach default mockImplementation returns a distinct log excerpt
+    // per call, so fingerprints differ and the breaker never fires.
+    const { providerCalls, blockedReason } = await runResume({
+      stickyBody: failureBody()
+    });
+
+    expect(blockedReason).toBe('budget_exhausted');
+    expect(providerCalls).toBe(3);
   });
 });
