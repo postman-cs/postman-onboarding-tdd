@@ -1,8 +1,9 @@
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { git, initGitRepo } from './helpers/git.js';
 
 import { changedPaths } from '../src/repair/git.js';
 import { applyValidatedPatch, validatePatch, type PatchPolicy } from '../src/repair/patch.js';
@@ -23,11 +24,7 @@ describe('repair patch guard', () => {
     writeFileSync(join(dir, 'src', 'app.js'), 'const status = "old";\n', 'utf8');
     writeFileSync(join(dir, 'api', 'openapi.yaml'), 'openapi: 3.0.3\n', 'utf8');
     writeFileSync(join(dir, '.github', 'workflows', 'tdd.yml'), 'name: tdd\n', 'utf8');
-    execFileSync('git', ['init'], { cwd: dir, stdio: 'ignore' });
-    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
-    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
-    execFileSync('git', ['add', '.'], { cwd: dir });
-    execFileSync('git', ['commit', '-m', 'initial'], { cwd: dir, stdio: 'ignore' });
+    initGitRepo(dir);
     return dir;
   }
 
@@ -42,10 +39,7 @@ describe('repair patch guard', () => {
   function diffFor(repoRoot: string, path: string, content: string): string {
     const original = readFileSync(join(repoRoot, path), 'utf8');
     writeFileSync(join(repoRoot, path), content, 'utf8');
-    const diff = execFileSync('git', ['diff', '--', path], {
-      cwd: repoRoot,
-      encoding: 'utf8'
-    });
+    const diff = git(repoRoot, ['diff', '--', path]);
     writeFileSync(join(repoRoot, path), original, 'utf8');
     return diff;
   }
