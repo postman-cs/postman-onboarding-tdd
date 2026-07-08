@@ -17,6 +17,7 @@ export function createSecretMasker(secrets: Array<string | undefined>): SecretMa
 
 export function sanitizeLogExcerpt(value: string, mask: SecretMasker, maxLength = 4000): string {
   const normalized = mask(String(value || ''))
+    // eslint-disable-next-line no-control-regex -- intentionally strips ANSI escape sequences
     .replace(/\u001b\[[0-9;]*m/g, '')
     .trim();
   if (normalized.length <= maxLength) {

@@ -91,7 +91,7 @@ export function execGit(cwd: string, args: string[]): string {
     const stderr = Buffer.isBuffer((error as { stderr?: unknown }).stderr)
       ? ((error as { stderr: Buffer }).stderr).toString('utf8')
       : error instanceof Error ? error.message : String(error);
-    throw new Error(`git ${redactGitArgs(args).join(' ')} failed: ${redactSecret(stderr.trim()) || 'unknown error'}`);
+    throw new Error(`git ${redactGitArgs(args).join(' ')} failed: ${redactSecret(stderr.trim()) || 'unknown error'}`, { cause: error });
   }
 }
 

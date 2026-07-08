@@ -105880,12 +105880,13 @@ function validateRepairProvider(value) {
 }
 function loadOnboardingConfig(options) {
   const configPath = options.configPath;
-  let raw = "";
+  let raw;
   try {
     raw = readFileSync2(configPath, "utf8");
   } catch (error2) {
     throw new Error(
-      `Could not read onboarding config ${configPath}: ${error2 instanceof Error ? error2.message : String(error2)}`
+      `Could not read onboarding config ${configPath}: ${error2 instanceof Error ? error2.message : String(error2)}`,
+      { cause: error2 }
     );
   }
   const doc = (0, import_yaml.parseDocument)(raw);
@@ -107990,7 +107991,7 @@ function gitApply(args, patch, cwd) {
     });
   } catch (error2) {
     const stderr = Buffer.isBuffer(error2.stderr) ? error2.stderr.toString("utf8") : error2 instanceof Error ? error2.message : String(error2);
-    throw new Error(`git apply failed: ${stderr.trim() || "unknown error"}`);
+    throw new Error(`git apply failed: ${stderr.trim() || "unknown error"}`, { cause: error2 });
   }
 }
 function globMatch(path4, pattern) {
@@ -108079,7 +108080,7 @@ function execGit(cwd, args) {
     });
   } catch (error2) {
     const stderr = Buffer.isBuffer(error2.stderr) ? error2.stderr.toString("utf8") : error2 instanceof Error ? error2.message : String(error2);
-    throw new Error(`git ${redactGitArgs(args).join(" ")} failed: ${redactSecret(stderr.trim()) || "unknown error"}`);
+    throw new Error(`git ${redactGitArgs(args).join(" ")} failed: ${redactSecret(stderr.trim()) || "unknown error"}`, { cause: error2 });
   }
 }
 function redactGitArgs(args) {

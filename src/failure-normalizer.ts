@@ -188,6 +188,7 @@ function dedupeFailures(failures: AgentFailure[]): AgentFailure[] {
 }
 
 function stripAnsi(value: string): string {
+  // eslint-disable-next-line no-control-regex -- intentionally matches ANSI escape sequences
   return value.replace(/\u001b\[[0-9;]*m/g, '');
 }
 
