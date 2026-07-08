@@ -1,0 +1,66 @@
+# Opt-in agent dispatch template: Claude Code CI fix.
+#
+# This file is OPT-IN. Copy it into .github/workflows/ in your repo only if you
+# want Claude Code to attempt automated contract-failure repair. It is never
+# auto-installed and the Postman TDD preview workflow does not reference it.
+#
+# Required secret (add under repo/org settings):
+#   ANTHROPIC_API_KEY   - Anthropic API key
+#
+# Budget: max-turns defaults to a conservative value (customer bears API cost).
+# Override via the max-turns input below.
+#
+# Recursion guard: skips runs whose head_branch starts with 'postman-tdd-fix-'
+# (the D17 repair-branch prefix) so Claude never re-triggers on its own push.
+# Adapted from anthropics/claude-code-action ci-failure-auto-fix.yml.
+# actions: read is required for the bundled github_ci MCP to download job logs.
+name: Postman TDD Claude CI Fix
+
+on:
+  workflow_run:
+    workflows: ['Postman TDD Preview']
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: postman-tdd-agent-claude-${{ github.event.workflow_run.pull_requests[0].number }}
+  cancel-in-progress: false
+
+jobs:
+  claude-fix:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      !startsWith(github.event.workflow_run.head_branch, 'postman-tdd-fix-') &&
+      github.event.workflow_run.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+
+      - name: Download agent context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: postman-tdd-agent-context
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Postman TDD contract failed. Read .postman-tdd/failures.json for the full failure context.
+            Fix the implementation so the Postman TDD contract collection passes.
+            Do NOT edit the OpenAPI spec or any files listed in immutablePaths.
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+          # max-turns budget + allowed tools (customer bears API cost): passed via claude_args.
+          claude_args: '--max-turns 12 --allowedTools Read,Write,Edit,Bash,Glob,Grep'

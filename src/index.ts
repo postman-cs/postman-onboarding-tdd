@@ -1,6 +1,8 @@
 import * as core from '@actions/core';
 import { DefaultArtifactClient } from '@actions/artifact';
 import { createTelemetryContext } from '@postman-cse/automation-telemetry-core';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   createFailureDocument,
@@ -13,6 +15,7 @@ import { loadOnboardingConfig, validateConfigWriteMode, validateRepairProvider }
 import { buildContractHints } from './contract-hints.js';
 import { extractCollectionFailures } from './failure-normalizer.js';
 import { GitHubPrClient, parseFailureDocument, resolvePrMetadata } from './github/pr-comment.js';
+import { publishCheckRunAnnotations } from './github/check-run.js';
 import {
   createImmutableStatePayload,
   IMMUTABLE_STATE_TAMPERED_MESSAGE,
@@ -26,6 +29,7 @@ import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from './pr
 import { resolvePostmanEndpointProfile, parsePostmanRegion, parsePostmanStack } from './postman/base-urls.js';
 import type { PostmanEndpointProfile } from './postman/base-urls.js';
 import { PostmanClient } from './postman/client.js';
+import { renderJUnit } from './reporting/junit.js';
 import { runValidateMode } from './validation.js';
 import {
   ensurePostmanCli,
@@ -478,6 +482,7 @@ async function runActionInner(
           }));
           writeLedgerFile(scoredLedger);
           state.ledger = toLedgerSummary(scoredLedger);
+          writeJUnitReport(state.ledger);
           const ratchetDocument = createFailureDocument({
             collectionName: assetNames.collectionName,
             commit: pr.sha,
@@ -518,6 +523,7 @@ async function runActionInner(
 
         writeLedgerFile(finalLedger);
         state.ledger = toLedgerSummary(finalLedger);
+        writeJUnitReport(state.ledger);
         const document = createFailureDocument({
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
@@ -681,6 +687,35 @@ function setStandardOutputs(paths: { agentTaskPath: string; failuresJsonPath: st
   core.setOutput('agent-task-path', paths.agentTaskPath);
   core.setOutput('failures-json-path', paths.failuresJsonPath);
   core.setOutput('ledger-path', '.postman-tdd/ledger.json');
+  core.setOutput('junit-path', '.postman-tdd/junit.xml');
+}
+
+/**
+ * D13: assembles the canonical GitHub Actions run URL from standard runner
+ * env (GITHUB_SERVER_URL + GITHUB_REPOSITORY + /actions/runs/ + GITHUB_RUN_ID).
+ * Returns `undefined` when any of those env vars are absent (local/test), so
+ * the published document stays serializable without a fabricated URL.
+ */
+export function resolveRunUrl(): string | undefined {
+  const server = process.env.GITHUB_SERVER_URL;
+  const repository = process.env.GITHUB_REPOSITORY;
+  const runId = process.env.GITHUB_RUN_ID;
+  if (!server || !repository || !runId) {
+    return undefined;
+  }
+  return `${server}/${repository}/actions/runs/${runId}`;
+}
+
+/**
+ * D16: writes the JUnit XML report of the contract run into
+ * `.postman-tdd/junit.xml` so it rides the existing agent-context artifact
+ * upload. Mirrors the `writeAgentContext`/`writeLedgerFile` mkdir pattern.
+ */
+function writeJUnitReport(summary: LedgerSummary, dir = AGENT_CONTEXT_DIR): string {
+  mkdirSync(dir, { recursive: true });
+  const junitPath = join(dir, 'junit.xml');
+  writeFileSync(junitPath, renderJUnit(summary), 'utf8');
+  return junitPath;
 }
 
 async function cleanupPreviewAssets(options: {
@@ -710,9 +745,34 @@ async function publishFailure(options: {
   summary: { collectionName: string; failurePhase: FailurePhase; ledger?: LedgerSummary };
 }): Promise<number> {
   core.info(`[postman-tdd] Publishing failure context: phase=${options.document.phase}, failures=${options.document.failures.length}.`);
+  // D13/P3-2: enrich the document additively with runUrl (from runner env),
+  // phase-keyed failedJobs, and the JUnit artifact name. These are populated
+  // here (not at the ~7 createFailureDocument call sites) so every publish
+  // path gets them for free. ??= preserves any explicit caller value.
+  options.document.runUrl ??= resolveRunUrl();
+  options.document.failedJobs ??= [`postman-tdd:${options.document.phase}`];
+  options.document.artifact = { ...options.document.artifact, junit: 'junit.xml' };
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
   core.info(`[postman-tdd] Wrote agent context files: ${paths.agentTaskPath}, ${paths.failuresJsonPath}, ${paths.immutableSpecGuardPath}.`);
   core.setOutput('failure-phase', options.document.phase);
+
+  // D15/P3-4: best-effort check-run annotations on failing ledger packets.
+  // Owner/repo from GITHUB_REPOSITORY, head sha from the document commit,
+  // token from the github-token input. Swallow-safe — never throws.
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (repository && options.document.commit) {
+    const [owner, repo] = repository.split('/');
+    if (owner && repo) {
+      await publishCheckRunAnnotations({
+        headSha: options.document.commit,
+        ledger: options.document.ledger,
+        owner,
+        repo,
+        specPath: options.document.specPath,
+        token: core.getInput('github-token')
+      });
+    }
+  }
 
   let artifact: UploadArtifactResponse | undefined;
   try {

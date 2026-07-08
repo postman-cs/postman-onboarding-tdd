@@ -41,6 +41,8 @@ describe('runAction failure publishing', () => {
   const envKeys = [
     'GITHUB_OUTPUT',
     'GITHUB_REPOSITORY',
+    'GITHUB_RUN_ID',
+    'GITHUB_SERVER_URL',
     'GITHUB_SHA',
     'GITHUB_WORKSPACE',
     'INPUT_CONFIG-WRITE-MODE',
@@ -496,5 +498,138 @@ paths:
     const keys = ledger.packets.map((p: { key: string }) => p.key);
     expect(keys).not.toContain('oldOp');
     expect(keys).toContain('getWidgets');
+  });
+
+  it('enriches the published failure document with runUrl, failedJobs, and artifact.junit from runner env', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'postman-tdd-run-action-'));
+    mkdirSync(join(dir, '.postman-template'), { recursive: true });
+    writeFileSync(join(dir, '.postman-template', 'onboarding.yml'), `
+spec:
+  path: api/openapi.yaml
+service:
+  name: config-failure-service
+tdd:
+  enabled: true
+  workspace:
+    name: Config Failure Preview
+`, 'utf8');
+    process.chdir(dir);
+    process.env.GITHUB_WORKSPACE = dir;
+    process.env.GITHUB_REPOSITORY = 'postman-cs/run-url-service';
+    process.env.GITHUB_SERVER_URL = 'https://github.com';
+    process.env.GITHUB_RUN_ID = '99999';
+    process.env.GITHUB_SHA = 'head-sha';
+    const outputPath = join(dir, 'outputs.txt');
+    writeFileSync(outputPath, '', 'utf8');
+    process.env.GITHUB_OUTPUT = outputPath;
+    setInput('mode', 'run');
+    setInput('pr-number', '42');
+    setInput('postman-api-key', 'postman-token');
+    setInput('github-token', 'github-token');
+    setInput('config-write-mode', 'none');
+    setInput('onboarding-config-path', '.postman-template/onboarding.yml');
+
+    const renderedComments: string[] = [];
+    const github = {
+      findStickyComment: async () => undefined,
+      upsertStickyComment: async (
+        _prNumber: number,
+        state: PreviewAssetState,
+        summary: PrCommentSummary
+      ) => {
+        renderedComments.push(renderStickyComment(state, summary));
+        return 321;
+      }
+    } as unknown as GitHubPrClient;
+    const postman = new Proxy({}, {
+      get(_target, prop) {
+        return () => {
+          throw new Error(`Unexpected Postman client call: ${String(prop)}`);
+        };
+      }
+    });
+    const artifactClient = {
+      uploadArtifact: async () => ({ digest: 'sha256:config-failure', id: 654 })
+    };
+
+    await expect(runAction({
+      artifactClient: artifactClient as never,
+      githubClient: github,
+      postmanClient: postman as never
+    })).rejects.toThrow('tdd.baseUrl is required');
+
+    const body = renderedComments[0] || '';
+    const failureDocument = parseFailureDocument(body);
+    expect(failureDocument?.runUrl).toBe('https://github.com/postman-cs/run-url-service/actions/runs/99999');
+    expect(failureDocument?.failedJobs).toEqual(['postman-tdd:config']);
+    expect(failureDocument?.artifact?.junit).toBe('junit.xml');
+  });
+
+  it('leaves runUrl undefined when GitHub runner env is absent', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'postman-tdd-run-action-'));
+    mkdirSync(join(dir, '.postman-template'), { recursive: true });
+    writeFileSync(join(dir, '.postman-template', 'onboarding.yml'), `
+spec:
+  path: api/openapi.yaml
+service:
+  name: config-failure-service
+tdd:
+  enabled: true
+  workspace:
+    name: Config Failure Preview
+`, 'utf8');
+    process.chdir(dir);
+    process.env.GITHUB_WORKSPACE = dir;
+    process.env.GITHUB_REPOSITORY = 'postman-cs/no-run-url-service';
+    delete process.env.GITHUB_SERVER_URL;
+    delete process.env.GITHUB_RUN_ID;
+    process.env.GITHUB_SHA = 'head-sha';
+    const outputPath = join(dir, 'outputs.txt');
+    writeFileSync(outputPath, '', 'utf8');
+    process.env.GITHUB_OUTPUT = outputPath;
+    setInput('mode', 'run');
+    setInput('pr-number', '42');
+    setInput('postman-api-key', 'postman-token');
+    setInput('github-token', 'github-token');
+    setInput('config-write-mode', 'none');
+    setInput('onboarding-config-path', '.postman-template/onboarding.yml');
+
+    const renderedComments: string[] = [];
+    const github = {
+      findStickyComment: async () => undefined,
+      upsertStickyComment: async (
+        _prNumber: number,
+        state: PreviewAssetState,
+        summary: PrCommentSummary
+      ) => {
+        renderedComments.push(renderStickyComment(state, summary));
+        return 321;
+      }
+    } as unknown as GitHubPrClient;
+    const postman = new Proxy({}, {
+      get(_target, prop) {
+        return () => {
+          throw new Error(`Unexpected Postman client call: ${String(prop)}`);
+        };
+      }
+    });
+    const artifactClient = {
+      uploadArtifact: async () => ({ digest: 'sha256:config-failure', id: 654 })
+    };
+
+    await expect(runAction({
+      artifactClient: artifactClient as never,
+      githubClient: github,
+      postmanClient: postman as never
+    })).rejects.toThrow('tdd.baseUrl is required');
+
+    const body = renderedComments[0] || '';
+    const failureDocument = parseFailureDocument(body);
+    expect(failureDocument?.runUrl).toBeUndefined();
+    // failedJobs + artifact are still populated (they don't depend on runner env).
+    expect(failureDocument?.failedJobs).toEqual(['postman-tdd:config']);
+    expect(failureDocument?.artifact?.junit).toBe('junit.xml');
+    // Document still serializes (round-tripped through render -> parse).
+    expect(failureDocument?.status).toBe('failed');
   });
 });

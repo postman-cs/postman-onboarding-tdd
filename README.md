@@ -670,6 +670,8 @@ Important preview outputs:
 | `tdd-collection-id` | PR-scoped generated collection ID. |
 | `pr-comment-id` | Sticky preview PR comment ID. |
 | `agent-context-artifact` | Uploaded agent context artifact name, when available. |
+| `ledger-path` | Path to the local verification ledger JSON (`.postman-tdd/ledger.json`). |
+| `junit-path` | Path to the local JUnit XML report of the contract run (`.postman-tdd/junit.xml`). |
 
 Important validation outputs:
 
@@ -688,6 +690,51 @@ Important repair outputs:
 | `repair-attempts` | Number of accepted implementation patch attempts. |
 | `repair-commit-sha` | Commit SHA pushed by the repair worker after a passing local collection run. |
 | `repair-summary-path` | Local JSON summary path. |
+
+## Agent-Consumer Ergonomics (WS3)
+
+On failure, the action publishes three consumption tiers so any coding agent (Devin, Codex, Claude Code, cursor-agent) can drive the repair loop:
+
+### Triage flags
+
+The `AgentFailureDocument` (embedded in the sticky comment JSON) carries RFC 9457-style triage flags derived from the failure phase:
+
+- `retryable: true` for `service_startup` and `health_check` (transient infra/flake — agent should re-run before touching code).
+- `ownerActionRequired: true` for `immutable_spec`, `immutable_state_tampered`, and `test_ratchet` (spec drift / tamper / assertion removal — human/owner decision, agent must NOT auto-fix).
+- Neither flag set for `collection_run` and other phases (the normal repairable contract failure — the agent's actual job).
+
+The document also includes `runUrl` (canonical GitHub Actions run URL), `failedJobs` (phase-keyed job identifiers), and `artifact.junit` (the JUnit report filename).
+
+### Check-run annotations
+
+The action creates a `Postman TDD Contract` check-run with one `failure` annotation per failing ledger packet (capped at 50 — the GitHub API limit). The check-run is best-effort: if `GITHUB_TOKEN` lacks `checks: write`, the create call 403s and is swallowed with a remediation warning. The sticky comment remains the primary consumption surface.
+
+### JUnit XML report
+
+A JUnit XML report is written to `.postman-tdd/junit.xml` (one `<testcase>` per ledger packet, `<failure>` on failing ones) and rides the existing agent-context artifact upload. Compatible with `dorny/test-reporter` and `step-security/test-reporter`.
+
+### Opt-in agent dispatch templates
+
+Four opt-in `workflow_run` dispatch templates live under `.postman-template/workflows/agents/`. Copy the one(s) you want into `.github/workflows/` to have an external agent attempt automated repair on preview failure. They are never auto-installed.
+
+| Template | Agent | Required secret |
+| --- | --- | --- |
+| `devin-ci-fix.yml` | Devin (POST session to api.devin.ai) | `DEVIN_API_KEY` |
+| `codex-ci-fix.yml` | OpenAI Codex (openai/codex-action) | `OPENAI_API_KEY` |
+| `claude-ci-fix.yml` | Claude Code (anthropics/claude-code-action) | `ANTHROPIC_API_KEY` |
+| `cursor-ci-fix.yml` | cursor-agent (headless `cursor-agent --print`) | `CURSOR_API_KEY` |
+
+All four share:
+- `on: workflow_run` keyed to the `Postman TDD Preview` workflow with `types: [completed]`.
+- A recursion guard that skips runs whose `head_branch` starts with `postman-tdd-fix-` (so an agent's repair push never re-triggers the dispatch).
+- Per-PR concurrency with `cancel-in-progress: false`.
+- A `max-turns`/budget knob with a conservative default (customer bears API cost).
+
+The cursor template additionally guards on the `cursor/` branch prefix (the cursor background-agent branch convention).
+
+### Repair branch convention
+
+Automated repair pushes (built-in repair mode and external agents) use the deterministic branch name `postman-tdd-fix-<pr-number>` and an idempotent commit message keyed to the PR number. This prefix is what the dispatch-template recursion guards recognize, so repair pushes never create a dispatch loop.
 
 ## Telemetry
 

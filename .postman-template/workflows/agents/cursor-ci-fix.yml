@@ -1,0 +1,72 @@
+# Opt-in agent dispatch template: cursor-agent CI fix.
+#
+# This file is OPT-IN. Copy it into .github/workflows/ in your repo only if you
+# want the cursor-agent (Cursor CLI) to attempt automated contract-failure
+# repair. It is never auto-installed and the Postman TDD preview workflow does
+# not reference it.
+#
+# Required secret (add under repo/org settings):
+#   CURSOR_API_KEY   - Cursor API key
+#
+# Budget: max-turns defaults to a conservative value (customer bears API cost).
+# Override via the MAX_TURNS environment variable below.
+#
+# Recursion guard: skips runs whose head_branch starts with 'postman-tdd-fix-'
+# (the D17 repair-branch prefix) OR 'cursor/' (the cursor background-agent
+# branch convention) so cursor never re-triggers on its own push.
+# Structurally parallel to the Devin/Codex/Claude templates.
+name: Postman TDD Cursor CI Fix
+
+on:
+  workflow_run:
+    workflows: ['Postman TDD Preview']
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: postman-tdd-agent-cursor-${{ github.event.workflow_run.pull_requests[0].number }}
+  cancel-in-progress: false
+
+jobs:
+  cursor-fix:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      !startsWith(github.event.workflow_run.head_branch, 'postman-tdd-fix-') &&
+      !startsWith(github.event.workflow_run.head_branch, 'cursor/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+
+      - name: Download agent context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: postman-tdd-agent-context
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Install cursor-agent
+        run: npm install -g @anthropic-ai/cursor-agent@latest
+
+      - name: Run cursor-agent (headless)
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          MAX_TURNS: '12'
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          FAILURE_JSON="$(cat .postman-tdd/failures.json 2>/dev/null || echo '{}')"
+          PROMPT="Postman TDD contract failed. Failure context JSON:
+          ${FAILURE_JSON}
+          Run URL: ${RUN_URL}
+          Fix the implementation so the contract passes. Do NOT edit the OpenAPI spec or generated assertions."
+          cursor-agent --print --max-turns "${MAX_TURNS}" "${PROMPT}"

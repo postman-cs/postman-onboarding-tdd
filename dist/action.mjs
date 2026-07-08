@@ -28369,7 +28369,7 @@ var require_BufferList = __commonJS({
         this.head = this.tail = null;
         this.length = 0;
       };
-      BufferList.prototype.join = function join10(s) {
+      BufferList.prototype.join = function join11(s) {
         if (this.length === 0) return "";
         var p = this.head;
         var ret = "" + p.data;
@@ -107279,6 +107279,10 @@ function createTelemetryContext(options) {
   };
 }
 
+// src/index.ts
+import { mkdirSync as mkdirSync5, writeFileSync as writeFileSync7 } from "node:fs";
+import { join as join10 } from "node:path";
+
 // src/agent-context.ts
 import { createHash as createHash4 } from "node:crypto";
 import { existsSync as existsSync5, mkdirSync, readFileSync as readFileSync3, writeFileSync as writeFileSync2 } from "node:fs";
@@ -107448,10 +107452,33 @@ function findImmutablePathChanges(expectedHashes) {
     }];
   });
 }
+function phaseTriage(phase) {
+  switch (phase) {
+    case "service_startup":
+    case "health_check":
+      return { ownerActionRequired: false, retryable: true };
+    case "immutable_spec":
+    case "immutable_state_tampered":
+    case "test_ratchet":
+      return { ownerActionRequired: true, retryable: false };
+    case "collection_run":
+    case "config":
+    case "workspace":
+    case "asset_upsert":
+    case "cleanup":
+    case "none":
+      return { ownerActionRequired: false, retryable: false };
+    default:
+      return { ownerActionRequired: false, retryable: false };
+  }
+}
 function createFailureDocument(input) {
   const immutablePaths = input.immutablePaths ?? (input.specPath ? [input.specPath] : []);
   const immutablePathHashes = input.immutablePathHashes ?? [];
+  const triage = phaseTriage(input.phase);
   return {
+    ownerActionRequired: triage.ownerActionRequired,
+    retryable: triage.retryable,
     ...input,
     immutablePathHashes,
     immutablePaths,
@@ -108879,6 +108906,51 @@ function resolvePrMetadata(inputPrNumber) {
   };
 }
 
+// src/github/check-run.ts
+var ANNOTATION_CAP = 50;
+async function publishCheckRunAnnotations(args) {
+  try {
+    const octokit = getOctokit(args.token);
+    const failingPackets = (args.ledger?.packets ?? []).filter((packet) => !packet.passes);
+    const annotations = failingPackets.slice(0, 50).map((packet) => {
+      const fingerprint = packet.lastFailureFingerprint ? ` [${packet.lastFailureFingerprint.slice(0, 12)}]` : "";
+      return {
+        annotation_level: "failure",
+        end_line: 1,
+        message: `${packet.title}${fingerprint}`,
+        path: args.specPath ?? "openapi.yaml",
+        start_line: 1,
+        title: packet.key
+      };
+    });
+    const total = args.ledger?.total ?? 0;
+    const passing = args.ledger?.passing ?? 0;
+    const failing = args.ledger?.failing ?? 0;
+    const summary2 = `Postman TDD contract: ${passing}/${total} packets passing, ${failing} failing.${failingPackets.length > ANNOTATION_CAP ? ` (showing first ${ANNOTATION_CAP} of ${failingPackets.length} failures.)` : ""}`;
+    await octokit.rest.checks.create({
+      conclusion: "failure",
+      head_sha: args.headSha,
+      name: "Postman TDD Contract",
+      owner: args.owner,
+      repo: args.repo,
+      status: "completed",
+      output: {
+        annotations,
+        summary: summary2,
+        title: "Postman TDD contract failures"
+      }
+    });
+    info(`[postman-tdd] Published ${annotations.length} check-run annotation(s).`);
+  } catch (error2) {
+    const message = error2 instanceof Error ? error2.message : String(error2);
+    if (/403|forbidden|checks: write|Resource not accessible/i.test(message)) {
+      warning(`[postman-tdd] Could not create check-run annotations (GITHUB_TOKEN likely lacks checks: write permission). Sticky comment remains the primary surface. Error: ${message}`);
+    } else {
+      warning(`[postman-tdd] Check-run annotation publish failed (non-fatal): ${message}`);
+    }
+  }
+}
+
 // src/immutable-state.ts
 import { createHmac as createHmac4, timingSafeEqual } from "node:crypto";
 var IMMUTABLE_STATE_TAMPERED_MESSAGE = "The signed immutable spec baseline could not be verified. Treat the sticky comment as tampered and do not continue implementation repair.";
@@ -109666,6 +109738,13 @@ function hashPaths(repoRoot, paths) {
       sha256: createHash6("sha256").update(readFileSync6(resolve5(repoRoot, normalized))).digest("hex")
     };
   });
+}
+function repairBranchName(prNumber) {
+  return `postman-tdd-fix-${prNumber}`;
+}
+function repairCommitMessage(prNumber, checkRunId) {
+  const base = `postman-tdd: repair contract for PR #${prNumber}`;
+  return checkRunId === void 0 || checkRunId === null || checkRunId === "" ? base : `${base} [check:${checkRunId}]`;
 }
 function verifyPathHashes(repoRoot, hashes) {
   for (const expected of hashes) {
@@ -111096,10 +111175,10 @@ async function runRepairMode(options) {
       if (!options.inputs.repairGithubToken) {
         warning("repair-github-token was not set. Commits pushed with GITHUB_TOKEN may not trigger follow-up workflows.");
       }
-      info(`[postman-tdd] Committing and pushing repair to branch ${prDetails.headBranch}.`);
+      info(`[postman-tdd] Committing and pushing repair to branch ${repairBranchName(options.pr.number)}.`);
       const commitSha = commitAndPushRepair({
-        branch: prDetails.headBranch,
-        commitMessage: options.inputs.repairCommitMessage,
+        branch: repairBranchName(options.pr.number),
+        commitMessage: repairCommitMessage(options.pr.number),
         committerEmail: options.inputs.committerEmail,
         committerName: options.inputs.committerName,
         githubToken: token,
@@ -111218,8 +111297,8 @@ async function runRepairMode(options) {
         info(`[postman-tdd] Escalation diff validated: ${changedPaths2.join(", ") || "(none)"}.`);
         const token = options.inputs.repairGithubToken || options.inputs.githubToken;
         const commitSha = commitAndPushRepair({
-          branch: prDetails.headBranch,
-          commitMessage: options.inputs.repairCommitMessage,
+          branch: repairBranchName(options.pr.number),
+          commitMessage: repairCommitMessage(options.pr.number),
           committerEmail: options.inputs.committerEmail,
           committerName: options.inputs.committerName,
           githubToken: token,
@@ -111742,6 +111821,37 @@ function extractCollectionId(data) {
   return String(
     first?.id ?? collection?.id ?? collection?.uid ?? resource?.id ?? resource?.uid ?? ""
   ).trim() || void 0;
+}
+
+// src/reporting/junit.ts
+var SUITE_NAME_DEFAULT = "postman-tdd";
+function escapeXml(value) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+function renderJUnit(ledger, opts) {
+  const suiteName = escapeXml(opts?.suiteName ?? SUITE_NAME_DEFAULT);
+  const total = ledger.total;
+  const failures = ledger.failing;
+  const lines = [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<testsuite name="${suiteName}" tests="${total}" failures="${failures}">`
+  ];
+  for (const packet of ledger.packets) {
+    const classname = escapeXml(packet.key);
+    const name = escapeXml(packet.title);
+    if (packet.passes) {
+      lines.push(`  <testcase classname="${classname}" name="${name}"/>`);
+    } else {
+      const fingerprint = packet.lastFailureFingerprint ? ` [${packet.lastFailureFingerprint.slice(0, 12)}]` : "";
+      const message = escapeXml(`${packet.title}${fingerprint}`);
+      lines.push(`  <testcase classname="${classname}" name="${name}">`);
+      lines.push(`    <failure message="${message}">contract assertion failed</failure>`);
+      lines.push(`  </testcase>`);
+    }
+  }
+  lines.push(`</testsuite>`);
+  return `${lines.join("\n")}
+`;
 }
 
 // src/validation.ts
@@ -112309,6 +112419,7 @@ async function runActionInner(options, telemetry) {
           }));
           writeLedgerFile(scoredLedger);
           state3.ledger = toLedgerSummary(scoredLedger);
+          writeJUnitReport(state3.ledger);
           const ratchetDocument = createFailureDocument({
             collectionName: assetNames.collectionName,
             commit: pr.sha,
@@ -112347,6 +112458,7 @@ async function runActionInner(options, telemetry) {
         }
         writeLedgerFile(finalLedger);
         state3.ledger = toLedgerSummary(finalLedger);
+        writeJUnitReport(state3.ledger);
         const document2 = createFailureDocument({
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
@@ -112495,6 +112607,22 @@ function setStandardOutputs(paths) {
   setOutput("agent-task-path", paths.agentTaskPath);
   setOutput("failures-json-path", paths.failuresJsonPath);
   setOutput("ledger-path", ".postman-tdd/ledger.json");
+  setOutput("junit-path", ".postman-tdd/junit.xml");
+}
+function resolveRunUrl() {
+  const server = process.env.GITHUB_SERVER_URL;
+  const repository = process.env.GITHUB_REPOSITORY;
+  const runId = process.env.GITHUB_RUN_ID;
+  if (!server || !repository || !runId) {
+    return void 0;
+  }
+  return `${server}/${repository}/actions/runs/${runId}`;
+}
+function writeJUnitReport(summary2, dir = AGENT_CONTEXT_DIR) {
+  mkdirSync5(dir, { recursive: true });
+  const junitPath = join10(dir, "junit.xml");
+  writeFileSync7(junitPath, renderJUnit(summary2), "utf8");
+  return junitPath;
 }
 async function cleanupPreviewAssets(options) {
   void options.github;
@@ -112510,9 +112638,26 @@ async function cleanupPreviewAssets(options) {
 }
 async function publishFailure(options) {
   info(`[postman-tdd] Publishing failure context: phase=${options.document.phase}, failures=${options.document.failures.length}.`);
+  options.document.runUrl ??= resolveRunUrl();
+  options.document.failedJobs ??= [`postman-tdd:${options.document.phase}`];
+  options.document.artifact = { ...options.document.artifact, junit: "junit.xml" };
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
   info(`[postman-tdd] Wrote agent context files: ${paths.agentTaskPath}, ${paths.failuresJsonPath}, ${paths.immutableSpecGuardPath}.`);
   setOutput("failure-phase", options.document.phase);
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (repository && options.document.commit) {
+    const [owner, repo] = repository.split("/");
+    if (owner && repo) {
+      await publishCheckRunAnnotations({
+        headSha: options.document.commit,
+        ledger: options.document.ledger,
+        owner,
+        repo,
+        specPath: options.document.specPath,
+        token: getInput("github-token")
+      });
+    }
+  }
   let artifact;
   try {
     info(`[postman-tdd] Uploading agent context artifact "${AGENT_CONTEXT_ARTIFACT_NAME}".`);
