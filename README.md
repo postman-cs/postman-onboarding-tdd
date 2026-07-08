@@ -797,3 +797,5 @@ npm run typecheck
 npm run build
 npm run check:dist
 ```
+
+Maintainers and coding agents working on this action should read `./AGENTS.md` for the routing table, gate commands, committed-dist rule, release/tagging conventions, and the PRD/ledger workflow. It is the maintainer router and is distinct from the customer-facing `.postman-template/AGENTS.md` harness router installed into onboarded repos.
