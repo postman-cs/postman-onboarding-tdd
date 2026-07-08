@@ -25,6 +25,15 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
-      - uses: postman-cs/postman-onboarding-tdd@v0
+      - id: validate
+        uses: postman-cs/postman-onboarding-tdd@v0
         with:
           mode: validate
+
+      # Surface the validation-summary output (which includes harness lint
+      # 'To fix:' remediation instructions when the agent harness is opted in)
+      # in the GitHub Actions step summary so it is visible in the Actions UI.
+      - name: Surface validation summary
+        if: always()
+        run: |
+          echo "${{ steps.validate.outputs.validation-summary }}" >> "$GITHUB_STEP_SUMMARY"

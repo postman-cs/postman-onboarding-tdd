@@ -265,4 +265,100 @@ tdd:
 
     expect(loadOnboardingConfig({ configPath: path }).repair.escalationModel).toBeUndefined();
   });
+
+  it('defaults harness.enabled to false when tdd.harness is absent', () => {
+    const path = writeConfig(`
+spec:
+  path: api/openapi.yaml
+service:
+  name: reference-service
+tdd:
+  enabled: true
+  workspace:
+    name: Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+`);
+
+    const config = loadOnboardingConfig({ configPath: path });
+    expect(config.harness).toEqual({ enabled: false });
+  });
+
+  it('parses tdd.harness.enabled: true', () => {
+    const path = writeConfig(`
+spec:
+  path: api/openapi.yaml
+service:
+  name: reference-service
+tdd:
+  enabled: true
+  workspace:
+    name: Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  harness:
+    enabled: true
+`);
+
+    const config = loadOnboardingConfig({ configPath: path });
+    expect(config.harness).toEqual({ enabled: true });
+  });
+
+  it('parses tdd.harness.enabled: "true" (string form)', () => {
+    const path = writeConfig(`
+spec:
+  path: api/openapi.yaml
+service:
+  name: reference-service
+tdd:
+  enabled: true
+  workspace:
+    name: Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  harness:
+    enabled: "true"
+`);
+
+    const config = loadOnboardingConfig({ configPath: path });
+    expect(config.harness).toEqual({ enabled: true });
+  });
+
+  it('does not alter projectName/specPath/repair when tdd.harness is added', () => {
+    const path = writeConfig(`
+spec:
+  path: api/openapi.yaml
+service:
+  name: reference-service
+tdd:
+  enabled: true
+  workspace:
+    name: Preview
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  repair:
+    enabled: true
+    provider: openai-responses
+    allowedWritePaths:
+      - src/**
+  harness:
+    enabled: true
+`);
+
+    const config = loadOnboardingConfig({ configPath: path });
+    expect(config).toMatchObject({
+      projectName: 'reference-service',
+      specPath: 'api/openapi.yaml',
+      repair: {
+        enabled: true,
+        provider: 'openai-responses',
+        allowedWritePaths: ['src/**']
+      },
+      harness: { enabled: true }
+    });
+  });
 });

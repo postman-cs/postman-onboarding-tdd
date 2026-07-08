@@ -52,6 +52,12 @@ export interface ResolvedOnboardingConfig {
   workspace: TddWorkspaceConfig;
   runtime: TddRuntimeConfig;
   repair: TddRepairConfig;
+  /**
+   * P4 (D19): optional additive harness-lint opt-in. Defaults to
+   * `{ enabled: false }` when `tdd.harness` is absent in onboarding.yml, so
+   * pre-P4 configs and their config.test.ts snapshot are unaffected.
+   */
+  harness?: { enabled: boolean };
 }
 
 export interface PrMetadata {

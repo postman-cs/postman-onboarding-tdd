@@ -121,6 +121,12 @@ export function loadOnboardingConfig(options: ConfigLoadOptions): ResolvedOnboar
     throw new Error('tdd.repair.allowedWritePaths is required when tdd.repair.enabled=true');
   }
 
+  // P4 (D19): additive optional tdd.harness block. Defaults to disabled when
+  // absent, so existing configs and the config.test.ts snapshot are unchanged.
+  const harnessBlock = asRecord(tdd.harness);
+  const harnessEnabled = harnessBlock.enabled === true ||
+    stringValue(harnessBlock.enabled).toLowerCase() === 'true';
+
   return {
     configPath,
     projectName,
@@ -131,7 +137,8 @@ export function loadOnboardingConfig(options: ConfigLoadOptions): ResolvedOnboar
       name: workspaceName
     },
     runtime,
-    repair
+    repair,
+    harness: { enabled: harnessEnabled }
   };
 }
 
