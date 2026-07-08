@@ -173,6 +173,12 @@ export interface SignedRepairCheckpoint {
 }
 
 export interface AgentFailureDocument {
+  /**
+   * D5/D13-reserved artifact names carried by the published document. The
+   * JUnit report is written to `.postman-tdd/junit.xml` (D16); SARIF is
+   * deferred. Both are optional and additive in schemaVersion 2.
+   */
+  artifact?: { junit?: string; sarif?: string };
   baseUrl?: string;
   /**
    * D9-reserved authoritative repair resume state. A SignedRepairCheckpoint
@@ -184,6 +190,11 @@ export interface AgentFailureDocument {
   collectionName?: string;
   commit?: string;
   contractHints?: AgentContractHint[];
+  /**
+   * D13: phase-keyed job identifiers that failed in the triggering run, so
+   * an agent can fetch the right logs. Additive optional in schemaVersion 2.
+   */
+  failedJobs?: string[];
   failures: AgentFailure[];
   healthUrl?: string;
   immutablePathHashes: ImmutablePathHash[];
@@ -197,7 +208,30 @@ export interface AgentFailureDocument {
    */
   ledger?: LedgerSummary;
   message: string;
+  /**
+   * D13/D14: RFC 9457-style triage flag. `true` means the failure is
+   * transient (service_startup/health_check) and the agent should re-run
+   * before touching code. Computed authoritatively from `phase` inside
+   * `createFailureDocument`; an explicit caller value overrides the default.
+   * Additive optional in schemaVersion 2.
+   */
+  ownerActionRequired?: boolean;
   phase: FailurePhase;
+  /**
+   * D13/D14: RFC 9457-style triage flag. `true` means the failure is
+   * transient (service_startup/health_check) and the agent should re-run
+   * before touching code. Computed authoritatively from `phase` inside
+   * `createFailureDocument`; an explicit caller value overrides the default.
+   * Additive optional in schemaVersion 2.
+   */
+  retryable?: boolean;
+  /**
+   * D13: canonical GitHub Actions run URL assembled from runner env
+   * (GITHUB_SERVER_URL + GITHUB_REPOSITORY + /actions/runs/ + GITHUB_RUN_ID),
+   * undefined when those env vars are absent (local/test). Additive optional
+   * in schemaVersion 2.
+   */
+  runUrl?: string;
   schemaVersion: 1 | 2;
   specPath?: string;
   startCommand?: string;

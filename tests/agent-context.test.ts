@@ -9,11 +9,12 @@ import {
   findImmutablePathChanges,
   hashImmutablePaths,
   IMMUTABLE_SPEC_GUARD_MESSAGE,
+  phaseTriage,
   writeAgentContext
 } from '../src/agent-context.js';
 import { parseFailureDocument, renderStickyComment } from '../src/github/pr-comment.js';
 import { emptyCheckpoint, signRepairCheckpoint } from '../src/repair/checkpoint.js';
-import type { LedgerSummary, RepairCheckpointPayload, SignedRepairCheckpoint } from '../src/types.js';
+import type { FailurePhase, LedgerSummary, RepairCheckpointPayload, SignedRepairCheckpoint } from '../src/types.js';
 
 describe('agent context', () => {
   let dir = '';
@@ -216,5 +217,68 @@ describe('agent context', () => {
     const parsed = parseFailureDocument(body);
     expect(parsed?.checkpointRef).toEqual(payload);
     expect((parsed?.checkpointRef as { signature?: string })?.signature).toBeUndefined();
+  });
+
+  describe('phaseTriage (D14)', () => {
+    const cases: Array<{ phase: FailurePhase; ownerActionRequired: boolean; retryable: boolean }> = [
+      { phase: 'service_startup', ownerActionRequired: false, retryable: true },
+      { phase: 'health_check', ownerActionRequired: false, retryable: true },
+      { phase: 'immutable_spec', ownerActionRequired: true, retryable: false },
+      { phase: 'immutable_state_tampered', ownerActionRequired: true, retryable: false },
+      { phase: 'test_ratchet', ownerActionRequired: true, retryable: false },
+      { phase: 'collection_run', ownerActionRequired: false, retryable: false },
+      { phase: 'config', ownerActionRequired: false, retryable: false },
+      { phase: 'workspace', ownerActionRequired: false, retryable: false },
+      { phase: 'asset_upsert', ownerActionRequired: false, retryable: false },
+      { phase: 'cleanup', ownerActionRequired: false, retryable: false },
+      { phase: 'none', ownerActionRequired: false, retryable: false }
+    ];
+    for (const { phase, ownerActionRequired, retryable } of cases) {
+      it(`returns retryable=${retryable}, ownerActionRequired=${ownerActionRequired} for ${phase}`, () => {
+        expect(phaseTriage(phase)).toEqual({ ownerActionRequired, retryable });
+      });
+    }
+  });
+
+  it('createFailureDocument populates retryable/ownerActionRequired from phase', () => {
+    const health = createFailureDocument({
+      failures: [{ message: 'fail' }],
+      message: 'health failed',
+      phase: 'health_check',
+      specPath: 'api/openapi.yaml'
+    });
+    expect(health.retryable).toBe(true);
+    expect(health.ownerActionRequired).toBe(false);
+
+    const ratchet = createFailureDocument({
+      failures: [{ message: 'fail' }],
+      message: 'ratchet violated',
+      phase: 'test_ratchet',
+      specPath: 'api/openapi.yaml'
+    });
+    expect(ratchet.ownerActionRequired).toBe(true);
+    expect(ratchet.retryable).toBe(false);
+
+    const collection = createFailureDocument({
+      failures: [{ message: 'fail' }],
+      message: 'collection failed',
+      phase: 'collection_run',
+      specPath: 'api/openapi.yaml'
+    });
+    expect(collection.retryable).toBe(false);
+    expect(collection.ownerActionRequired).toBe(false);
+  });
+
+  it('explicit caller retryable override wins over the phase default', () => {
+    const document = createFailureDocument({
+      failures: [{ message: 'fail' }],
+      message: 'collection failed',
+      phase: 'collection_run',
+      retryable: true,
+      specPath: 'api/openapi.yaml'
+    });
+    // collection_run default is retryable=false, but the explicit input wins.
+    expect(document.retryable).toBe(true);
+    expect(document.ownerActionRequired).toBe(false);
   });
 });

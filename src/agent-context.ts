@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { resolveWorkspacePath } from './config.js';
-import type { AgentFailureDocument, ImmutablePathHash } from './types.js';
+import type { AgentFailureDocument, FailurePhase, ImmutablePathHash } from './types.js';
 
 export interface AgentContextPaths {
   agentTaskPath: string;
@@ -58,17 +58,60 @@ export function findImmutablePathChanges(expectedHashes: ImmutablePathHash[]): I
 }
 
 /**
+ * D14: triage flags are a pure function of {@link FailurePhase}.
+ *
+ * - `service_startup` / `health_check` => `{ retryable: true, ownerActionRequired: false }`
+ *   (transient infra/flake — agent should re-run before touching code).
+ * - `immutable_spec` / `immutable_state_tampered` / `test_ratchet` =>
+ *   `{ retryable: false, ownerActionRequired: true }` (spec drift / tamper /
+ *   assertion removal — human/owner decision, agent must NOT auto-fix).
+ * - `collection_run` (+ config/workspace/asset_upsert/cleanup/none) =>
+ *   `{ retryable: false, ownerActionRequired: false }` (the normal repairable
+ *   contract failure — the agent's actual job; neither flag set so the agent
+ *   proceeds with repair).
+ *
+ * RFC 9457 retryable-vs-owner-action semantics.
+ */
+export function phaseTriage(phase: FailurePhase): { ownerActionRequired: boolean; retryable: boolean } {
+  switch (phase) {
+    case 'service_startup':
+    case 'health_check':
+      return { ownerActionRequired: false, retryable: true };
+    case 'immutable_spec':
+    case 'immutable_state_tampered':
+    case 'test_ratchet':
+      return { ownerActionRequired: true, retryable: false };
+    case 'collection_run':
+    case 'config':
+    case 'workspace':
+    case 'asset_upsert':
+    case 'cleanup':
+    case 'none':
+      return { ownerActionRequired: false, retryable: false };
+    default:
+      return { ownerActionRequired: false, retryable: false };
+  }
+}
+
+/**
  * Creates an {@link AgentFailureDocument} at schemaVersion 2. The optional
  * `ledger` (D5) and `checkpointRef` (D9) fields are forwarded from the input
  * via the object spread, so they survive create -> serialize -> parse round
  * trips without explicit handling.
+ *
+ * D14: `retryable`/`ownerActionRequired` triage flags are computed
+ * authoritatively from `input.phase` via {@link phaseTriage} and placed
+ * BEFORE the spread so an explicit caller value overrides the phase default.
  */
 export function createFailureDocument(
   input: AgentFailureDocumentInput
 ): AgentFailureDocument {
   const immutablePaths = input.immutablePaths ?? (input.specPath ? [input.specPath] : []);
   const immutablePathHashes = input.immutablePathHashes ?? [];
+  const triage = phaseTriage(input.phase);
   return {
+    ownerActionRequired: triage.ownerActionRequired,
+    retryable: triage.retryable,
     ...input,
     immutablePathHashes,
     immutablePaths,
