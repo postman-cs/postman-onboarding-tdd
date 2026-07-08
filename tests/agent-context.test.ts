@@ -12,7 +12,8 @@ import {
   writeAgentContext
 } from '../src/agent-context.js';
 import { parseFailureDocument, renderStickyComment } from '../src/github/pr-comment.js';
-import type { LedgerSummary } from '../src/types.js';
+import { emptyCheckpoint, signRepairCheckpoint } from '../src/repair/checkpoint.js';
+import type { LedgerSummary, RepairCheckpointPayload, SignedRepairCheckpoint } from '../src/types.js';
 
 describe('agent context', () => {
   let dir = '';
@@ -171,5 +172,49 @@ describe('agent context', () => {
     const parsed = parseFailureDocument(body);
     expect(parsed?.schemaVersion).toBe(1);
     expect(parsed?.ledger).toBeUndefined();
+  });
+
+  it('round-trips a signed checkpointRef through create -> render -> parse', () => {
+    const payload = { ...emptyCheckpoint('commit-abc', 'openai-responses'), attempts: 1, attemptFingerprints: ['fp1'] };
+    const signed: SignedRepairCheckpoint = signRepairCheckpoint(payload, 'signing-key');
+    const document = createFailureDocument({
+      checkpointRef: signed,
+      commit: 'commit-abc',
+      failures: [{ message: 'fail' }],
+      message: 'failed',
+      phase: 'collection_run',
+      specPath: 'api/openapi.yaml'
+    });
+
+    const body = renderStickyComment({ prNumber: 123, schemaVersion: 1 }, {
+      failureDocument: document,
+      status: 'failed'
+    });
+    const parsed = parseFailureDocument(body);
+    expect(parsed?.checkpointRef).toEqual(signed);
+    expect((parsed?.checkpointRef as SignedRepairCheckpoint)?.signature).toMatch(/^hmac-sha256:/);
+  });
+
+  it('round-trips a bare (unsigned) checkpointRef payload through create -> render -> parse', () => {
+    const payload: RepairCheckpointPayload = {
+      ...emptyCheckpoint('commit-abc', 'openai-responses'),
+      attempts: 2
+    };
+    const document = createFailureDocument({
+      checkpointRef: payload,
+      commit: 'commit-abc',
+      failures: [{ message: 'fail' }],
+      message: 'failed',
+      phase: 'collection_run',
+      specPath: 'api/openapi.yaml'
+    });
+
+    const body = renderStickyComment({ prNumber: 123, schemaVersion: 1 }, {
+      failureDocument: document,
+      status: 'failed'
+    });
+    const parsed = parseFailureDocument(body);
+    expect(parsed?.checkpointRef).toEqual(payload);
+    expect((parsed?.checkpointRef as { signature?: string })?.signature).toBeUndefined();
   });
 });

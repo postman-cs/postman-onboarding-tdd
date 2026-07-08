@@ -57,6 +57,12 @@ export function findImmutablePathChanges(expectedHashes: ImmutablePathHash[]): I
   });
 }
 
+/**
+ * Creates an {@link AgentFailureDocument} at schemaVersion 2. The optional
+ * `ledger` (D5) and `checkpointRef` (D9) fields are forwarded from the input
+ * via the object spread, so they survive create -> serialize -> parse round
+ * trips without explicit handling.
+ */
 export function createFailureDocument(
   input: AgentFailureDocumentInput
 ): AgentFailureDocument {

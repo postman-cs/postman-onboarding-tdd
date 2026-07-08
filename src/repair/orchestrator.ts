@@ -51,7 +51,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       blockedReason: !config.tddEnabled ? 'tdd_disabled' : 'repair_disabled',
       message: !config.tddEnabled ? 'TDD preview is disabled.' : 'TDD repair is disabled.',
       prNumber: options.pr.number,
-      schemaVersion: 1,
+      schemaVersion: 2,
       status: 'skipped'
     });
     setRepairOutputs({ attempts: 0, status: 'skipped' });
@@ -285,7 +285,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
         commitSha,
         message: 'Postman TDD repair produced an implementation-only commit after the collection passed in the worker.',
         prNumber: options.pr.number,
-        schemaVersion: 1,
+        schemaVersion: 2,
         status: 'repaired'
       });
       setRepairOutputs({
@@ -501,7 +501,7 @@ async function block(
     blockedReason: reason,
     message,
     prNumber: options.pr.number,
-    schemaVersion: 1,
+    schemaVersion: 2,
     status: 'blocked'
   });
   setRepairOutputs({
