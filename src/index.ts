@@ -15,6 +15,7 @@ import { loadOnboardingConfig, validateConfigWriteMode, validateRepairProvider }
 import { buildContractHints } from './contract-hints.js';
 import { extractCollectionFailures } from './failure-normalizer.js';
 import { GitHubPrClient, parseFailureDocument, resolvePrMetadata } from './github/pr-comment.js';
+import { publishCheckRunAnnotations } from './github/check-run.js';
 import {
   createImmutableStatePayload,
   IMMUTABLE_STATE_TAMPERED_MESSAGE,
@@ -753,6 +754,24 @@ async function publishFailure(options: {
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
   core.info(`[postman-tdd] Wrote agent context files: ${paths.agentTaskPath}, ${paths.failuresJsonPath}, ${paths.immutableSpecGuardPath}.`);
   core.setOutput('failure-phase', options.document.phase);
+
+  // D15/P3-4: best-effort check-run annotations on failing ledger packets.
+  // Owner/repo from GITHUB_REPOSITORY, head sha from the document commit,
+  // token from the github-token input. Swallow-safe — never throws.
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (repository && options.document.commit) {
+    const [owner, repo] = repository.split('/');
+    if (owner && repo) {
+      await publishCheckRunAnnotations({
+        headSha: options.document.commit,
+        ledger: options.document.ledger,
+        owner,
+        repo,
+        specPath: options.document.specPath,
+        token: core.getInput('github-token')
+      });
+    }
+  }
 
   let artifact: UploadArtifactResponse | undefined;
   try {
