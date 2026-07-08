@@ -194,7 +194,7 @@ function gitApply(args: string[], patch: string, cwd: string): void {
     const stderr = Buffer.isBuffer((error as { stderr?: unknown }).stderr)
       ? ((error as { stderr: Buffer }).stderr).toString('utf8')
       : error instanceof Error ? error.message : String(error);
-    throw new Error(`git apply failed: ${stderr.trim() || 'unknown error'}`);
+    throw new Error(`git apply failed: ${stderr.trim() || 'unknown error'}`, { cause: error });
   }
 }
 

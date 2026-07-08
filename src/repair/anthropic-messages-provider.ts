@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 
-import { buildRepairPrompt, type RepairProviderOptions, type RepairProviderResult } from './provider-common.js';
-import { createRepairTools, executeRepairTool, type RepairToolResult } from './tools.js';
+import { buildRepairPrompt, isRecord, logToolResult, type RepairProviderOptions, type RepairProviderResult } from './provider-common.js';
+import { createRepairTools, executeRepairTool } from './tools.js';
 
 type JsonRecord = Record<string, unknown>;
 type AnthropicContentBlock = JsonRecord;
@@ -136,20 +136,6 @@ async function createMessage(options: {
   return JSON.parse(text) as JsonRecord;
 }
 
-function logToolResult(name: string, result: RepairToolResult): void {
-  if (result.error) {
-    core.info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
-  } else if (name === 'list_files') {
-    core.info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
-  } else if (name === 'search_files') {
-    core.info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
-  } else if (name === 'read_file') {
-    core.info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
-  } else if (name === 'propose_patch') {
-    core.info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(', ') || '(none)'}.`);
-  }
-}
-
 function isToolUseBlock(value: AnthropicContentBlock): value is ToolUseBlock {
   return value.type === 'tool_use'
     && typeof value.id === 'string'
@@ -157,9 +143,6 @@ function isToolUseBlock(value: AnthropicContentBlock): value is ToolUseBlock {
     && isRecord(value.input);
 }
 
-function isRecord(value: unknown): value is JsonRecord {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
 
 function extractText(response: JsonRecord): string {
   const content = Array.isArray(response.content) ? response.content : [];

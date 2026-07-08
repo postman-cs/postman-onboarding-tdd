@@ -1,0 +1,6 @@
+# False positives: the Azure Storage emulator (Azurite) well-known development
+# account key, hardcoded in the Azure SDK that @actions/artifact bundles into
+# dist/. Publicly documented, not a credential:
+# https://learn.microsoft.com/azure/storage/common/storage-use-azurite#well-known-storage-account-and-key
+572e6eac441b663bc473038cfeae77d566a4e4ea:dist/action.mjs:generic-api-key:79991
+abbbc19c9bd14c21c093f950c8bf720ae0f57984:dist/action.cjs:generic-api-key:79986

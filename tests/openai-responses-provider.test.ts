@@ -1,8 +1,9 @@
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { git, initGitRepo } from './helpers/git.js';
 
 import { runOpenAiRepairTurn } from '../src/repair/openai-responses-provider.js';
 import type { AgentFailureDocument } from '../src/types.js';
@@ -21,20 +22,13 @@ describe('OpenAI Responses repair provider', () => {
     mkdirSync(join(dir, 'api'), { recursive: true });
     writeFileSync(join(dir, 'src', 'app.js'), 'export const status = "broken";\n', 'utf8');
     writeFileSync(join(dir, 'api', 'openapi.yaml'), 'openapi: 3.0.3\n', 'utf8');
-    execFileSync('git', ['init'], { cwd: dir, stdio: 'ignore' });
-    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
-    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
-    execFileSync('git', ['add', '.'], { cwd: dir });
-    execFileSync('git', ['commit', '-m', 'initial'], { cwd: dir, stdio: 'ignore' });
+    initGitRepo(dir);
     return dir;
   }
 
   function diffFor(repoRoot: string): string {
     writeFileSync(join(repoRoot, 'src', 'app.js'), 'export const status = "fixed";\n', 'utf8');
-    const patch = execFileSync('git', ['diff', '--', 'src/app.js'], {
-      cwd: repoRoot,
-      encoding: 'utf8'
-    });
+    const patch = git(repoRoot, ['diff', '--', 'src/app.js']);
     writeFileSync(join(repoRoot, 'src', 'app.js'), 'export const status = "broken";\n', 'utf8');
     return patch;
   }

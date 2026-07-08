@@ -2,7 +2,7 @@ import * as core from '@actions/core';
 
 import type { SecretMasker } from '../secrets.js';
 import { buildRepairPrompt, type RepairProviderOptions, type RepairProviderResult } from './provider-common.js';
-import { createRepairTools, executeRepairTool, type RepairToolContext } from './tools.js';
+import { createRepairTools, executeRepairTool } from './tools.js';
 
 type JsonRecord = Record<string, unknown>;
 type FetchLike = typeof fetch;

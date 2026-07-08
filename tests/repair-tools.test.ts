@@ -1,8 +1,9 @@
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { git, initGitRepo } from './helpers/git.js';
 
 import { executeRepairTool, type RepairToolContext } from '../src/repair/tools.js';
 
@@ -21,11 +22,7 @@ describe('repair tools', () => {
     writeFileSync(join(dir, 'src', 'app.js'), 'export const status = "ok";\n', 'utf8');
     writeFileSync(join(dir, 'api', 'openapi.yaml'), 'openapi: 3.0.3\n', 'utf8');
     writeFileSync(join(dir, '.env'), 'TOKEN=secret\n', 'utf8');
-    execFileSync('git', ['init'], { cwd: dir, stdio: 'ignore' });
-    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
-    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
-    execFileSync('git', ['add', '.'], { cwd: dir });
-    execFileSync('git', ['commit', '-m', 'initial'], { cwd: dir, stdio: 'ignore' });
+    initGitRepo(dir);
     return {
       allowedReadPaths: ['**'],
       patchPolicy: {
@@ -53,10 +50,7 @@ describe('repair tools', () => {
   it('accepts a markdown-fenced unified diff while preserving guarded patch validation', () => {
     const context = createContext();
     writeFileSync(join(context.repoRoot, 'src', 'app.js'), 'export const status = "fixed";\n', 'utf8');
-    const patch = execFileSync('git', ['diff', '--', 'src/app.js'], {
-      cwd: context.repoRoot,
-      encoding: 'utf8'
-    });
+    const patch = git(context.repoRoot, ['diff', '--', 'src/app.js']);
     writeFileSync(join(context.repoRoot, 'src', 'app.js'), 'export const status = "ok";\n', 'utf8');
 
     const result = executeRepairTool('propose_patch', {

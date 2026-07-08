@@ -16,6 +16,8 @@ interface ExpectationChain {
 
 function createExpectation(actual: unknown, message?: string): ExpectationChain {
   let negate = false;
+  // Self-referential: the closure below captures `chain` before its single assignment.
+  // eslint-disable-next-line prefer-const
   let chain: ExpectationChain;
   const assert = (condition: boolean, defaultMessage: string): ExpectationChain => {
     const passed = negate ? !condition : condition;

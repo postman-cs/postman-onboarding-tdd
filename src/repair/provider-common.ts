@@ -1,6 +1,8 @@
+import * as core from '@actions/core';
+
 import type { SecretMasker } from '../secrets.js';
 import type { AgentContractHint, AgentFailure, AgentFailureDocument } from '../types.js';
-import type { RepairToolContext } from './tools.js';
+import type { RepairToolContext, RepairToolResult } from './tools.js';
 
 export interface RepairProviderOptions {
   apiKey: string;
@@ -275,6 +277,20 @@ function omitUndefined(input: JsonRecord): JsonRecord {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
 }
 
-function isRecord(value: unknown): value is JsonRecord {
+export function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function logToolResult(name: string, result: RepairToolResult): void {
+  if (result.error) {
+    core.info(`[postman-tdd] Guarded repair tool ${name} returned error: ${result.error}`);
+  } else if (name === 'list_files') {
+    core.info(`[postman-tdd] Guarded repair tool ${name} returned ${result.paths?.length || 0} path(s).`);
+  } else if (name === 'search_files') {
+    core.info(`[postman-tdd] Guarded repair tool ${name} returned ${result.matches?.length || 0} match(es).`);
+  } else if (name === 'read_file') {
+    core.info(`[postman-tdd] Guarded repair tool ${name} returned allowed file content.`);
+  } else if (name === 'propose_patch') {
+    core.info(`[postman-tdd] Guarded repair tool ${name} applied patch touching: ${result.touchedPaths?.join(', ') || '(none)'}.`);
+  }
 }

@@ -53,12 +53,13 @@ export function validateRepairProvider(value: string | undefined): RepairProvide
 
 export function loadOnboardingConfig(options: ConfigLoadOptions): ResolvedOnboardingConfig {
   const configPath = options.configPath;
-  let raw = '';
+  let raw: string;
   try {
     raw = readFileSync(configPath, 'utf8');
   } catch (error) {
     throw new Error(
-      `Could not read onboarding config ${configPath}: ${error instanceof Error ? error.message : String(error)}`
+      `Could not read onboarding config ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
     );
   }
 

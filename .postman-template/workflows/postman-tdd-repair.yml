@@ -27,7 +27,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
 
-      - uses: postman-cs/postman-onboarding-tdd@main
+      - uses: postman-cs/postman-onboarding-tdd@v0
         with:
           mode: repair
           pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
