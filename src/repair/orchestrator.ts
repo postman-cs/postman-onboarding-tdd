@@ -16,12 +16,13 @@ import {
 } from '../runner.js';
 import type { PostmanEndpointProfile } from '../postman/base-urls.js';
 import type { PostmanClient } from '../postman/client.js';
-import type { ActionInputs, AgentFailureDocument, PrMetadata, PreviewAssetState, RepairStatus } from '../types.js';
+import type { ActionInputs, AgentFailureDocument, PrMetadata, PreviewAssetState, RepairCheckpointPayload, RepairProvider, RepairStatus, SignedRepairCheckpoint } from '../types.js';
 import type { SecretMasker } from '../secrets.js';
 import { commitAndPushRepair, hashPaths, verifyChangedPaths, verifyPathHashes } from './git.js';
 import { assertMatchingRepairProvider, defaultRepairModel, resolveRepairProviderApiKey, runRepairProviderTurn } from './provider-dispatcher.js';
 import type { PatchPolicy } from './patch.js';
 import { writeRepairSummary, type RepairAttemptDiagnostic, type RepairSummary } from './summary.js';
+import { signRepairCheckpoint, verifyRepairCheckpoint, writeCheckpointArtifact } from './checkpoint.js';
 
 export interface RepairModeOptions {
   endpointProfile: PostmanEndpointProfile;
@@ -151,11 +152,46 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     immutablePaths,
     repoRoot
   };
-  let currentFailure: AgentFailureDocument = failure;
-  let attempts = 0;
-  const attemptDetails: RepairAttemptDiagnostic[] = [];
   const maxAttempts = Math.min(options.inputs.repairMaxAttempts, config.repair.maxAttempts);
   core.info(`[postman-tdd] Repair loop budget: maxAttempts=${maxAttempts}.`);
+
+  // D9: Read prior checkpoint from the sticky-comment failure document for resume.
+  let startAttempts = 0;
+  let resumedEscalated = false;
+  let attemptFingerprints: string[] = [];
+  let currentCheckpointRef: SignedRepairCheckpoint | RepairCheckpointPayload | undefined;
+  const priorCheckpoint = failure.checkpointRef;
+  if (priorCheckpoint) {
+    const checkpointPayload = 'signature' in priorCheckpoint ? priorCheckpoint.payload : priorCheckpoint;
+    if (checkpointPayload.commit === prDetails.headSha) {
+      if ('signature' in priorCheckpoint && options.inputs.immutableStateSigningKey) {
+        if (verifyRepairCheckpoint(priorCheckpoint, options.inputs.immutableStateSigningKey, { commit: prDetails.headSha })) {
+          startAttempts = Math.min(checkpointPayload.attempts, maxAttempts);
+          resumedEscalated = checkpointPayload.escalated;
+          attemptFingerprints = [...checkpointPayload.attemptFingerprints];
+          currentCheckpointRef = priorCheckpoint;
+          core.info(`[postman-tdd] Authoritative resume from signed checkpoint: attempts=${startAttempts}, fingerprints=${attemptFingerprints.length}.`);
+        } else {
+          core.info('[postman-tdd] Signed checkpoint failed verification; restarting from attempts=0.');
+        }
+      } else {
+        // Unsigned payload, or signed checkpoint with no signing key configured → ADVISORY resume.
+        // Re-verify the attempts budget from the visible fingerprint history, not the trusted counter.
+        startAttempts = Math.min(checkpointPayload.attemptFingerprints.length, maxAttempts);
+        resumedEscalated = checkpointPayload.escalated;
+        attemptFingerprints = [...checkpointPayload.attemptFingerprints];
+        currentCheckpointRef = priorCheckpoint;
+        core.info(`[postman-tdd] Advisory resume from checkpoint: recomputed attempts=${startAttempts} from fingerprint history.`);
+      }
+    } else {
+      core.info(`[postman-tdd] Checkpoint commit mismatch; restarting from attempts=0.`);
+    }
+  }
+
+  let currentFailure: AgentFailureDocument = failure;
+  let attempts = startAttempts;
+  const escalated = resumedEscalated;
+  const attemptDetails: RepairAttemptDiagnostic[] = [];
 
   while (attempts < maxAttempts) {
     const attemptNumber = attempts + 1;
@@ -179,13 +215,13 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     if (repair.status === 'blocked') {
       core.info(`[postman-tdd] Provider reported blocked: ${repair.message}`);
       attemptDetails.push(providerStoppedAttempt(attemptNumber, 'blocked', repair.message));
-      await block(options, 'agent_blocked', repair.message, attempts, attemptDetails);
+      await block(options, 'agent_blocked', repair.message, attempts, attemptDetails, currentCheckpointRef);
       return;
     }
     if (repair.status === 'no_change') {
       core.info(`[postman-tdd] Provider returned no implementation change: ${repair.message}`);
       attemptDetails.push(providerStoppedAttempt(attemptNumber, 'no_change', repair.message));
-      await block(options, 'agent_no_change', repair.message, attempts, attemptDetails);
+      await block(options, 'agent_no_change', repair.message, attempts, attemptDetails, currentCheckpointRef);
       return;
     }
 
@@ -233,6 +269,10 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
           phase: 'collection_run',
           specPath: config.specPath
         });
+        currentCheckpointRef = buildCheckpoint(
+          prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey
+        );
+        currentFailure = { ...currentFailure, checkpointRef: currentCheckpointRef };
         continue;
       }
       core.info('[postman-tdd] Local test command passed.');
@@ -280,6 +320,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       });
       core.info(`[postman-tdd] Repair commit pushed: ${commitSha}.`);
       const summary = await publishRepair(options.github, options.pr.number, {
+        ...(currentCheckpointRef ? { checkpointRef: currentCheckpointRef } : {}),
         attemptDetails,
         attempts,
         commitSha,
@@ -301,10 +342,14 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     attempt.outcome = 'oracle_failed';
     attemptDetails.push(attempt);
     currentFailure = result.failure;
+    currentCheckpointRef = buildCheckpoint(
+      prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey
+    );
+    currentFailure = { ...currentFailure, checkpointRef: currentCheckpointRef };
   }
 
   core.info(`[postman-tdd] Repair budget exhausted after ${attempts} accepted attempt(s).`);
-  await block(options, 'budget_exhausted', `Repair budget exhausted after ${attempts} attempt(s).`, attempts, attemptDetails);
+  await block(options, 'budget_exhausted', `Repair budget exhausted after ${attempts} attempt(s).`, attempts, attemptDetails, currentCheckpointRef);
 }
 
 function validateRepairFailureContext(failure: AgentFailureDocument): string | undefined {
@@ -492,11 +537,13 @@ async function block(
   reason: string,
   message: string,
   attempts: number,
-  attemptDetails: RepairAttemptDiagnostic[] = []
+  attemptDetails: RepairAttemptDiagnostic[] = [],
+  checkpointRef?: SignedRepairCheckpoint | RepairCheckpointPayload
 ): Promise<void> {
   core.info(`[postman-tdd] Repair blocked: reason=${reason}, attempts=${attempts}, message=${message}`);
   const summaryPath = await publishRepair(options.github, options.pr.number, {
     ...(attemptDetails.length > 0 ? { attemptDetails } : {}),
+    ...(checkpointRef ? { checkpointRef } : {}),
     attempts,
     blockedReason: reason,
     message,
@@ -537,4 +584,36 @@ function setRepairOutputs(options: {
   core.setOutput('repair-summary-path', options.summaryPath || '');
   core.setOutput('status', options.status === 'repaired' ? 'passed' : options.status === 'skipped' ? 'skipped' : 'failed');
   core.setOutput('failure-phase', 'none');
+}
+
+/**
+ * Builds, signs (when a signing key is configured), and persists a
+ * {@link RepairCheckpointPayload} to `.postman-tdd/checkpoint.json` (D9 full
+ * copy). Returns the signed checkpoint when the key is present, or the bare
+ * payload when it is not, for attachment as `checkpointRef` on failure
+ * documents and repair summaries.
+ */
+function buildCheckpoint(
+  commit: string,
+  provider: RepairProvider,
+  attempts: number,
+  escalated: boolean,
+  attemptFingerprints: string[],
+  signingKey: string | undefined,
+  breakerReason?: string
+): SignedRepairCheckpoint | RepairCheckpointPayload {
+  const payload: RepairCheckpointPayload = {
+    schemaVersion: 1,
+    attempts,
+    attemptFingerprints,
+    commit,
+    escalated,
+    provider,
+    ...(breakerReason ? { breakerReason } : {})
+  };
+  writeCheckpointArtifact(payload);
+  if (signingKey) {
+    return signRepairCheckpoint(payload, signingKey);
+  }
+  return payload;
 }

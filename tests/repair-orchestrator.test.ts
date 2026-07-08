@@ -1,21 +1,29 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type GitHubPrClient, type PullRequestDetails } from '../src/github/pr-comment.js';
 import { runRepairMode } from '../src/repair/orchestrator.js';
-import type { ActionInputs, AgentFailureDocument } from '../src/types.js';
+import { signRepairCheckpoint } from '../src/repair/checkpoint.js';
+import type { ActionInputs, AgentFailureDocument, RepairCheckpointPayload, SignedRepairCheckpoint } from '../src/types.js';
 
 // Partial mocks that preserve real helper functions while stubbing the
 // side-effectful seams (provider turn, preview assets, runner, git hashing).
 // Guard tests block before reaching any of these, so the mocks are inert there.
 const repairMocks = vi.hoisted(() => ({
+  commitAndPushRepair: vi.fn(),
   ensurePostmanCli: vi.fn(),
   hashPaths: vi.fn(),
   resolveTddWorkspace: vi.fn(),
+  runCommand: vi.fn(),
   runRepairProviderTurn: vi.fn(),
-  upsertPreviewAssets: vi.fn()
+  runTddCollection: vi.fn(),
+  startBackgroundCommand: vi.fn(),
+  upsertPreviewAssets: vi.fn(),
+  verifyChangedPaths: vi.fn(),
+  verifyPathHashes: vi.fn(),
+  waitForHealth: vi.fn()
 }));
 
 vi.mock('../src/repair/provider-dispatcher.js', async (importOriginal) => {
@@ -34,12 +42,25 @@ vi.mock('../src/preview-assets.js', async (importOriginal) => {
 
 vi.mock('../src/runner.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/runner.js')>();
-  return { ...actual, ensurePostmanCli: repairMocks.ensurePostmanCli };
+  return {
+    ...actual,
+    ensurePostmanCli: repairMocks.ensurePostmanCli,
+    runCommand: repairMocks.runCommand,
+    runTddCollection: repairMocks.runTddCollection,
+    startBackgroundCommand: repairMocks.startBackgroundCommand,
+    waitForHealth: repairMocks.waitForHealth
+  };
 });
 
 vi.mock('../src/repair/git.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/repair/git.js')>();
-  return { ...actual, hashPaths: repairMocks.hashPaths };
+  return {
+    ...actual,
+    commitAndPushRepair: repairMocks.commitAndPushRepair,
+    hashPaths: repairMocks.hashPaths,
+    verifyChangedPaths: repairMocks.verifyChangedPaths,
+    verifyPathHashes: repairMocks.verifyPathHashes
+  };
 });
 
 describe('repair orchestrator early guards', () => {
@@ -546,5 +567,235 @@ tdd:
     expect(repairMocks.runRepairProviderTurn).toHaveBeenCalledWith(
       expect.objectContaining({ maxToolRounds: 5 })
     );
+  });
+});
+
+describe('repair orchestrator checkpoint resume', () => {
+  let dir = '';
+  let previousCwd = '';
+  let previousWorkspace: string | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    previousCwd = process.cwd();
+    previousWorkspace = process.env.GITHUB_WORKSPACE;
+    dir = mkdtempSync(join(tmpdir(), 'postman-tdd-checkpoint-resume-'));
+    mkdirSync(join(dir, '.postman-template'), { recursive: true });
+    writeFileSync(join(dir, '.postman-template', 'onboarding.yml'), `
+spec:
+  path: api/openapi.yaml
+service:
+  name: repair-test
+tdd:
+  enabled: true
+  workspace:
+    name: Repair Test
+  baseUrl: http://127.0.0.1:4010
+  healthUrl: http://127.0.0.1:4010/v1/health
+  startCommand: ./start.sh
+  repair:
+    enabled: true
+    provider: openai-responses
+    maxAttempts: 3
+    allowedWritePaths:
+      - src/**
+`, 'utf8');
+    process.chdir(dir);
+    process.env.GITHUB_WORKSPACE = dir;
+    mkdirSync(join(dir, 'api'), { recursive: true });
+    writeFileSync(join(dir, 'api', 'openapi.yaml'), 'openapi: 3.0.3\ninfo:\n  title: test\n  version: 0.1.0\npaths: {}\n', 'utf8');
+    repairMocks.ensurePostmanCli.mockResolvedValue(undefined);
+    repairMocks.resolveTddWorkspace.mockResolvedValue({ workspaceId: 'ws-1' });
+    repairMocks.upsertPreviewAssets.mockResolvedValue({
+      collectionId: 'col-1',
+      contractIndex: { operations: [], openapiVersion: '3.0' } as never,
+      specId: 'spec-1'
+    });
+    repairMocks.hashPaths.mockReturnValue([]);
+    repairMocks.verifyChangedPaths.mockReturnValue([]);
+    repairMocks.verifyPathHashes.mockReturnValue(undefined);
+    repairMocks.commitAndPushRepair.mockReturnValue('commit-sha');
+    repairMocks.startBackgroundCommand.mockReturnValue({ kill: vi.fn() });
+    repairMocks.waitForHealth.mockResolvedValue({ ok: true });
+    repairMocks.runTddCollection.mockResolvedValue({ exitCode: 1, logExcerpt: 'collection failed' });
+    repairMocks.runRepairProviderTurn.mockResolvedValue({
+      status: 'changed',
+      summary: 'patch',
+      touchedPaths: []
+    });
+  });
+
+  afterEach(() => {
+    process.chdir(previousCwd);
+    if (previousWorkspace === undefined) {
+      delete process.env.GITHUB_WORKSPACE;
+    } else {
+      process.env.GITHUB_WORKSPACE = previousWorkspace;
+    }
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = '';
+  });
+
+  function failureBody(checkpointRef?: SignedRepairCheckpoint | RepairCheckpointPayload): string {
+    const failure: AgentFailureDocument = {
+      commit: 'head-sha',
+      failures: [{ message: 'Synthetic failure.' }],
+      immutablePathHashes: [{ path: 'api/openapi.yaml', sha256: 'abc123' }],
+      immutablePaths: ['api/openapi.yaml'],
+      message: 'Synthetic failure.',
+      phase: 'collection_run',
+      schemaVersion: 2,
+      specPath: 'api/openapi.yaml',
+      status: 'failed',
+      successCriteria: {
+        doneWhen: 'requiredCheck passes on the latest PR head commit',
+        failureContextMustMatchPrHeadCommit: true,
+        latestHeadOnly: true,
+        requiredCheck: 'Postman TDD Preview'
+      },
+      ...(checkpointRef ? { checkpointRef } : {})
+    };
+    return [
+      '# Postman TDD Preview (FAILED)',
+      '',
+      '<details>',
+      '<summary>Agent failure JSON</summary>',
+      '',
+      '```json',
+      JSON.stringify(failure, null, 2),
+      '```',
+      '</details>'
+    ].join('\n');
+  }
+
+  async function runResume(options: {
+    stickyBody: string;
+    signingKey?: string;
+  }): Promise<{ providerCalls: number; checkpointWritten: boolean }> {
+    const github = {
+      findStickyComment: async () => ({ body: options.stickyBody, id: 1 }),
+      getPullRequest: async () => ({
+        baseRepository: 'postman-cs/pavan-test-TDD',
+        headBranch: 'repair-branch',
+        headRepository: 'postman-cs/pavan-test-TDD',
+        headSha: 'head-sha',
+        isFork: false,
+        labels: [],
+        number: 123
+      }),
+      upsertRepairComment: async () => 1
+    } as unknown as GitHubPrClient;
+
+    await runRepairMode({
+      endpointProfile: {
+        apiBaseUrl: 'https://api.getpostman.com',
+        cliInstallUrl: 'https://dl-cli.pstmn.io/install/unix.sh'
+      },
+      github,
+      inputs: {
+        committerEmail: 'support@postman.com',
+        committerName: 'Postman',
+        configWriteMode: 'none',
+        githubToken: 'github-token',
+        immutableStateSigningKey: options.signingKey,
+        mode: 'repair',
+        onboardingConfigPath: '.postman-template/onboarding.yml',
+        openaiApiKey: 'openai-token',
+        postmanApiKey: 'postman-token',
+        postmanRegion: 'us',
+        postmanStack: 'prod',
+        repairCommitMessage: 'Postman TDD repair',
+        repairMaxAttempts: 3,
+        repairMaxToolRounds: 12,
+        repairModel: 'gpt-5.5',
+        repairProvider: 'openai-responses'
+      },
+      mask: (value) => value,
+      postman: {} as never,
+      pr: {
+        number: 123,
+        repository: 'postman-cs/pavan-test-TDD'
+      }
+    });
+
+    return {
+      providerCalls: repairMocks.runRepairProviderTurn.mock.calls.length,
+      checkpointWritten: existsSync(join(dir, '.postman-tdd', 'checkpoint.json'))
+    };
+  }
+
+  it('resumes from a signed checkpoint with matching head when the signing key is set', async () => {
+    const payload = {
+      schemaVersion: 1 as const,
+      attempts: 2,
+      attemptFingerprints: ['fp1', 'fp2'],
+      commit: 'head-sha',
+      escalated: false,
+      provider: 'openai-responses' as const
+    };
+    const signed = signRepairCheckpoint(payload, 'signing-key');
+
+    const { providerCalls, checkpointWritten } = await runResume({
+      stickyBody: failureBody(signed),
+      signingKey: 'signing-key'
+    });
+
+    // Resumed at attempts=2, maxAttempts=3 → only 1 new provider turn.
+    expect(providerCalls).toBe(1);
+    expect(checkpointWritten).toBe(true);
+  });
+
+  it('restarts from attempts=0 when the signed checkpoint signature is tampered', async () => {
+    const payload = {
+      schemaVersion: 1 as const,
+      attempts: 2,
+      attemptFingerprints: ['fp1', 'fp2'],
+      commit: 'head-sha',
+      escalated: false,
+      provider: 'openai-responses' as const
+    };
+    const tampered: SignedRepairCheckpoint = {
+      ...signRepairCheckpoint(payload, 'signing-key'),
+      signature: 'hmac-sha256:deadbeef'
+    };
+
+    const { providerCalls } = await runResume({
+      stickyBody: failureBody(tampered),
+      signingKey: 'signing-key'
+    });
+
+    // Tampered → restart from 0 → 3 provider turns.
+    expect(providerCalls).toBe(3);
+  });
+
+  it('advisory-resumes from an unsigned checkpoint, recomputing attempts from fingerprints', async () => {
+    const payload = {
+      schemaVersion: 1 as const,
+      attempts: 99,
+      attemptFingerprints: ['fp1', 'fp2'],
+      commit: 'head-sha',
+      escalated: false,
+      provider: 'openai-responses' as const
+    };
+
+    const { providerCalls } = await runResume({
+      stickyBody: failureBody(payload)
+    });
+
+    // Advisory: attempts recomputed from fingerprintFingerprints.length=2, NOT trusted attempts=99.
+    // startAttempts=2, maxAttempts=3 → 1 new provider turn.
+    expect(providerCalls).toBe(1);
+  });
+
+  it('writes the checkpoint.json artifact each attempt', async () => {
+    const { checkpointWritten } = await runResume({
+      stickyBody: failureBody()
+    });
+
+    expect(checkpointWritten).toBe(true);
+    const checkpoint = JSON.parse(readFileSync(join(dir, '.postman-tdd', 'checkpoint.json'), 'utf8'));
+    expect(checkpoint.schemaVersion).toBe(1);
+    expect(checkpoint.commit).toBe('head-sha');
+    expect(checkpoint.provider).toBe('openai-responses');
   });
 });
