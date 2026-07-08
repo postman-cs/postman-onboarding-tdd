@@ -106,6 +106,7 @@ export function loadOnboardingConfig(options: ConfigLoadOptions): ResolvedOnboar
     allowedReadPaths: repairAllowedReadPaths.length > 0 ? repairAllowedReadPaths : repairAllowedWritePaths,
     allowedWritePaths: repairAllowedWritePaths,
     enabled: repairEnabled,
+    escalationModel: stringValue(repairConfig.escalationModel) || undefined,
     localTestCommand: stringValue(repairConfig.localTestCommand) || undefined,
     maxAttempts: numberValue(repairConfig.maxAttempts, 3, 'tdd.repair.maxAttempts'),
     provider: validateRepairProvider(stringValue(repairConfig.provider) || 'openai-responses')

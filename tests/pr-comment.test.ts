@@ -225,6 +225,48 @@ describe('PR sticky comment marker', () => {
     expect(body).toContain('**Next action:** Review the repair commit and wait for preview to rerun on the updated PR branch.');
   });
 
+  it('renders a schemaVersion 2 repair summary with checkpointRef', () => {
+    const body = renderRepairComment({
+      attempts: 1,
+      blockedReason: 'budget_exhausted',
+      checkpointRef: {
+        algorithm: 'hmac-sha256',
+        payload: {
+          attempts: 1,
+          attemptFingerprints: ['fp1'],
+          commit: 'head-sha',
+          escalated: false,
+          provider: 'openai-responses',
+          schemaVersion: 1
+        },
+        schemaVersion: 1,
+        signature: 'hmac-sha256:abc123'
+      },
+      message: 'Repair budget exhausted after 1 attempt(s).',
+      prNumber: 123,
+      schemaVersion: 2,
+      status: 'blocked'
+    });
+
+    expect(isRepairComment(body)).toBe(true);
+    expect(body).toContain('Postman TDD Repair (BLOCKED)');
+  });
+
+  it('still renders a v1 repair summary without checkpointRef (backward compat)', () => {
+    const body = renderRepairComment({
+      attempts: 0,
+      blockedReason: 'stale_failure',
+      message: 'Stale failure context.',
+      prNumber: 123,
+      schemaVersion: 1,
+      status: 'blocked'
+    });
+
+    expect(isRepairComment(body)).toBe(true);
+    expect(body).toContain('Postman TDD Repair (BLOCKED)');
+    expect(body).toContain('`stale_failure`');
+  });
+
   it('renders blocked repair comments with failed attempt diagnostics', () => {
     const body = renderRepairComment({
       attemptDetails: [{

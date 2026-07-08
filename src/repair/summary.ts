@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { FailurePhase, RepairStatus } from '../types.js';
+import type { FailurePhase, RepairStatus, SignedRepairCheckpoint, RepairCheckpointPayload } from '../types.js';
 
 const REPAIR_MARKER_START = '<!-- postman-tdd-repair';
 const REPAIR_MARKER_END = '-->';
@@ -12,10 +12,17 @@ export interface RepairSummary {
   attemptDetails?: RepairAttemptDiagnostic[];
   attempts: number;
   blockedReason?: string;
+  /**
+   * D9 authoritative repair resume state embedded on the repair summary.
+   * SignedRepairCheckpoint when immutable-state-signing-key is set, or a
+   * bare RepairCheckpointPayload when it is not. Additive in schemaVersion 2;
+   * absent on v1 summaries.
+   */
+  checkpointRef?: SignedRepairCheckpoint | RepairCheckpointPayload;
   commitSha?: string;
   message: string;
   prNumber: number;
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   status: RepairStatus;
 }
 
@@ -151,6 +158,18 @@ function repairBlockedGuidance(reason: string | undefined): {
         doneWhen: '`Postman TDD Preview` passes on the latest PR head commit.',
         nextAction: 'Review the latest preview failures and repair summary, then fix manually or raise the repair attempt budget for another run.',
         whatHappened: 'Repair used all accepted attempts without producing a passing local TDD oracle.'
+      };
+    case 'owner_action_required':
+      return {
+        doneWhen: '`Postman TDD Preview` passes on the latest PR head commit after a manual fix.',
+        nextAction: 'Inspect the escalation payload (models tried, last failure, run URL) in the repair summary, then fix the implementation manually.',
+        whatHappened: 'Repair exhausted all attempts including the escalation model without producing a passing local TDD oracle.'
+      };
+    case 'repeated_failure':
+      return {
+        doneWhen: '`Postman TDD Preview` passes on the latest PR head commit after the failure is addressed.',
+        nextAction: 'The same failure fingerprint recurred consecutively. Inspect the normalized error and fix the root cause rather than retrying.',
+        whatHappened: 'Repair circuit breaker stopped the loop because the same failure recurred without progress.'
       };
     case 'fork_pr':
       return {

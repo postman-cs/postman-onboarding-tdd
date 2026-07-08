@@ -77,6 +77,17 @@ export function readActionInputs(): ActionInputs {
   if (!Number.isFinite(repairMaxAttempts) || repairMaxAttempts <= 0) {
     throw new Error(`repair-max-attempts must be a positive number, got: ${core.getInput('repair-max-attempts')}`);
   }
+  const repairMaxToolRoundsInput = core.getInput('repair-max-tool-rounds') || '12';
+  const repairMaxToolRounds = Number(repairMaxToolRoundsInput);
+  if (!Number.isInteger(repairMaxToolRounds) || repairMaxToolRounds < 1 || repairMaxToolRounds > 50) {
+    throw new Error(`repair-max-tool-rounds must be an integer between 1 and 50, got: ${repairMaxToolRoundsInput}`);
+  }
+  const repairBreakerThresholdInput = core.getInput('repair-breaker-threshold') || '2';
+  const repairBreakerThreshold = Number(repairBreakerThresholdInput);
+  if (!Number.isInteger(repairBreakerThreshold) || repairBreakerThreshold < 2) {
+    throw new Error(`repair-breaker-threshold must be an integer >= 2, got: ${repairBreakerThresholdInput}`);
+  }
+  const repairEscalationModel = core.getInput('repair-escalation-model') || undefined;
   const githubToken = core.getInput('github-token') || '';
   const postmanApiKey = core.getInput('postman-api-key') || '';
   if (modeRaw !== 'validate' && !githubToken) {
@@ -104,6 +115,9 @@ export function readActionInputs(): ActionInputs {
     repairCommitMessage: core.getInput('repair-commit-message') || 'Postman TDD repair',
     repairGithubToken: core.getInput('repair-github-token') || undefined,
     repairMaxAttempts,
+    repairMaxToolRounds,
+    repairBreakerThreshold,
+    repairEscalationModel,
     repairModel: repairModelInput || (repairProvider ? defaultRepairModel(repairProvider) : undefined),
     repairProvider,
     specPath: core.getInput('spec-path') || undefined,

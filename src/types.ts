@@ -38,6 +38,7 @@ export interface TddRepairConfig {
   allowedReadPaths: string[];
   allowedWritePaths: string[];
   enabled: boolean;
+  escalationModel?: string;
   localTestCommand?: string;
   maxAttempts: number;
   provider: RepairProvider;
@@ -154,8 +155,32 @@ export interface SignedImmutableState {
   signature: string;
 }
 
+export interface RepairCheckpointPayload {
+  attempts: number;
+  attemptFingerprints: string[];
+  breakerReason?: string;
+  commit: string;
+  escalated: boolean;
+  provider: RepairProvider;
+  schemaVersion: 1;
+}
+
+export interface SignedRepairCheckpoint {
+  algorithm: 'hmac-sha256';
+  payload: RepairCheckpointPayload;
+  schemaVersion: 1;
+  signature: string;
+}
+
 export interface AgentFailureDocument {
   baseUrl?: string;
+  /**
+   * D9-reserved authoritative repair resume state. A SignedRepairCheckpoint
+   * when immutable-state-signing-key is set (signature-verified resume), or
+   * a bare RepairCheckpointPayload when it is not (advisory-only resume).
+   * Additive in schemaVersion 2; absent on v1 documents.
+   */
+  checkpointRef?: SignedRepairCheckpoint | RepairCheckpointPayload;
   collectionName?: string;
   commit?: string;
   contractHints?: AgentContractHint[];
@@ -205,6 +230,9 @@ export interface ActionInputs {
   repairCommitMessage: string;
   repairGithubToken?: string;
   repairMaxAttempts: number;
+  repairMaxToolRounds: number;
+  repairBreakerThreshold: number;
+  repairEscalationModel?: string;
   repairModel?: string;
   repairProvider?: RepairProvider;
   specPath?: string;

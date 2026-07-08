@@ -10,6 +10,8 @@ describe('action input parsing', () => {
     'INPUT_OPENAI-API-KEY',
     'INPUT_POSTMAN-ACCESS-TOKEN',
     'INPUT_POSTMAN-API-KEY',
+    'INPUT_REPAIR-MAX-TOOL-ROUNDS',
+    'INPUT_REPAIR-BREAKER-THRESHOLD',
     'INPUT_REPAIR-MODEL',
     'INPUT_REPAIR-PROVIDER'
   ];
@@ -102,5 +104,61 @@ describe('action input parsing', () => {
       repairModel: 'GPT_5',
       repairProvider: 'postman-agent-mode'
     });
+  });
+
+  it('defaults repair-max-tool-rounds to 12 when the action input is omitted', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+
+    expect(readActionInputs().repairMaxToolRounds).toBe(12);
+  });
+
+  it('defaults repair-breaker-threshold to 2 when the action input is omitted', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+
+    expect(readActionInputs().repairBreakerThreshold).toBe(2);
+  });
+
+  it('accepts valid repair-breaker-threshold values >= 2', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+
+    setInput('repair-breaker-threshold', '2');
+    expect(readActionInputs().repairBreakerThreshold).toBe(2);
+
+    setInput('repair-breaker-threshold', '5');
+    expect(readActionInputs().repairBreakerThreshold).toBe(5);
+  });
+
+  it('throws on repair-breaker-threshold below 2, non-integer, or non-numeric', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+
+    for (const value of ['1', '0', 'abc', '1.5']) {
+      setInput('repair-breaker-threshold', value);
+      expect(() => readActionInputs()).toThrow('repair-breaker-threshold must be an integer >= 2');
+    }
+  });
+
+  it('accepts valid repair-max-tool-rounds values at the range edges', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+
+    setInput('repair-max-tool-rounds', '1');
+    expect(readActionInputs().repairMaxToolRounds).toBe(1);
+
+    setInput('repair-max-tool-rounds', '50');
+    expect(readActionInputs().repairMaxToolRounds).toBe(50);
+  });
+
+  it('throws on repair-max-tool-rounds below 1, above 50, non-integer, or non-numeric', () => {
+    setInput('github-token', 'github-token');
+    setInput('postman-api-key', 'postman-token');
+
+    for (const value of ['0', '51', 'abc', '1.5']) {
+      setInput('repair-max-tool-rounds', value);
+      expect(() => readActionInputs()).toThrow('repair-max-tool-rounds must be an integer between 1 and 50');
+    }
   });
 });

@@ -5,6 +5,7 @@ import { createFailureDocument } from '../agent-context.js';
 import { loadOnboardingConfig } from '../config.js';
 import { buildContractHints } from '../contract-hints.js';
 import { extractCollectionFailures } from '../failure-normalizer.js';
+import { failureFingerprint } from '../ledger.js';
 import { GitHubPrClient, parseFailureDocument } from '../github/pr-comment.js';
 import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from '../preview-assets.js';
 import {
@@ -16,12 +17,13 @@ import {
 } from '../runner.js';
 import type { PostmanEndpointProfile } from '../postman/base-urls.js';
 import type { PostmanClient } from '../postman/client.js';
-import type { ActionInputs, AgentFailureDocument, PrMetadata, PreviewAssetState, RepairStatus } from '../types.js';
+import type { ActionInputs, AgentFailureDocument, PrMetadata, PreviewAssetState, RepairCheckpointPayload, RepairProvider, RepairStatus, SignedRepairCheckpoint } from '../types.js';
 import type { SecretMasker } from '../secrets.js';
 import { commitAndPushRepair, hashPaths, verifyChangedPaths, verifyPathHashes } from './git.js';
 import { assertMatchingRepairProvider, defaultRepairModel, resolveRepairProviderApiKey, runRepairProviderTurn } from './provider-dispatcher.js';
 import type { PatchPolicy } from './patch.js';
 import { writeRepairSummary, type RepairAttemptDiagnostic, type RepairSummary } from './summary.js';
+import { signRepairCheckpoint, verifyRepairCheckpoint, writeCheckpointArtifact } from './checkpoint.js';
 
 export interface RepairModeOptions {
   endpointProfile: PostmanEndpointProfile;
@@ -51,7 +53,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       blockedReason: !config.tddEnabled ? 'tdd_disabled' : 'repair_disabled',
       message: !config.tddEnabled ? 'TDD preview is disabled.' : 'TDD repair is disabled.',
       prNumber: options.pr.number,
-      schemaVersion: 1,
+      schemaVersion: 2,
       status: 'skipped'
     });
     setRepairOutputs({ attempts: 0, status: 'skipped' });
@@ -151,11 +153,46 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     immutablePaths,
     repoRoot
   };
-  let currentFailure: AgentFailureDocument = failure;
-  let attempts = 0;
-  const attemptDetails: RepairAttemptDiagnostic[] = [];
   const maxAttempts = Math.min(options.inputs.repairMaxAttempts, config.repair.maxAttempts);
   core.info(`[postman-tdd] Repair loop budget: maxAttempts=${maxAttempts}.`);
+
+  // D9: Read prior checkpoint from the sticky-comment failure document for resume.
+  let startAttempts = 0;
+  let resumedEscalated = false;
+  let attemptFingerprints: string[] = [];
+  let currentCheckpointRef: SignedRepairCheckpoint | RepairCheckpointPayload | undefined;
+  const priorCheckpoint = failure.checkpointRef;
+  if (priorCheckpoint) {
+    const checkpointPayload = 'signature' in priorCheckpoint ? priorCheckpoint.payload : priorCheckpoint;
+    if (checkpointPayload.commit === prDetails.headSha) {
+      if ('signature' in priorCheckpoint && options.inputs.immutableStateSigningKey) {
+        if (verifyRepairCheckpoint(priorCheckpoint, options.inputs.immutableStateSigningKey, { commit: prDetails.headSha })) {
+          startAttempts = Math.min(checkpointPayload.attempts, maxAttempts);
+          resumedEscalated = checkpointPayload.escalated;
+          attemptFingerprints = [...checkpointPayload.attemptFingerprints];
+          currentCheckpointRef = priorCheckpoint;
+          core.info(`[postman-tdd] Authoritative resume from signed checkpoint: attempts=${startAttempts}, fingerprints=${attemptFingerprints.length}.`);
+        } else {
+          core.info('[postman-tdd] Signed checkpoint failed verification; restarting from attempts=0.');
+        }
+      } else {
+        // Unsigned payload, or signed checkpoint with no signing key configured → ADVISORY resume.
+        // Re-verify the attempts budget from the visible fingerprint history, not the trusted counter.
+        startAttempts = Math.min(checkpointPayload.attemptFingerprints.length, maxAttempts);
+        resumedEscalated = checkpointPayload.escalated;
+        attemptFingerprints = [...checkpointPayload.attemptFingerprints];
+        currentCheckpointRef = priorCheckpoint;
+        core.info(`[postman-tdd] Advisory resume from checkpoint: recomputed attempts=${startAttempts} from fingerprint history.`);
+      }
+    } else {
+      core.info(`[postman-tdd] Checkpoint commit mismatch; restarting from attempts=0.`);
+    }
+  }
+
+  let currentFailure: AgentFailureDocument = failure;
+  let attempts = startAttempts;
+  let escalated = resumedEscalated;
+  const attemptDetails: RepairAttemptDiagnostic[] = [];
 
   while (attempts < maxAttempts) {
     const attemptNumber = attempts + 1;
@@ -167,6 +204,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
         repairModel,
         repairProvider
       },
+      maxToolRounds: options.inputs.repairMaxToolRounds,
       provider: repairProvider,
       repairContext: {
         allowedReadPaths: config.repair.allowedReadPaths,
@@ -178,13 +216,13 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     if (repair.status === 'blocked') {
       core.info(`[postman-tdd] Provider reported blocked: ${repair.message}`);
       attemptDetails.push(providerStoppedAttempt(attemptNumber, 'blocked', repair.message));
-      await block(options, 'agent_blocked', repair.message, attempts, attemptDetails);
+      await block(options, 'agent_blocked', repair.message, attempts, attemptDetails, currentCheckpointRef);
       return;
     }
     if (repair.status === 'no_change') {
       core.info(`[postman-tdd] Provider returned no implementation change: ${repair.message}`);
       attemptDetails.push(providerStoppedAttempt(attemptNumber, 'no_change', repair.message));
-      await block(options, 'agent_no_change', repair.message, attempts, attemptDetails);
+      await block(options, 'agent_no_change', repair.message, attempts, attemptDetails, currentCheckpointRef);
       return;
     }
 
@@ -232,6 +270,10 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
           phase: 'collection_run',
           specPath: config.specPath
         });
+        currentCheckpointRef = buildCheckpoint(
+          prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey
+        );
+        currentFailure = { ...currentFailure, checkpointRef: currentCheckpointRef };
         continue;
       }
       core.info('[postman-tdd] Local test command passed.');
@@ -279,17 +321,19 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       });
       core.info(`[postman-tdd] Repair commit pushed: ${commitSha}.`);
       const summary = await publishRepair(options.github, options.pr.number, {
+        ...(currentCheckpointRef ? { checkpointRef: currentCheckpointRef } : {}),
         attemptDetails,
         attempts,
         commitSha,
         message: 'Postman TDD repair produced an implementation-only commit after the collection passed in the worker.',
         prNumber: options.pr.number,
-        schemaVersion: 1,
+        schemaVersion: 2,
         status: 'repaired'
       });
       setRepairOutputs({
         attempts,
         commitSha,
+        escalated,
         status: 'repaired',
         summaryPath: summary
       });
@@ -300,10 +344,139 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
     attempt.outcome = 'oracle_failed';
     attemptDetails.push(attempt);
     currentFailure = result.failure;
+
+    // D10: Fingerprint circuit breaker — track consecutive identical post-oracle
+    // failure fingerprints and block before spending the next attempt.
+    if (result.failure.failures.length > 0) {
+      const fp = failureFingerprint(result.failure.failures[0]!);
+      attemptFingerprints.push(fp);
+      const consecutive = countTrailingConsecutive(attemptFingerprints);
+      if (consecutive >= options.inputs.repairBreakerThreshold) {
+        const breakerReason = 'repeated_failure';
+        const breakerMessage = `Repair circuit breaker: same failure fingerprint (${fp.slice(0, 8)}) recurred ${consecutive} consecutive time(s) (threshold=${options.inputs.repairBreakerThreshold}) after ${attempts} attempt(s).`;
+        currentCheckpointRef = buildCheckpoint(
+          prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey, breakerReason
+        );
+        await block(options, breakerReason, breakerMessage, attempts, attemptDetails, currentCheckpointRef);
+        return;
+      }
+    }
+
+    currentCheckpointRef = buildCheckpoint(
+      prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey
+    );
+    currentFailure = { ...currentFailure, checkpointRef: currentCheckpointRef };
   }
 
   core.info(`[postman-tdd] Repair budget exhausted after ${attempts} accepted attempt(s).`);
-  await block(options, 'budget_exhausted', `Repair budget exhausted after ${attempts} attempt(s).`, attempts, attemptDetails);
+
+  // D11: Rung 2 — optional escalation model (same provider, one extra attempt).
+  const escalationModel = options.inputs.repairEscalationModel || config.repair.escalationModel;
+  if (escalationModel) {
+    escalated = true;
+    const escalationAttemptNumber = attempts + 1;
+    core.info(`[postman-tdd] Escalation rung: one extra turn with model=${escalationModel} (attempt ${escalationAttemptNumber}).`);
+    const escalationRepair = await runRepairProviderTurn({
+      failure: currentFailure,
+      inputs: {
+        ...options.inputs,
+        repairModel: escalationModel,
+        repairProvider
+      },
+      maxToolRounds: options.inputs.repairMaxToolRounds,
+      provider: repairProvider,
+      repairContext: {
+        allowedReadPaths: config.repair.allowedReadPaths,
+        patchPolicy,
+        repoRoot
+      },
+      secretMasker: options.mask
+    });
+    if (escalationRepair.status === 'blocked') {
+      attemptDetails.push(providerStoppedAttempt(escalationAttemptNumber, 'blocked', escalationRepair.message));
+    } else if (escalationRepair.status === 'no_change') {
+      attemptDetails.push(providerStoppedAttempt(escalationAttemptNumber, 'no_change', escalationRepair.message));
+    } else {
+      attempts += 1;
+      const escalationAttempt: RepairAttemptDiagnostic = {
+        attempt: attempts,
+        localTest: { status: 'skipped' },
+        oracle: { status: 'skipped' },
+        outcome: 'oracle_failed',
+        patchSummary: escalationRepair.summary,
+        providerStatus: 'changed',
+        touchedPaths: escalationRepair.touchedPaths
+      };
+      const escalationResult = await runOracle({
+        collectionId: state.collectionId || '',
+        config,
+        immutableHashes,
+        immutablePaths,
+        mask: options.mask,
+        prHeadSha: prDetails.headSha,
+        assetNames
+      });
+      if (escalationResult.ok) {
+        core.info('[postman-tdd] Escalation oracle passed.');
+        escalationAttempt.oracle = { status: 'passed' };
+        escalationAttempt.outcome = 'oracle_passed';
+        attemptDetails.push(escalationAttempt);
+        verifyPathHashes(repoRoot, immutableHashes);
+        const changedPaths = verifyChangedPaths(repoRoot, patchPolicy);
+        core.info(`[postman-tdd] Escalation diff validated: ${changedPaths.join(', ') || '(none)'}.`);
+        const token = options.inputs.repairGithubToken || options.inputs.githubToken;
+        const commitSha = commitAndPushRepair({
+          branch: prDetails.headBranch,
+          commitMessage: options.inputs.repairCommitMessage,
+          committerEmail: options.inputs.committerEmail,
+          committerName: options.inputs.committerName,
+          githubToken: token,
+          patchPolicy,
+          repoRoot,
+          repository: options.pr.repository
+        });
+        core.info(`[postman-tdd] Escalation repair commit pushed: ${commitSha}.`);
+        currentCheckpointRef = buildCheckpoint(
+          prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey
+        );
+        const summary = await publishRepair(options.github, options.pr.number, {
+          ...(currentCheckpointRef ? { checkpointRef: currentCheckpointRef } : {}),
+          attemptDetails,
+          attempts,
+          commitSha,
+          message: 'Postman TDD escalation repair produced an implementation-only commit after the collection passed.',
+          prNumber: options.pr.number,
+          schemaVersion: 2,
+          status: 'repaired'
+        });
+        setRepairOutputs({ attempts, commitSha, escalated, status: 'repaired', summaryPath: summary });
+        return;
+      }
+      core.info(`[postman-tdd] Escalation oracle still failed: phase=${escalationResult.failure.phase}.`);
+      escalationAttempt.oracle = failureDiagnostic(escalationResult.failure);
+      escalationAttempt.outcome = 'oracle_failed';
+      attemptDetails.push(escalationAttempt);
+      currentFailure = escalationResult.failure;
+      currentCheckpointRef = buildCheckpoint(
+        prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey
+      );
+    }
+  }
+
+  // D11: Rung 3 — terminal block.
+  if (escalationModel) {
+    const runUrl = process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID
+      ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+      : '(run URL unavailable)';
+    const firstFailure = currentFailure.failures[0];
+    const errorSummary = firstFailure
+      ? `${firstFailure.assertion || 'unknown assertion'}: ${firstFailure.message}`
+      : currentFailure.message;
+    const escalationMessage = `Owner action required: repair could not produce a passing local oracle after ${attempts} attempt(s) including escalation. Models tried: ${repairModel}${escalationModel ? ` → ${escalationModel}` : ''}. Last failure: ${errorSummary}. Recommended next step: inspect the failure context and run logs, then fix manually. Run URL: ${runUrl}`;
+    await block(options, 'owner_action_required', escalationMessage, attempts, attemptDetails, currentCheckpointRef, escalated);
+  } else {
+    await block(options, 'budget_exhausted', `Repair budget exhausted after ${attempts} attempt(s).`, attempts, attemptDetails, currentCheckpointRef, escalated);
+  }
 }
 
 function validateRepairFailureContext(failure: AgentFailureDocument): string | undefined {
@@ -491,21 +664,25 @@ async function block(
   reason: string,
   message: string,
   attempts: number,
-  attemptDetails: RepairAttemptDiagnostic[] = []
+  attemptDetails: RepairAttemptDiagnostic[] = [],
+  checkpointRef?: SignedRepairCheckpoint | RepairCheckpointPayload,
+  escalated: boolean = false
 ): Promise<void> {
   core.info(`[postman-tdd] Repair blocked: reason=${reason}, attempts=${attempts}, message=${message}`);
   const summaryPath = await publishRepair(options.github, options.pr.number, {
     ...(attemptDetails.length > 0 ? { attemptDetails } : {}),
+    ...(checkpointRef ? { checkpointRef } : {}),
     attempts,
     blockedReason: reason,
     message,
     prNumber: options.pr.number,
-    schemaVersion: 1,
+    schemaVersion: 2,
     status: 'blocked'
   });
   setRepairOutputs({
     attempts,
     blockedReason: reason,
+    escalated,
     status: 'blocked',
     summaryPath
   });
@@ -526,6 +703,7 @@ function setRepairOutputs(options: {
   attempts: number;
   blockedReason?: string;
   commitSha?: string;
+  escalated?: boolean;
   status: RepairStatus;
   summaryPath?: string;
 }): void {
@@ -533,7 +711,54 @@ function setRepairOutputs(options: {
   core.setOutput('repair-attempts', String(options.attempts));
   core.setOutput('repair-blocked-reason', options.blockedReason || '');
   core.setOutput('repair-commit-sha', options.commitSha || '');
+  core.setOutput('repair-escalated', String(options.escalated || false));
   core.setOutput('repair-summary-path', options.summaryPath || '');
   core.setOutput('status', options.status === 'repaired' ? 'passed' : options.status === 'skipped' ? 'skipped' : 'failed');
   core.setOutput('failure-phase', 'none');
+}
+
+/**
+ * Counts the trailing run of consecutive identical fingerprints at the end of
+ * the array (D10 circuit breaker signal). Returns 0 for an empty array.
+ */
+function countTrailingConsecutive(fingerprints: string[]): number {
+  if (fingerprints.length === 0) return 0;
+  const last = fingerprints[fingerprints.length - 1]!;
+  let count = 0;
+  for (let i = fingerprints.length - 1; i >= 0 && fingerprints[i] === last; i--) {
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Builds, signs (when a signing key is configured), and persists a
+ * {@link RepairCheckpointPayload} to `.postman-tdd/checkpoint.json` (D9 full
+ * copy). Returns the signed checkpoint when the key is present, or the bare
+ * payload when it is not, for attachment as `checkpointRef` on failure
+ * documents and repair summaries.
+ */
+function buildCheckpoint(
+  commit: string,
+  provider: RepairProvider,
+  attempts: number,
+  escalated: boolean,
+  attemptFingerprints: string[],
+  signingKey: string | undefined,
+  breakerReason?: string
+): SignedRepairCheckpoint | RepairCheckpointPayload {
+  const payload: RepairCheckpointPayload = {
+    schemaVersion: 1,
+    attempts,
+    attemptFingerprints,
+    commit,
+    escalated,
+    provider,
+    ...(breakerReason ? { breakerReason } : {})
+  };
+  writeCheckpointArtifact(payload);
+  if (signingKey) {
+    return signRepairCheckpoint(payload, signingKey);
+  }
+  return payload;
 }

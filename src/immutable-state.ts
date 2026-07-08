@@ -121,7 +121,7 @@ export function canonicalize(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function createSignature(payload: ImmutableStatePayload, signingKey: string): string {
+export function createSignature(payload: unknown, signingKey: string): string {
   return createHmac('sha256', signingKey)
     .update(canonicalize(payload))
     .digest('hex');
