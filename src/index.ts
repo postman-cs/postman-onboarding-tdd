@@ -683,6 +683,22 @@ function setStandardOutputs(paths: { agentTaskPath: string; failuresJsonPath: st
   core.setOutput('ledger-path', '.postman-tdd/ledger.json');
 }
 
+/**
+ * D13: assembles the canonical GitHub Actions run URL from standard runner
+ * env (GITHUB_SERVER_URL + GITHUB_REPOSITORY + /actions/runs/ + GITHUB_RUN_ID).
+ * Returns `undefined` when any of those env vars are absent (local/test), so
+ * the published document stays serializable without a fabricated URL.
+ */
+export function resolveRunUrl(): string | undefined {
+  const server = process.env.GITHUB_SERVER_URL;
+  const repository = process.env.GITHUB_REPOSITORY;
+  const runId = process.env.GITHUB_RUN_ID;
+  if (!server || !repository || !runId) {
+    return undefined;
+  }
+  return `${server}/${repository}/actions/runs/${runId}`;
+}
+
 async function cleanupPreviewAssets(options: {
   github: GitHubPrClient;
   postman: PostmanClient;
@@ -710,6 +726,13 @@ async function publishFailure(options: {
   summary: { collectionName: string; failurePhase: FailurePhase; ledger?: LedgerSummary };
 }): Promise<number> {
   core.info(`[postman-tdd] Publishing failure context: phase=${options.document.phase}, failures=${options.document.failures.length}.`);
+  // D13/P3-2: enrich the document additively with runUrl (from runner env),
+  // phase-keyed failedJobs, and the JUnit artifact name. These are populated
+  // here (not at the ~7 createFailureDocument call sites) so every publish
+  // path gets them for free. ??= preserves any explicit caller value.
+  options.document.runUrl ??= resolveRunUrl();
+  options.document.failedJobs ??= [`postman-tdd:${options.document.phase}`];
+  options.document.artifact = { ...options.document.artifact, junit: 'junit.xml' };
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
   core.info(`[postman-tdd] Wrote agent context files: ${paths.agentTaskPath}, ${paths.failuresJsonPath}, ${paths.immutableSpecGuardPath}.`);
   core.setOutput('failure-phase', options.document.phase);
