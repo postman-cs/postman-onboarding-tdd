@@ -13,13 +13,21 @@ import {
 import { runAction } from '../src/index.js';
 import type { LedgerSummary, PreviewAssetState } from '../src/types.js';
 
-const runnerMocks = vi.hoisted(() => ({
-  ensurePostmanCli: vi.fn(),
-  runCommand: vi.fn(),
-  runTddCollection: vi.fn(),
-  startBackgroundCommand: vi.fn(),
-  waitForHealth: vi.fn()
-}));
+const runnerMocks = vi.hoisted(() => {
+  // Scrub the GitHub event context before any module (including
+  // @actions/github, which snapshots GITHUB_EVENT_PATH at import time) loads.
+  // Without this, a real pull_request event payload in CI leaks its head.sha
+  // into resolvePrMetadata and overrides the test's mocked GITHUB_SHA.
+  delete process.env.GITHUB_EVENT_PATH;
+  delete process.env.GITHUB_EVENT_NAME;
+  return {
+    ensurePostmanCli: vi.fn(),
+    runCommand: vi.fn(),
+    runTddCollection: vi.fn(),
+    startBackgroundCommand: vi.fn(),
+    waitForHealth: vi.fn()
+  };
+});
 
 vi.mock('../src/runner.js', () => ({
   ensurePostmanCli: runnerMocks.ensurePostmanCli,
