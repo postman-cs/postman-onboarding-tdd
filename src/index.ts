@@ -1,6 +1,8 @@
 import * as core from '@actions/core';
 import { DefaultArtifactClient } from '@actions/artifact';
 import { createTelemetryContext } from '@postman-cse/automation-telemetry-core';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   createFailureDocument,
@@ -26,6 +28,7 @@ import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from './pr
 import { resolvePostmanEndpointProfile, parsePostmanRegion, parsePostmanStack } from './postman/base-urls.js';
 import type { PostmanEndpointProfile } from './postman/base-urls.js';
 import { PostmanClient } from './postman/client.js';
+import { renderJUnit } from './reporting/junit.js';
 import { runValidateMode } from './validation.js';
 import {
   ensurePostmanCli,
@@ -478,6 +481,7 @@ async function runActionInner(
           }));
           writeLedgerFile(scoredLedger);
           state.ledger = toLedgerSummary(scoredLedger);
+          writeJUnitReport(state.ledger);
           const ratchetDocument = createFailureDocument({
             collectionName: assetNames.collectionName,
             commit: pr.sha,
@@ -518,6 +522,7 @@ async function runActionInner(
 
         writeLedgerFile(finalLedger);
         state.ledger = toLedgerSummary(finalLedger);
+        writeJUnitReport(state.ledger);
         const document = createFailureDocument({
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
@@ -697,6 +702,18 @@ export function resolveRunUrl(): string | undefined {
     return undefined;
   }
   return `${server}/${repository}/actions/runs/${runId}`;
+}
+
+/**
+ * D16: writes the JUnit XML report of the contract run into
+ * `.postman-tdd/junit.xml` so it rides the existing agent-context artifact
+ * upload. Mirrors the `writeAgentContext`/`writeLedgerFile` mkdir pattern.
+ */
+function writeJUnitReport(summary: LedgerSummary, dir = AGENT_CONTEXT_DIR): string {
+  mkdirSync(dir, { recursive: true });
+  const junitPath = join(dir, 'junit.xml');
+  writeFileSync(junitPath, renderJUnit(summary), 'utf8');
+  return junitPath;
 }
 
 async function cleanupPreviewAssets(options: {
