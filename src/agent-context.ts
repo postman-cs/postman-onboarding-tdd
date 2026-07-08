@@ -66,7 +66,7 @@ export function createFailureDocument(
     ...input,
     immutablePathHashes,
     immutablePaths,
-    schemaVersion: 1,
+    schemaVersion: 2,
     status: 'failed',
     successCriteria: {
       requiredCheck: 'Postman TDD Preview',

@@ -11,6 +11,8 @@ import {
   IMMUTABLE_SPEC_GUARD_MESSAGE,
   writeAgentContext
 } from '../src/agent-context.js';
+import { parseFailureDocument, renderStickyComment } from '../src/github/pr-comment.js';
+import type { LedgerSummary } from '../src/types.js';
 
 describe('agent context', () => {
   let dir = '';
@@ -87,5 +89,87 @@ describe('agent context', () => {
       expectedSha256: baseline[0]?.sha256,
       path: 'api/openapi.yaml'
     }]);
+  });
+
+  it('createFailureDocument emits schemaVersion 2 and forwards ledger', () => {
+    const ledger: LedgerSummary = {
+      failing: 1,
+      packets: [{ key: 'op1', lastFailureFingerprint: 'abc', passes: false, title: 'op1' }],
+      passing: 0,
+      total: 1
+    };
+    const document = createFailureDocument({
+      failures: [{ message: 'fail' }],
+      ledger,
+      message: 'failed',
+      phase: 'collection_run',
+      specPath: 'api/openapi.yaml'
+    });
+    expect(document.schemaVersion).toBe(2);
+    expect(document.ledger).toEqual(ledger);
+    expect(document.status).toBe('failed');
+  });
+
+  it('round-trips a v2 document with ledger through parseFailureDocument', () => {
+    const body = renderStickyComment({
+      prNumber: 123,
+      schemaVersion: 1
+    }, {
+      failureDocument: {
+        commit: 'abc',
+        failures: [{ message: 'fail' }],
+        immutablePathHashes: [],
+        immutablePaths: [],
+        ledger: {
+          failing: 1,
+          packets: [{ key: 'op1', passes: false, title: 'op1' }],
+          passing: 0,
+          total: 1
+        },
+        message: 'failed',
+        phase: 'collection_run',
+        schemaVersion: 2,
+        status: 'failed',
+        successCriteria: {
+          doneWhen: 'requiredCheck passes on the latest PR head commit',
+          failureContextMustMatchPrHeadCommit: true,
+          latestHeadOnly: true,
+          requiredCheck: 'Postman TDD Preview'
+        }
+      },
+      status: 'failed'
+    });
+    const parsed = parseFailureDocument(body);
+    expect(parsed?.schemaVersion).toBe(2);
+    expect(parsed?.ledger).toBeDefined();
+    expect(parsed?.ledger?.total).toBe(1);
+  });
+
+  it('still parses a v1 document without ledger', () => {
+    const body = renderStickyComment({
+      prNumber: 123,
+      schemaVersion: 1
+    }, {
+      failureDocument: {
+        commit: 'abc',
+        failures: [{ message: 'fail' }],
+        immutablePathHashes: [],
+        immutablePaths: [],
+        message: 'failed',
+        phase: 'collection_run',
+        schemaVersion: 1,
+        status: 'failed',
+        successCriteria: {
+          doneWhen: 'requiredCheck passes on the latest PR head commit',
+          failureContextMustMatchPrHeadCommit: true,
+          latestHeadOnly: true,
+          requiredCheck: 'Postman TDD Preview'
+        }
+      },
+      status: 'failed'
+    });
+    const parsed = parseFailureDocument(body);
+    expect(parsed?.schemaVersion).toBe(1);
+    expect(parsed?.ledger).toBeUndefined();
   });
 });

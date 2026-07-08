@@ -12,6 +12,7 @@ export type FailurePhase =
   | 'service_startup'
   | 'health_check'
   | 'collection_run'
+  | 'test_ratchet'
   | 'cleanup';
 
 export type RepairStatus = 'repaired' | 'blocked' | 'skipped' | 'failed';
@@ -59,9 +60,49 @@ export interface PrMetadata {
   sha?: string;
 }
 
+export interface LedgerAcceptance {
+  assertion: string;
+  criterion: string;
+}
+
+export interface LedgerPacket {
+  acceptance: LedgerAcceptance[];
+  attempts: number;
+  firstSeenCommit?: string;
+  key: string;
+  lastFailureFingerprint?: string;
+  lastVerifiedCommit?: string;
+  method: string;
+  operationId?: string;
+  passes: boolean;
+  path: string;
+  title: string;
+}
+
+export interface Ledger {
+  generatedAtCommit?: string;
+  packets: LedgerPacket[];
+  schemaVersion: 1;
+}
+
+export interface LedgerSummaryPacket {
+  key: string;
+  lastFailureFingerprint?: string;
+  passes: boolean;
+  title: string;
+}
+
+export interface LedgerSummary {
+  failing: number;
+  packets: LedgerSummaryPacket[];
+  passing: number;
+  total: number;
+}
+
 export interface PreviewAssetState {
   collectionId?: string;
   immutableState?: SignedImmutableState;
+  ledger?: LedgerSummary;
   prNumber: number;
   schemaVersion: 1;
   specId?: string;
@@ -123,9 +164,16 @@ export interface AgentFailureDocument {
   immutablePathHashes: ImmutablePathHash[];
   immutablePaths: string[];
   immutableState?: SignedImmutableState;
+  /**
+   * Compact per-packet verification ledger, ≤20 packets (`toLedgerSummary`
+   * cap, D8). Packet `key` is `operationId` when present else `method+path`;
+   * an `operationId` rename is non-breaking metadata per oasdiff, so
+   * `method+path` is the stable identity (D1).
+   */
+  ledger?: LedgerSummary;
   message: string;
   phase: FailurePhase;
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   specPath?: string;
   startCommand?: string;
   status: 'failed';

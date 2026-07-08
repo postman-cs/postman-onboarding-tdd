@@ -19,6 +19,7 @@ import {
   resolveTrustedImmutableBaseline,
   signImmutableState
 } from './immutable-state.js';
+import { buildLedgerPackets, mergePersistedState, ratchetLedger, scoreLedger, toLedgerSummary, writeLedgerFile } from './ledger.js';
 import { runRepairMode } from './repair/orchestrator.js';
 import { defaultRepairModel } from './repair/provider-dispatcher.js';
 import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from './preview-assets.js';
@@ -39,6 +40,8 @@ import type {
   AgentFailureDocument,
   FailurePhase,
   ImmutablePathHash,
+  Ledger,
+  LedgerSummary,
   PreviewAssetState,
   ResolvedOnboardingConfig
 } from './types.js';
@@ -362,6 +365,21 @@ async function runActionInner(
     core.setOutput('tdd-collection-id', state.collectionId || '');
     core.info(`[postman-tdd] Asset upsert complete: workspace=${state.workspaceId}, spec=${state.specId}, collection=${state.collectionId}.`);
 
+    let allowRatchetRemoval = false;
+    try {
+      const prDetails = await github.getPullRequest(pr.number);
+      allowRatchetRemoval = prDetails.labels.includes('postman-tdd-allow-ratchet-removal');
+      core.info(`[postman-tdd] Ratchet escape-hatch label: ${allowRatchetRemoval ? 'present' : 'absent'}.`);
+    } catch (error) {
+      core.warning(`[postman-tdd] Could not fetch PR labels for ratchet check: ${formatUnknownError(error)}`);
+    }
+
+    const ledger: Ledger = {
+      packets: mergePersistedState(buildLedgerPackets(assetResult.contractIndex), state.ledger, pr.sha),
+      schemaVersion: 1
+    };
+    core.info(`[postman-tdd] Built verification ledger with ${ledger.packets.length} packet(s) from contract index.`);
+
     core.info('[postman-tdd] Ensuring Postman CLI is available and authenticated.');
     await ensurePostmanCli(inputs.postmanApiKey, {
       cliInstallUrl: endpointProfile.cliInstallUrl,
@@ -436,6 +454,56 @@ async function runActionInner(
       if (collectionRun.exitCode !== 0) {
         const failures = extractCollectionFailures(collectionRun.logExcerpt);
         core.info(`[postman-tdd] Collection run failed with exit code ${collectionRun.exitCode}; normalized ${failures.length} failure(s).`);
+        const previousLedgerSummary = state.ledger;
+        const scoredLedger = scoreLedger(ledger, failures, pr.sha);
+
+        const ratchetResult = ratchetLedger(previousLedgerSummary, scoredLedger, { allowRemoval: allowRatchetRemoval });
+        if (ratchetResult.violated) {
+          const ratchetFailures = [...ratchetResult.missingKeys, ...ratchetResult.weakenedKeys].map((key) => ({
+            message: `Packet ${key} was previously passing but is missing or weakened in this PR.`
+          }));
+          writeLedgerFile(scoredLedger);
+          state.ledger = toLedgerSummary(scoredLedger);
+          const ratchetDocument = createFailureDocument({
+            collectionName: assetNames.collectionName,
+            commit: pr.sha,
+            failures: ratchetFailures,
+            immutablePathHashes,
+            immutablePaths,
+            immutableState,
+            ledger: state.ledger,
+            message: 'Previously-passing contract assertions were removed or weakened in this PR.',
+            phase: 'test_ratchet',
+            specPath: config.specPath
+          });
+          if (immutableState) {
+            state.immutableState = immutableState;
+          }
+          prCommentId = String(await publishFailure({
+            artifactClient,
+            document: ratchetDocument,
+            github,
+            prNumber: pr.number,
+            state,
+            summary: {
+              collectionName: assetNames.collectionName,
+              failurePhase: 'test_ratchet',
+              ledger: state.ledger
+            }
+          }));
+          failurePublished = true;
+          throw new Error(ratchetDocument.message);
+        }
+
+        let finalLedger = scoredLedger;
+        if (allowRatchetRemoval && (ratchetResult.missingKeys.length > 0 || ratchetResult.weakenedKeys.length > 0)) {
+          const keysToDrop = new Set([...ratchetResult.missingKeys, ...ratchetResult.weakenedKeys]);
+          finalLedger = { ...scoredLedger, packets: scoredLedger.packets.filter((packet) => !keysToDrop.has(packet.key)) };
+          core.info(`[postman-tdd] Ratchet escape hatch: dropped ${keysToDrop.size} previously-passing packet(s) from the ledger.`);
+        }
+
+        writeLedgerFile(finalLedger);
+        state.ledger = toLedgerSummary(finalLedger);
         const document = createFailureDocument({
           baseUrl: config.runtime.baseUrl,
           collectionName: assetNames.collectionName,
@@ -445,6 +513,7 @@ async function runActionInner(
           immutablePathHashes,
           immutablePaths,
           immutableState,
+          ledger: state.ledger,
           message: `Postman TDD collection failed with exit code ${collectionRun.exitCode}`,
           phase: 'collection_run',
           specPath: config.specPath
@@ -460,13 +529,17 @@ async function runActionInner(
           state,
           summary: {
             collectionName: assetNames.collectionName,
-            failurePhase: 'collection_run'
+            failurePhase: 'collection_run',
+            ledger: state.ledger
           }
         }));
         failurePublished = true;
         throw new Error(document.message);
       }
       core.info('[postman-tdd] Collection run passed.');
+      const passedLedger = scoreLedger(ledger, [], pr.sha);
+      writeLedgerFile(passedLedger);
+      state.ledger = toLedgerSummary(passedLedger);
     } finally {
       if (config.runtime.stopCommand) {
         core.info(`[postman-tdd] Running stop command: ${mask(config.runtime.stopCommand)}`);
@@ -485,6 +558,7 @@ async function runActionInner(
       collectionId: state.collectionId,
       collectionName: assetNames.collectionName,
       commit: pr.sha,
+      ledger: state.ledger,
       specId: state.specId,
       status: 'passed',
       workspaceId: state.workspaceId
@@ -592,6 +666,7 @@ function setStandardOutputs(paths: { agentTaskPath: string; failuresJsonPath: st
   core.setOutput('agent-context-dir', AGENT_CONTEXT_DIR);
   core.setOutput('agent-task-path', paths.agentTaskPath);
   core.setOutput('failures-json-path', paths.failuresJsonPath);
+  core.setOutput('ledger-path', '.postman-tdd/ledger.json');
 }
 
 async function cleanupPreviewAssets(options: {
@@ -618,7 +693,7 @@ async function publishFailure(options: {
   github: GitHubPrClient;
   prNumber: number;
   state: PreviewAssetState;
-  summary: { collectionName: string; failurePhase: FailurePhase };
+  summary: { collectionName: string; failurePhase: FailurePhase; ledger?: LedgerSummary };
 }): Promise<number> {
   core.info(`[postman-tdd] Publishing failure context: phase=${options.document.phase}, failures=${options.document.failures.length}.`);
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
@@ -655,6 +730,7 @@ async function publishFailure(options: {
     collectionName: options.summary.collectionName,
     failureDocument: options.document,
     failurePhase: options.summary.failurePhase,
+    ledger: options.summary.ledger,
     specId: options.state.specId,
     status: 'failed',
     workspaceId: options.state.workspaceId
