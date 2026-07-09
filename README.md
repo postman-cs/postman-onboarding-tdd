@@ -15,8 +15,14 @@ The optional repair worker can also call a configured AI repair provider, make i
 ## End-To-End Flow
 
 ```mermaid
+---
+config:
+  theme: neutral
+  flowchart:
+    curve: basis
+---
 flowchart TD
-  A["Developer opens or updates a PR"] --> B["Postman TDD Preview workflow starts"]
+  A@{ shape: event, label: "Developer opens or updates a PR" } --> B["Postman TDD Preview workflow starts"]
   B --> C["Read PR OpenAPI spec"]
   C --> D["Upsert PR-scoped Spec Hub spec and TDD collection"]
   D --> E["Start customer service in CI with tdd.startCommand"]
@@ -25,10 +31,10 @@ flowchart TD
   G --> H{"Collection passed?"}
 
   H -- "Yes" --> I["Update sticky PR comment: passed"]
-  I --> J["PR has passing Postman TDD Preview check"]
+  I --> J@{ shape: stadium, label: "PR has passing Postman TDD Preview check" }
 
   H -- "No" --> K["Normalize failures into compact JSON"]
-  K --> L["Update sticky PR comment and optional agent artifact"]
+  K --> L@{ shape: docs, label: "Sticky comment + agent context artifact\n(failures JSON, task md, JUnit XML,\ncheck-run annotations)" }
   L --> M{"Automated repair enabled?"}
 
   M -- "No" --> N["Human or external agent reads sticky comment"]
@@ -38,14 +44,30 @@ flowchart TD
   M -- "Yes" --> P["Postman TDD Repair workflow starts after failed preview"]
   P --> Q["Verify failure JSON matches latest PR head SHA"]
   Q --> R{"Repairable and same-repo PR?"}
-  R -- "No" --> S["Post repair comment: blocked"]
-  R -- "Yes" --> T["Repair provider proposes implementation-only patch"]
-  T --> U["Validate allowed write paths and immutable spec"]
-  U --> V["Run local tests, start service, run Postman collection"]
-  V --> W{"Local TDD passed?"}
-  W -- "No" --> X["Retry until budget exhausted or blocked"]
-  X --> T
+  R -- "No" --> S@{ shape: stadium, label: "Post repair comment: blocked" }
+
+  subgraph LOOP["Repair loop (checkpoint / breaker / escalation)"]
+    direction TB
+    T["Repair provider proposes implementation-only patch"]
+    T --> U["Validate allowed write paths and immutable spec"]
+    U --> V["Run local tests, start service, run Postman collection"]
+    V --> W{"Local TDD passed?"}
+    W -- "No" --> X{"Same failure fingerprint\nrepeated to threshold?"}
+    X -- "No" --> XA{"Attempt budget left?"}
+    XA -- "Yes" --> CK@{ shape: doc, label: "Write signed checkpoint\n(.postman-tdd/checkpoint.json)" }
+    CK --> T
+    XA -- "No" --> XE{"Escalation model configured?"}
+    XE -- "Yes" --> T2["One final attempt with stronger model"]
+    T2 --> W2{"Passed?"}
+  end
+
+  R -- "Yes" --> RS["Resume from signed checkpoint when it matches PR head"]
+  RS --> T
+  X -- "Yes" --> XB@{ shape: stadium, label: "Blocked: repeated_failure" }
+  XE -- "No" --> XO@{ shape: stadium, label: "Blocked: budget_exhausted" }
+  W2 -- "No" --> XP@{ shape: stadium, label: "Blocked: owner_action_required" }
   W -- "Yes" --> Y["Verify immutable paths again"]
+  W2 -- "Yes" --> Y
   Y --> Z["Push one repair commit with repair token"]
   Z --> B
 ```
@@ -174,7 +196,8 @@ Create these secrets in the customer service repository:
 
 Use a long random value for `POSTMAN_TDD_SIGNING_KEY`. Implementation agents should not be able to read it.
 
-`POSTMAN_TDD_REPAIR_TOKEN` should be a token that can push to PR branches. A normal `GITHUB_TOKEN` push may not trigger the follow-up workflow run, so production repair should use a PAT or GitHub App token.
+> [!WARNING]
+> `POSTMAN_TDD_REPAIR_TOKEN` should be a token that can push to PR branches. A normal `GITHUB_TOKEN` push may not trigger the follow-up workflow run, so production repair should use a PAT or GitHub App token.
 
 ## Repair Setup Checklist
 
@@ -266,7 +289,7 @@ jobs:
 
 When the agent harness is opted in (see [Agent Harness](#agent-harness-ws4) below), `mode: validate` additionally lints the copied harness for internal consistency and surfaces every issue as an imperative `To fix:` remediation instruction in the `validation-summary` output and the GitHub Actions step summary.
 
-## Agent Harness (WS4)
+## Agent Harness
 
 The action ships a copyable agent harness under `.postman-template/` that gives coding agents a routing table over focused boundary docs. Copy it into the service repository so agents working on a failing `Postman TDD Preview` check have a single entry point:
 
@@ -691,7 +714,7 @@ Postman Agent Mode repair receives the same guarded repair tool definitions as t
 | `repair-escalation-model` | no | `tdd.repair.escalationModel` | Optional stronger model for the escalation rung in `mode: repair`. Same provider, one extra attempt after budget exhaustion. |
 | `repair-commit-message` | no | `Postman TDD repair` | Commit message used for a passing repair commit. |
 
-### Repair Loop Mechanics (P2)
+### Repair Loop Mechanics
 
 The repair loop (`mode: repair`) has four anti-thrash and budget mechanics:
 
@@ -718,6 +741,12 @@ Important preview outputs:
 | `agent-context-artifact` | Uploaded agent context artifact name, when available. |
 | `ledger-path` | Path to the local verification ledger JSON (`.postman-tdd/ledger.json`). |
 | `junit-path` | Path to the local JUnit XML report of the contract run (`.postman-tdd/junit.xml`). |
+| `failures-json-path` | Agent failure JSON path. |
+| `agent-task-path` | Agent task markdown path. |
+| `agent-context-dir` | Agent context directory path. |
+| `agent-context-artifact-id` | GitHub Actions artifact ID for the agent context, when uploaded. |
+| `agent-context-artifact-digest` | SHA-256 digest for the uploaded agent context artifact, when available. |
+| `config-commit-sha` | Commit SHA produced by workspace ID config writeback, if any. |
 
 Important validation outputs:
 
@@ -736,8 +765,9 @@ Important repair outputs:
 | `repair-attempts` | Number of accepted implementation patch attempts. |
 | `repair-commit-sha` | Commit SHA pushed by the repair worker after a passing local collection run. |
 | `repair-summary-path` | Local JSON summary path. |
+| `repair-escalated` | Whether the escalation model rung was attempted (`true` or `false`). |
 
-## Agent-Consumer Ergonomics (WS3)
+## Agent-Consumer Ergonomics
 
 On failure, the action publishes three consumption tiers so any coding agent (Devin, Codex, Claude Code, cursor-agent) can drive the repair loop:
 
@@ -748,6 +778,9 @@ The `AgentFailureDocument` (embedded in the sticky comment JSON) carries RFC 945
 - `retryable: true` for `service_startup` and `health_check` (transient infra/flake — agent should re-run before touching code).
 - `ownerActionRequired: true` for `immutable_spec`, `immutable_state_tampered`, and `test_ratchet` (spec drift / tamper / assertion removal — human/owner decision, agent must NOT auto-fix).
 - Neither flag set for `collection_run` and other phases (the normal repairable contract failure — the agent's actual job).
+
+> [!NOTE]
+> To intentionally remove or weaken a previously-passing contract packet, add the `postman-tdd-allow-ratchet-removal` label to the PR; without it the run fails with `failure-phase: test_ratchet`.
 
 The document also includes `runUrl` (canonical GitHub Actions run URL), `failedJobs` (phase-keyed job identifiers), and `artifact.junit` (the JUnit report filename).
 
