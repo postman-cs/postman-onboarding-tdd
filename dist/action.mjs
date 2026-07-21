@@ -4020,11 +4020,11 @@ var require_util2 = __commonJS({
     var { isUint8Array } = __require("node:util/types");
     var { webidl } = require_webidl();
     var supportedHashes = [];
-    var crypto5;
+    var crypto4;
     try {
-      crypto5 = __require("node:crypto");
+      crypto4 = __require("node:crypto");
       const possibleRelevantHashes = ["sha256", "sha384", "sha512"];
-      supportedHashes = crypto5.getHashes().filter((hash) => possibleRelevantHashes.includes(hash));
+      supportedHashes = crypto4.getHashes().filter((hash) => possibleRelevantHashes.includes(hash));
     } catch {
     }
     function responseURL(response) {
@@ -4297,7 +4297,7 @@ var require_util2 = __commonJS({
       }
     }
     function bytesMatch(bytes, metadataList) {
-      if (crypto5 === void 0) {
+      if (crypto4 === void 0) {
         return true;
       }
       const parsedMetadata = parseMetadata(metadataList);
@@ -4312,7 +4312,7 @@ var require_util2 = __commonJS({
       for (const item of metadata2) {
         const algorithm = item.algo;
         const expectedValue = item.hash;
-        let actualValue = crypto5.createHash(algorithm).update(bytes).digest("base64");
+        let actualValue = crypto4.createHash(algorithm).update(bytes).digest("base64");
         if (actualValue[actualValue.length - 1] === "=") {
           if (actualValue[actualValue.length - 2] === "=") {
             actualValue = actualValue.slice(0, -2);
@@ -5376,8 +5376,8 @@ var require_body = __commonJS({
     var { multipartFormDataParser } = require_formdata_parser();
     var random;
     try {
-      const crypto5 = __require("node:crypto");
-      random = (max) => crypto5.randomInt(0, max);
+      const crypto4 = __require("node:crypto");
+      random = (max) => crypto4.randomInt(0, max);
     } catch {
       random = (max) => Math.floor(Math.random(max));
     }
@@ -16878,13 +16878,13 @@ var require_frame = __commonJS({
     "use strict";
     var { maxUnsigned16Bit } = require_constants5();
     var BUFFER_SIZE = 16386;
-    var crypto5;
+    var crypto4;
     var buffer2 = null;
     var bufIdx = BUFFER_SIZE;
     try {
-      crypto5 = __require("node:crypto");
+      crypto4 = __require("node:crypto");
     } catch {
-      crypto5 = {
+      crypto4 = {
         // not full compatibility, but minimum.
         randomFillSync: function randomFillSync(buffer3, _offset, _size) {
           for (let i = 0; i < buffer3.length; ++i) {
@@ -16897,7 +16897,7 @@ var require_frame = __commonJS({
     function generateMask() {
       if (bufIdx === BUFFER_SIZE) {
         bufIdx = 0;
-        crypto5.randomFillSync(buffer2 ??= Buffer.allocUnsafe(BUFFER_SIZE), 0, BUFFER_SIZE);
+        crypto4.randomFillSync(buffer2 ??= Buffer.allocUnsafe(BUFFER_SIZE), 0, BUFFER_SIZE);
       }
       return [buffer2[bufIdx++], buffer2[bufIdx++], buffer2[bufIdx++], buffer2[bufIdx++]];
     }
@@ -16969,9 +16969,9 @@ var require_connection = __commonJS({
     var { Headers: Headers2, getHeadersList } = require_headers();
     var { getDecodeSplit } = require_util2();
     var { WebsocketFrameSend } = require_frame();
-    var crypto5;
+    var crypto4;
     try {
-      crypto5 = __require("node:crypto");
+      crypto4 = __require("node:crypto");
     } catch {
     }
     function establishWebSocketConnection(url2, protocols, client2, ws, onEstablish, options) {
@@ -16991,7 +16991,7 @@ var require_connection = __commonJS({
         const headersList = getHeadersList(new Headers2(options.headers));
         request2.headersList = headersList;
       }
-      const keyValue = crypto5.randomBytes(16).toString("base64");
+      const keyValue = crypto4.randomBytes(16).toString("base64");
       request2.headersList.append("sec-websocket-key", keyValue);
       request2.headersList.append("sec-websocket-version", "13");
       for (const protocol of protocols) {
@@ -17021,7 +17021,7 @@ var require_connection = __commonJS({
             return;
           }
           const secWSAccept = response.headersList.get("Sec-WebSocket-Accept");
-          const digest = crypto5.createHash("sha1").update(keyValue + uid).digest("base64");
+          const digest = crypto4.createHash("sha1").update(keyValue + uid).digest("base64");
           if (secWSAccept !== digest) {
             failWebsocketConnection(ws, "Incorrect hash received in Sec-WebSocket-Accept header.");
             return;
@@ -24321,9 +24321,9 @@ var require_dist3 = __commonJS({
   }
 });
 
-// node_modules/@azure/core-tracing/dist/commonjs/state.js
-var require_state = __commonJS({
-  "node_modules/@azure/core-tracing/dist/commonjs/state.js"(exports2) {
+// node_modules/@azure/core-tracing/dist/commonjs/state-cjs.js
+var require_state_cjs = __commonJS({
+  "node_modules/@azure/core-tracing/dist/commonjs/state-cjs.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.state = void 0;
@@ -24334,7 +24334,7 @@ var require_state = __commonJS({
 });
 
 // node_modules/@azure/core-client/dist/commonjs/state-cjs.js
-var require_state_cjs = __commonJS({
+var require_state_cjs2 = __commonJS({
   "node_modules/@azure/core-client/dist/commonjs/state-cjs.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -24353,9 +24353,9 @@ var require_path = __commonJS({
   }
 });
 
-// node_modules/balanced-match/index.js
+// node_modules/readdir-glob/node_modules/balanced-match/index.js
 var require_balanced_match = __commonJS({
-  "node_modules/balanced-match/index.js"(exports2, module) {
+  "node_modules/readdir-glob/node_modules/balanced-match/index.js"(exports2, module) {
     "use strict";
     module.exports = balanced;
     function balanced(a, b, str) {
@@ -24411,9 +24411,9 @@ var require_balanced_match = __commonJS({
   }
 });
 
-// node_modules/brace-expansion/index.js
+// node_modules/readdir-glob/node_modules/brace-expansion/index.js
 var require_brace_expansion = __commonJS({
-  "node_modules/brace-expansion/index.js"(exports2, module) {
+  "node_modules/readdir-glob/node_modules/brace-expansion/index.js"(exports2, module) {
     var balanced = require_balanced_match();
     module.exports = expandTop;
     var escSlash = "\0SLASH" + Math.random() + "\0";
@@ -24474,16 +24474,18 @@ var require_brace_expansion = __commonJS({
     }
     function expand2(str, max, isTop) {
       var expansions = [];
-      var m = balanced("{", "}", str);
-      if (!m) return [str];
-      var pre = m.pre;
-      var post = m.post.length ? expand2(m.post, max, false) : [""];
-      if (/\$$/.test(m.pre)) {
-        for (var k = 0; k < post.length && k < max; k++) {
-          var expansion = pre + "{" + m.body + "}" + post[k];
-          expansions.push(expansion);
+      for (; ; ) {
+        const m = balanced("{", "}", str);
+        if (!m) return [str];
+        const pre = m.pre;
+        if (/\$$/.test(m.pre)) {
+          const post2 = m.post.length ? expand2(m.post, max, false) : [""];
+          for (let k2 = 0; k2 < post2.length && k2 < max; k2++) {
+            const expansion2 = pre + "{" + m.body + "}" + post2[k2];
+            expansions.push(expansion2);
+          }
+          return expansions;
         }
-      } else {
         var isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
         var isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
         var isSequence = isNumericSequence || isAlphaSequence;
@@ -24491,10 +24493,12 @@ var require_brace_expansion = __commonJS({
         if (!isSequence && !isOptions) {
           if (m.post.match(/,(?!,).*\}/)) {
             str = m.pre + "{" + m.body + escClose + m.post;
-            return expand2(str, max, true);
+            isTop = true;
+            continue;
           }
           return [str];
         }
+        const post = m.post.length ? expand2(m.post, max, false) : [""];
         var n;
         if (isSequence) {
           n = m.body.split(/\.\./);
@@ -24557,8 +24561,8 @@ var require_brace_expansion = __commonJS({
               expansions.push(expansion);
           }
         }
+        return expansions;
       }
-      return expansions;
     }
   }
 });
@@ -33453,7 +33457,7 @@ var require_buffer_list = __commonJS({
 });
 
 // node_modules/readable-stream/lib/internal/streams/state.js
-var require_state2 = __commonJS({
+var require_state = __commonJS({
   "node_modules/readable-stream/lib/internal/streams/state.js"(exports2, module) {
     "use strict";
     var { MathFloor, NumberIsInteger } = require_primordials();
@@ -33916,7 +33920,7 @@ var require_readable3 = __commonJS({
     });
     var BufferList = require_buffer_list();
     var destroyImpl = require_destroy2();
-    var { getHighWaterMark, getDefaultHighWaterMark } = require_state2();
+    var { getHighWaterMark, getDefaultHighWaterMark } = require_state();
     var {
       aggregateTwoErrors,
       codes: {
@@ -34874,7 +34878,7 @@ var require_writable = __commonJS({
     var { Buffer: Buffer3 } = __require("buffer");
     var destroyImpl = require_destroy2();
     var { addAbortSignal } = require_add_abort_signal();
-    var { getHighWaterMark, getDefaultHighWaterMark } = require_state2();
+    var { getHighWaterMark, getDefaultHighWaterMark } = require_state();
     var {
       ERR_INVALID_ARG_TYPE,
       ERR_METHOD_NOT_IMPLEMENTED,
@@ -35944,7 +35948,7 @@ var require_transform = __commonJS({
     module.exports = Transform3;
     var { ERR_METHOD_NOT_IMPLEMENTED } = require_errors2().codes;
     var Duplex = require_duplex();
-    var { getHighWaterMark } = require_state2();
+    var { getHighWaterMark } = require_state();
     ObjectSetPrototypeOf(Transform3.prototype, Duplex.prototype);
     ObjectSetPrototypeOf(Transform3, Duplex);
     var kCallback = Symbol2("kCallback");
@@ -37139,7 +37143,7 @@ var require_stream2 = __commonJS({
       codes: { ERR_ILLEGAL_CONSTRUCTOR }
     } = require_errors2();
     var compose = require_compose();
-    var { setDefaultHighWaterMark, getDefaultHighWaterMark } = require_state2();
+    var { setDefaultHighWaterMark, getDefaultHighWaterMark } = require_state();
     var { pipeline } = require_pipeline();
     var { destroyer } = require_destroy2();
     var eos = require_end_of_stream();
@@ -38109,9 +38113,223 @@ var require_isPlainObject = __commonJS({
   }
 });
 
-// node_modules/minimatch/dist/commonjs/assert-valid-pattern.js
+// node_modules/glob/node_modules/balanced-match/index.js
+var require_balanced_match2 = __commonJS({
+  "node_modules/glob/node_modules/balanced-match/index.js"(exports2, module) {
+    "use strict";
+    module.exports = balanced;
+    function balanced(a, b, str) {
+      if (a instanceof RegExp) a = maybeMatch(a, str);
+      if (b instanceof RegExp) b = maybeMatch(b, str);
+      var r = range2(a, b, str);
+      return r && {
+        start: r[0],
+        end: r[1],
+        pre: str.slice(0, r[0]),
+        body: str.slice(r[0] + a.length, r[1]),
+        post: str.slice(r[1] + b.length)
+      };
+    }
+    function maybeMatch(reg, str) {
+      var m = str.match(reg);
+      return m ? m[0] : null;
+    }
+    balanced.range = range2;
+    function range2(a, b, str) {
+      var begs, beg, left, right, result;
+      var ai = str.indexOf(a);
+      var bi = str.indexOf(b, ai + 1);
+      var i = ai;
+      if (ai >= 0 && bi > 0) {
+        if (a === b) {
+          return [ai, bi];
+        }
+        begs = [];
+        left = str.length;
+        while (i >= 0 && !result) {
+          if (i == ai) {
+            begs.push(i);
+            ai = str.indexOf(a, i + 1);
+          } else if (begs.length == 1) {
+            result = [begs.pop(), bi];
+          } else {
+            beg = begs.pop();
+            if (beg < left) {
+              left = beg;
+              right = bi;
+            }
+            bi = str.indexOf(b, i + 1);
+          }
+          i = ai < bi && ai >= 0 ? ai : bi;
+        }
+        if (begs.length) {
+          result = [left, right];
+        }
+      }
+      return result;
+    }
+  }
+});
+
+// node_modules/glob/node_modules/brace-expansion/index.js
+var require_brace_expansion2 = __commonJS({
+  "node_modules/glob/node_modules/brace-expansion/index.js"(exports2, module) {
+    var balanced = require_balanced_match2();
+    module.exports = expandTop;
+    var escSlash = "\0SLASH" + Math.random() + "\0";
+    var escOpen = "\0OPEN" + Math.random() + "\0";
+    var escClose = "\0CLOSE" + Math.random() + "\0";
+    var escComma = "\0COMMA" + Math.random() + "\0";
+    var escPeriod = "\0PERIOD" + Math.random() + "\0";
+    function numeric(str) {
+      return parseInt(str, 10) == str ? parseInt(str, 10) : str.charCodeAt(0);
+    }
+    function escapeBraces(str) {
+      return str.split("\\\\").join(escSlash).split("\\{").join(escOpen).split("\\}").join(escClose).split("\\,").join(escComma).split("\\.").join(escPeriod);
+    }
+    function unescapeBraces(str) {
+      return str.split(escSlash).join("\\").split(escOpen).join("{").split(escClose).join("}").split(escComma).join(",").split(escPeriod).join(".");
+    }
+    function parseCommaParts(str) {
+      if (!str)
+        return [""];
+      var parts = [];
+      var m = balanced("{", "}", str);
+      if (!m)
+        return str.split(",");
+      var pre = m.pre;
+      var body2 = m.body;
+      var post = m.post;
+      var p = pre.split(",");
+      p[p.length - 1] += "{" + body2 + "}";
+      var postParts = parseCommaParts(post);
+      if (post.length) {
+        p[p.length - 1] += postParts.shift();
+        p.push.apply(p, postParts);
+      }
+      parts.push.apply(parts, p);
+      return parts;
+    }
+    function expandTop(str, options) {
+      if (!str)
+        return [];
+      options = options || {};
+      var max = options.max == null ? Infinity : options.max;
+      if (str.substr(0, 2) === "{}") {
+        str = "\\{\\}" + str.substr(2);
+      }
+      return expand2(escapeBraces(str), max, true).map(unescapeBraces);
+    }
+    function embrace(str) {
+      return "{" + str + "}";
+    }
+    function isPadded(el) {
+      return /^-?0\d/.test(el);
+    }
+    function lte(i, y) {
+      return i <= y;
+    }
+    function gte(i, y) {
+      return i >= y;
+    }
+    function expand2(str, max, isTop) {
+      var expansions = [];
+      for (; ; ) {
+        const m = balanced("{", "}", str);
+        if (!m) return [str];
+        const pre = m.pre;
+        if (/\$$/.test(m.pre)) {
+          const post2 = m.post.length ? expand2(m.post, max, false) : [""];
+          for (let k2 = 0; k2 < post2.length && k2 < max; k2++) {
+            const expansion2 = pre + "{" + m.body + "}" + post2[k2];
+            expansions.push(expansion2);
+          }
+          return expansions;
+        }
+        var isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
+        var isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
+        var isSequence = isNumericSequence || isAlphaSequence;
+        var isOptions = m.body.indexOf(",") >= 0;
+        if (!isSequence && !isOptions) {
+          if (m.post.match(/,(?!,).*\}/)) {
+            str = m.pre + "{" + m.body + escClose + m.post;
+            isTop = true;
+            continue;
+          }
+          return [str];
+        }
+        const post = m.post.length ? expand2(m.post, max, false) : [""];
+        var n;
+        if (isSequence) {
+          n = m.body.split(/\.\./);
+        } else {
+          n = parseCommaParts(m.body);
+          if (n.length === 1) {
+            n = expand2(n[0], max, false).map(embrace);
+            if (n.length === 1) {
+              return post.map(function(p) {
+                return m.pre + n[0] + p;
+              });
+            }
+          }
+        }
+        var N;
+        if (isSequence) {
+          var x = numeric(n[0]);
+          var y = numeric(n[1]);
+          var width = Math.max(n[0].length, n[1].length);
+          var incr = n.length == 3 ? Math.max(Math.abs(numeric(n[2])), 1) : 1;
+          var test = lte;
+          var reverse = y < x;
+          if (reverse) {
+            incr *= -1;
+            test = gte;
+          }
+          var pad = n.some(isPadded);
+          N = [];
+          for (var i = x; test(i, y) && N.length < max; i += incr) {
+            var c;
+            if (isAlphaSequence) {
+              c = String.fromCharCode(i);
+              if (c === "\\")
+                c = "";
+            } else {
+              c = String(i);
+              if (pad) {
+                var need = width - c.length;
+                if (need > 0) {
+                  var z = new Array(need + 1).join("0");
+                  if (i < 0)
+                    c = "-" + z + c.slice(1);
+                  else
+                    c = z + c;
+                }
+              }
+            }
+            N.push(c);
+          }
+        } else {
+          N = [];
+          for (var j = 0; j < n.length; j++) {
+            N.push.apply(N, expand2(n[j], max, false));
+          }
+        }
+        for (var j = 0; j < N.length; j++) {
+          for (var k = 0; k < post.length && expansions.length < max; k++) {
+            var expansion = pre + N[j] + post[k];
+            if (!isTop || isSequence || expansion)
+              expansions.push(expansion);
+          }
+        }
+        return expansions;
+      }
+    }
+  }
+});
+
+// node_modules/glob/node_modules/minimatch/dist/commonjs/assert-valid-pattern.js
 var require_assert_valid_pattern = __commonJS({
-  "node_modules/minimatch/dist/commonjs/assert-valid-pattern.js"(exports2) {
+  "node_modules/glob/node_modules/minimatch/dist/commonjs/assert-valid-pattern.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.assertValidPattern = void 0;
@@ -38128,9 +38346,9 @@ var require_assert_valid_pattern = __commonJS({
   }
 });
 
-// node_modules/minimatch/dist/commonjs/brace-expressions.js
+// node_modules/glob/node_modules/minimatch/dist/commonjs/brace-expressions.js
 var require_brace_expressions = __commonJS({
-  "node_modules/minimatch/dist/commonjs/brace-expressions.js"(exports2) {
+  "node_modules/glob/node_modules/minimatch/dist/commonjs/brace-expressions.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.parseClass = void 0;
@@ -38245,9 +38463,9 @@ var require_brace_expressions = __commonJS({
   }
 });
 
-// node_modules/minimatch/dist/commonjs/unescape.js
+// node_modules/glob/node_modules/minimatch/dist/commonjs/unescape.js
 var require_unescape = __commonJS({
-  "node_modules/minimatch/dist/commonjs/unescape.js"(exports2) {
+  "node_modules/glob/node_modules/minimatch/dist/commonjs/unescape.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.unescape = void 0;
@@ -38258,9 +38476,9 @@ var require_unescape = __commonJS({
   }
 });
 
-// node_modules/minimatch/dist/commonjs/ast.js
+// node_modules/glob/node_modules/minimatch/dist/commonjs/ast.js
 var require_ast = __commonJS({
-  "node_modules/minimatch/dist/commonjs/ast.js"(exports2) {
+  "node_modules/glob/node_modules/minimatch/dist/commonjs/ast.js"(exports2) {
     "use strict";
     var _a;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -38880,9 +39098,9 @@ var require_ast = __commonJS({
   }
 });
 
-// node_modules/minimatch/dist/commonjs/escape.js
+// node_modules/glob/node_modules/minimatch/dist/commonjs/escape.js
 var require_escape = __commonJS({
-  "node_modules/minimatch/dist/commonjs/escape.js"(exports2) {
+  "node_modules/glob/node_modules/minimatch/dist/commonjs/escape.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.escape = void 0;
@@ -38893,16 +39111,16 @@ var require_escape = __commonJS({
   }
 });
 
-// node_modules/minimatch/dist/commonjs/index.js
+// node_modules/glob/node_modules/minimatch/dist/commonjs/index.js
 var require_commonjs3 = __commonJS({
-  "node_modules/minimatch/dist/commonjs/index.js"(exports2) {
+  "node_modules/glob/node_modules/minimatch/dist/commonjs/index.js"(exports2) {
     "use strict";
     var __importDefault = exports2 && exports2.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
     };
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.unescape = exports2.escape = exports2.AST = exports2.Minimatch = exports2.match = exports2.makeRe = exports2.braceExpand = exports2.defaults = exports2.filter = exports2.GLOBSTAR = exports2.sep = exports2.minimatch = void 0;
-    var brace_expansion_1 = __importDefault(require_brace_expansion());
+    var brace_expansion_1 = __importDefault(require_brace_expansion2());
     var assert_valid_pattern_js_1 = require_assert_valid_pattern();
     var ast_js_1 = require_ast();
     var escape_js_1 = require_escape();
@@ -61393,7 +61611,7 @@ function escapeProperty(s) {
 }
 
 // node_modules/@actions/core/lib/file-command.js
-import * as crypto2 from "crypto";
+import * as crypto from "crypto";
 import * as fs from "fs";
 import * as os2 from "os";
 function issueFileCommand(command, message) {
@@ -61409,7 +61627,7 @@ function issueFileCommand(command, message) {
   });
 }
 function prepareKeyValueMessage(key, value) {
-  const delimiter4 = `ghadelimiter_${crypto2.randomUUID()}`;
+  const delimiter4 = `ghadelimiter_${crypto.randomUUID()}`;
   const convertedValue = toCommandValue(value);
   if (key.includes(delimiter4)) {
     throw new Error(`Unexpected input: name should not contain the delimiter "${delimiter4}"`);
@@ -66079,7 +66297,7 @@ function createHttpHeaders(rawHeaders) {
 
 // node_modules/@typespec/ts-http-runtime/dist/esm/util/uuidUtils.js
 function randomUUID2() {
-  return crypto.randomUUID();
+  return globalThis.crypto.randomUUID();
 }
 
 // node_modules/@typespec/ts-http-runtime/dist/esm/pipelineRequest.js
@@ -66865,7 +67083,7 @@ function logPolicy(options = {}) {
       logger7(`Request: ${sanitizer.sanitize(request2)}`);
       const response = await next(request2);
       logger7(`Response status code: ${response.status}`);
-      logger7(`Headers: ${sanitizer.sanitize(response.headers)}`);
+      logger7(`Headers: ${sanitizer.sanitize({ headers: response.headers })}`);
       return response;
     }
   };
@@ -67634,7 +67852,7 @@ async function setPlatformSpecificData2(map) {
 }
 
 // node_modules/@azure/core-rest-pipeline/dist/esm/constants.js
-var SDK_VERSION2 = "1.24.0";
+var SDK_VERSION2 = "1.25.0";
 
 // node_modules/@azure/core-rest-pipeline/dist/esm/util/userAgent.js
 function getUserAgentString2(telemetryInfo) {
@@ -67878,8 +68096,8 @@ var TracingContextImpl = class _TracingContextImpl {
 };
 
 // node_modules/@azure/core-tracing/dist/esm/state.js
-var import_state = __toESM(require_state(), 1);
-var state = import_state.state;
+var import_state_cjs = __toESM(require_state_cjs(), 1);
+var state = import_state_cjs.state;
 
 // node_modules/@azure/core-tracing/dist/esm/instrumenter.js
 function createDefaultTracingSpan() {
@@ -67950,7 +68168,7 @@ function createTracingClient(options) {
   async function withSpan(name, operationOptions, callback, spanOptions) {
     const { span, updatedOptions } = startSpan(name, operationOptions, spanOptions);
     try {
-      const result = await withContext(updatedOptions.tracingOptions.tracingContext, () => Promise.resolve(callback(updatedOptions, span)));
+      const result = await withContext(updatedOptions.tracingOptions.tracingContext, () => callback(updatedOptions, span));
       span.setStatus({ status: "success" });
       return result;
     } catch (err) {
@@ -68480,7 +68698,7 @@ var disableKeepAlivePolicyName = "DisableKeepAlivePolicy";
 function createDisableKeepAlivePolicy() {
   return {
     name: disableKeepAlivePolicyName,
-    async sendRequest(request2, next) {
+    sendRequest(request2, next) {
       request2.disableKeepAlive = true;
       return next(request2);
     }
@@ -69330,8 +69548,8 @@ var MapperTypeNames = {
 };
 
 // node_modules/@azure/core-client/dist/esm/state.js
-var import_state_cjs = __toESM(require_state_cjs(), 1);
-var state2 = import_state_cjs.state;
+var import_state_cjs2 = __toESM(require_state_cjs2(), 1);
+var state2 = import_state_cjs2.state;
 
 // node_modules/@azure/core-client/dist/esm/operationHelpers.js
 function getOperationArgumentValueFromParameter(operationArguments, parameter, fallbackObject) {
@@ -70196,6 +70414,22 @@ function requestToOptions(request2) {
 // node_modules/@azure/core-http-compat/dist/esm/util.js
 var originalRequestSymbol2 = /* @__PURE__ */ Symbol("Original PipelineRequest");
 var originalClientRequestSymbol = /* @__PURE__ */ Symbol.for("@azure/core-client original request");
+var passThroughProps = /* @__PURE__ */ new Set([
+  "url",
+  "method",
+  "withCredentials",
+  "timeout",
+  "requestId",
+  "abortSignal",
+  "body",
+  "formData",
+  "onDownloadProgress",
+  "onUploadProgress",
+  "proxySettings",
+  "streamResponseStatusCodes",
+  "agent",
+  "requestOverrides"
+]);
 function toPipelineRequest(webResource, options = {}) {
   const compatWebResource = webResource;
   const request2 = compatWebResource[originalRequestSymbol2];
@@ -70275,23 +70509,7 @@ function toWebResourceLike(request2, options) {
         if (prop === "keepAlive") {
           request2.disableKeepAlive = !value;
         }
-        const passThroughProps = [
-          "url",
-          "method",
-          "withCredentials",
-          "timeout",
-          "requestId",
-          "abortSignal",
-          "body",
-          "formData",
-          "onDownloadProgress",
-          "onUploadProgress",
-          "proxySettings",
-          "streamResponseStatusCodes",
-          "agent",
-          "requestOverrides"
-        ];
-        if (typeof prop === "string" && passThroughProps.includes(prop)) {
+        if (typeof prop === "string" && passThroughProps.has(prop)) {
           request2[prop] = value;
         }
         return Reflect.set(target, prop, value, receiver);
@@ -70917,940 +71135,6 @@ function getPositionFromMatch(match) {
 }
 
 // node_modules/@nodable/entities/src/entities.js
-var BASIC_LATIN = {
-  amp: "&",
-  AMP: "&",
-  lt: "<",
-  LT: "<",
-  gt: ">",
-  GT: ">",
-  quot: '"',
-  QUOT: '"',
-  apos: "'",
-  lsquo: "\u2018",
-  rsquo: "\u2019",
-  ldquo: "\u201C",
-  rdquo: "\u201D",
-  lsquor: "\u201A",
-  rsquor: "\u2019",
-  ldquor: "\u201E",
-  bdquo: "\u201E",
-  comma: ",",
-  period: ".",
-  colon: ":",
-  semi: ";",
-  excl: "!",
-  quest: "?",
-  num: "#",
-  dollar: "$",
-  percent: "%",
-  ast: "*",
-  commat: "@",
-  lowbar: "_",
-  verbar: "|",
-  vert: "|",
-  sol: "/",
-  bsol: "\\",
-  lbrace: "{",
-  rbrace: "}",
-  lbrack: "[",
-  rbrack: "]",
-  lpar: "(",
-  rpar: ")",
-  nbsp: "\xA0",
-  iexcl: "\xA1",
-  cent: "\xA2",
-  pound: "\xA3",
-  curren: "\xA4",
-  yen: "\xA5",
-  brvbar: "\xA6",
-  sect: "\xA7",
-  uml: "\xA8",
-  copy: "\xA9",
-  COPY: "\xA9",
-  ordf: "\xAA",
-  laquo: "\xAB",
-  not: "\xAC",
-  shy: "\xAD",
-  reg: "\xAE",
-  REG: "\xAE",
-  macr: "\xAF",
-  deg: "\xB0",
-  plusmn: "\xB1",
-  sup2: "\xB2",
-  sup3: "\xB3",
-  acute: "\xB4",
-  micro: "\xB5",
-  para: "\xB6",
-  middot: "\xB7",
-  cedil: "\xB8",
-  sup1: "\xB9",
-  ordm: "\xBA",
-  raquo: "\xBB",
-  frac14: "\xBC",
-  frac12: "\xBD",
-  half: "\xBD",
-  frac34: "\xBE",
-  iquest: "\xBF",
-  times: "\xD7",
-  div: "\xF7",
-  divide: "\xF7"
-};
-var LATIN_ACCENTS = {
-  Agrave: "\xC0",
-  agrave: "\xE0",
-  Aacute: "\xC1",
-  aacute: "\xE1",
-  Acirc: "\xC2",
-  acirc: "\xE2",
-  Atilde: "\xC3",
-  atilde: "\xE3",
-  Auml: "\xC4",
-  auml: "\xE4",
-  Aring: "\xC5",
-  aring: "\xE5",
-  AElig: "\xC6",
-  aelig: "\xE6",
-  Ccedil: "\xC7",
-  ccedil: "\xE7",
-  Egrave: "\xC8",
-  egrave: "\xE8",
-  Eacute: "\xC9",
-  eacute: "\xE9",
-  Ecirc: "\xCA",
-  ecirc: "\xEA",
-  Euml: "\xCB",
-  euml: "\xEB",
-  Igrave: "\xCC",
-  igrave: "\xEC",
-  Iacute: "\xCD",
-  iacute: "\xED",
-  Icirc: "\xCE",
-  icirc: "\xEE",
-  Iuml: "\xCF",
-  iuml: "\xEF",
-  ETH: "\xD0",
-  eth: "\xF0",
-  Ntilde: "\xD1",
-  ntilde: "\xF1",
-  Ograve: "\xD2",
-  ograve: "\xF2",
-  Oacute: "\xD3",
-  oacute: "\xF3",
-  Ocirc: "\xD4",
-  ocirc: "\xF4",
-  Otilde: "\xD5",
-  otilde: "\xF5",
-  Ouml: "\xD6",
-  ouml: "\xF6",
-  Oslash: "\xD8",
-  oslash: "\xF8",
-  Ugrave: "\xD9",
-  ugrave: "\xF9",
-  Uacute: "\xDA",
-  uacute: "\xFA",
-  Ucirc: "\xDB",
-  ucirc: "\xFB",
-  Uuml: "\xDC",
-  uuml: "\xFC",
-  Yacute: "\xDD",
-  yacute: "\xFD",
-  THORN: "\xDE",
-  thorn: "\xFE",
-  szlig: "\xDF",
-  yuml: "\xFF",
-  Yuml: "\u0178"
-};
-var LATIN_EXTENDED = {
-  Amacr: "\u0100",
-  amacr: "\u0101",
-  Abreve: "\u0102",
-  abreve: "\u0103",
-  Aogon: "\u0104",
-  aogon: "\u0105",
-  Cacute: "\u0106",
-  cacute: "\u0107",
-  Ccirc: "\u0108",
-  ccirc: "\u0109",
-  Cdot: "\u010A",
-  cdot: "\u010B",
-  Ccaron: "\u010C",
-  ccaron: "\u010D",
-  Dcaron: "\u010E",
-  dcaron: "\u010F",
-  Dstrok: "\u0110",
-  dstrok: "\u0111",
-  Emacr: "\u0112",
-  emacr: "\u0113",
-  Ecaron: "\u011A",
-  ecaron: "\u011B",
-  Edot: "\u0116",
-  edot: "\u0117",
-  Eogon: "\u0118",
-  eogon: "\u0119",
-  Gcirc: "\u011C",
-  gcirc: "\u011D",
-  Gbreve: "\u011E",
-  gbreve: "\u011F",
-  Gdot: "\u0120",
-  gdot: "\u0121",
-  Gcedil: "\u0122",
-  Hcirc: "\u0124",
-  hcirc: "\u0125",
-  Hstrok: "\u0126",
-  hstrok: "\u0127",
-  Itilde: "\u0128",
-  itilde: "\u0129",
-  Imacr: "\u012A",
-  imacr: "\u012B",
-  Iogon: "\u012E",
-  iogon: "\u012F",
-  Idot: "\u0130",
-  IJlig: "\u0132",
-  ijlig: "\u0133",
-  Jcirc: "\u0134",
-  jcirc: "\u0135",
-  Kcedil: "\u0136",
-  kcedil: "\u0137",
-  kgreen: "\u0138",
-  Lacute: "\u0139",
-  lacute: "\u013A",
-  Lcedil: "\u013B",
-  lcedil: "\u013C",
-  Lcaron: "\u013D",
-  lcaron: "\u013E",
-  Lmidot: "\u013F",
-  lmidot: "\u0140",
-  Lstrok: "\u0141",
-  lstrok: "\u0142",
-  Nacute: "\u0143",
-  nacute: "\u0144",
-  Ncaron: "\u0147",
-  ncaron: "\u0148",
-  Ncedil: "\u0145",
-  ncedil: "\u0146",
-  ENG: "\u014A",
-  eng: "\u014B",
-  Omacr: "\u014C",
-  omacr: "\u014D",
-  Odblac: "\u0150",
-  odblac: "\u0151",
-  OElig: "\u0152",
-  oelig: "\u0153",
-  Racute: "\u0154",
-  racute: "\u0155",
-  Rcaron: "\u0158",
-  rcaron: "\u0159",
-  Rcedil: "\u0156",
-  rcedil: "\u0157",
-  Sacute: "\u015A",
-  sacute: "\u015B",
-  Scirc: "\u015C",
-  scirc: "\u015D",
-  Scedil: "\u015E",
-  scedil: "\u015F",
-  Scaron: "\u0160",
-  scaron: "\u0161",
-  Tcedil: "\u0162",
-  tcedil: "\u0163",
-  Tcaron: "\u0164",
-  tcaron: "\u0165",
-  Tstrok: "\u0166",
-  tstrok: "\u0167",
-  Utilde: "\u0168",
-  utilde: "\u0169",
-  Umacr: "\u016A",
-  umacr: "\u016B",
-  Ubreve: "\u016C",
-  ubreve: "\u016D",
-  Uring: "\u016E",
-  uring: "\u016F",
-  Udblac: "\u0170",
-  udblac: "\u0171",
-  Uogon: "\u0172",
-  uogon: "\u0173",
-  Wcirc: "\u0174",
-  wcirc: "\u0175",
-  Ycirc: "\u0176",
-  ycirc: "\u0177",
-  Zacute: "\u0179",
-  zacute: "\u017A",
-  Zdot: "\u017B",
-  zdot: "\u017C",
-  Zcaron: "\u017D",
-  zcaron: "\u017E"
-};
-var GREEK = {
-  Alpha: "\u0391",
-  alpha: "\u03B1",
-  Beta: "\u0392",
-  beta: "\u03B2",
-  Gamma: "\u0393",
-  gamma: "\u03B3",
-  Delta: "\u0394",
-  delta: "\u03B4",
-  Epsilon: "\u0395",
-  epsilon: "\u03B5",
-  epsiv: "\u03F5",
-  varepsilon: "\u03F5",
-  Zeta: "\u0396",
-  zeta: "\u03B6",
-  Eta: "\u0397",
-  eta: "\u03B7",
-  Theta: "\u0398",
-  theta: "\u03B8",
-  thetasym: "\u03D1",
-  vartheta: "\u03D1",
-  Iota: "\u0399",
-  iota: "\u03B9",
-  Kappa: "\u039A",
-  kappa: "\u03BA",
-  kappav: "\u03F0",
-  varkappa: "\u03F0",
-  Lambda: "\u039B",
-  lambda: "\u03BB",
-  Mu: "\u039C",
-  mu: "\u03BC",
-  Nu: "\u039D",
-  nu: "\u03BD",
-  Xi: "\u039E",
-  xi: "\u03BE",
-  Omicron: "\u039F",
-  omicron: "\u03BF",
-  Pi: "\u03A0",
-  pi: "\u03C0",
-  piv: "\u03D6",
-  varpi: "\u03D6",
-  Rho: "\u03A1",
-  rho: "\u03C1",
-  rhov: "\u03F1",
-  varrho: "\u03F1",
-  Sigma: "\u03A3",
-  sigma: "\u03C3",
-  sigmaf: "\u03C2",
-  sigmav: "\u03C2",
-  varsigma: "\u03C2",
-  Tau: "\u03A4",
-  tau: "\u03C4",
-  Upsilon: "\u03A5",
-  upsilon: "\u03C5",
-  upsi: "\u03C5",
-  Upsi: "\u03D2",
-  upsih: "\u03D2",
-  Phi: "\u03A6",
-  phi: "\u03C6",
-  phiv: "\u03D5",
-  varphi: "\u03D5",
-  Chi: "\u03A7",
-  chi: "\u03C7",
-  Psi: "\u03A8",
-  psi: "\u03C8",
-  Omega: "\u03A9",
-  omega: "\u03C9",
-  ohm: "\u03A9",
-  Gammad: "\u03DC",
-  gammad: "\u03DD",
-  digamma: "\u03DD"
-};
-var CYRILLIC = {
-  Afr: "\u{1D504}",
-  afr: "\u{1D51E}",
-  Acy: "\u0410",
-  acy: "\u0430",
-  Bcy: "\u0411",
-  bcy: "\u0431",
-  Vcy: "\u0412",
-  vcy: "\u0432",
-  Gcy: "\u0413",
-  gcy: "\u0433",
-  Dcy: "\u0414",
-  dcy: "\u0434",
-  IEcy: "\u0415",
-  iecy: "\u0435",
-  IOcy: "\u0401",
-  iocy: "\u0451",
-  ZHcy: "\u0416",
-  zhcy: "\u0436",
-  Zcy: "\u0417",
-  zcy: "\u0437",
-  Icy: "\u0418",
-  icy: "\u0438",
-  Jcy: "\u0419",
-  jcy: "\u0439",
-  Kcy: "\u041A",
-  kcy: "\u043A",
-  Lcy: "\u041B",
-  lcy: "\u043B",
-  Mcy: "\u041C",
-  mcy: "\u043C",
-  Ncy: "\u041D",
-  ncy: "\u043D",
-  Ocy: "\u041E",
-  ocy: "\u043E",
-  Pcy: "\u041F",
-  pcy: "\u043F",
-  Rcy: "\u0420",
-  rcy: "\u0440",
-  Scy: "\u0421",
-  scy: "\u0441",
-  Tcy: "\u0422",
-  tcy: "\u0442",
-  Ucy: "\u0423",
-  ucy: "\u0443",
-  Fcy: "\u0424",
-  fcy: "\u0444",
-  KHcy: "\u0425",
-  khcy: "\u0445",
-  TScy: "\u0426",
-  tscy: "\u0446",
-  CHcy: "\u0427",
-  chcy: "\u0447",
-  SHcy: "\u0428",
-  shcy: "\u0448",
-  SHCHcy: "\u0429",
-  shchcy: "\u0449",
-  HARDcy: "\u042A",
-  hardcy: "\u044A",
-  Ycy: "\u042B",
-  ycy: "\u044B",
-  SOFTcy: "\u042C",
-  softcy: "\u044C",
-  Ecy: "\u042D",
-  ecy: "\u044D",
-  YUcy: "\u042E",
-  yucy: "\u044E",
-  YAcy: "\u042F",
-  yacy: "\u044F",
-  DJcy: "\u0402",
-  djcy: "\u0452",
-  GJcy: "\u0403",
-  gjcy: "\u0453",
-  Jukcy: "\u0404",
-  jukcy: "\u0454",
-  DScy: "\u0405",
-  dscy: "\u0455",
-  Iukcy: "\u0406",
-  iukcy: "\u0456",
-  YIcy: "\u0407",
-  yicy: "\u0457",
-  Jsercy: "\u0408",
-  jsercy: "\u0458",
-  LJcy: "\u0409",
-  ljcy: "\u0459",
-  NJcy: "\u040A",
-  njcy: "\u045A",
-  TSHcy: "\u040B",
-  tshcy: "\u045B",
-  KJcy: "\u040C",
-  kjcy: "\u045C",
-  Ubrcy: "\u040E",
-  ubrcy: "\u045E",
-  DZcy: "\u040F",
-  dzcy: "\u045F"
-};
-var MATH = {
-  plus: "+",
-  pm: "\xB1",
-  times: "\xD7",
-  div: "\xF7",
-  divide: "\xF7",
-  sdot: "\u22C5",
-  star: "\u2606",
-  starf: "\u2605",
-  bigstar: "\u2605",
-  lowast: "\u2217",
-  ast: "*",
-  midast: "*",
-  compfn: "\u2218",
-  smallcircle: "\u2218",
-  bullet: "\u2022",
-  bull: "\u2022",
-  nbsp: "\xA0",
-  hellip: "\u2026",
-  mldr: "\u2026",
-  prime: "\u2032",
-  Prime: "\u2033",
-  tprime: "\u2034",
-  bprime: "\u2035",
-  backprime: "\u2035",
-  minus: "\u2212",
-  minusd: "\u2238",
-  dotminus: "\u2238",
-  plusdo: "\u2214",
-  dotplus: "\u2214",
-  plusmn: "\xB1",
-  minusplus: "\u2213",
-  mnplus: "\u2213",
-  mp: "\u2213",
-  setminus: "\u2216",
-  smallsetminus: "\u2216",
-  Backslash: "\u2216",
-  setmn: "\u2216",
-  ssetmn: "\u2216",
-  lowbar: "_",
-  verbar: "|",
-  vert: "|",
-  VerticalLine: "|",
-  colon: ":",
-  Colon: "\u2237",
-  Proportion: "\u2237",
-  ratio: "\u2236",
-  equals: "=",
-  ne: "\u2260",
-  nequiv: "\u2262",
-  equiv: "\u2261",
-  Congruent: "\u2261",
-  sim: "\u223C",
-  thicksim: "\u223C",
-  thksim: "\u223C",
-  sime: "\u2243",
-  simeq: "\u2243",
-  TildeEqual: "\u2243",
-  asymp: "\u2248",
-  approx: "\u2248",
-  thickapprox: "\u2248",
-  thkap: "\u2248",
-  TildeTilde: "\u2248",
-  ncong: "\u2247",
-  cong: "\u2245",
-  TildeFullEqual: "\u2245",
-  asympeq: "\u224D",
-  CupCap: "\u224D",
-  bump: "\u224E",
-  Bumpeq: "\u224E",
-  HumpDownHump: "\u224E",
-  bumpe: "\u224F",
-  bumpeq: "\u224F",
-  HumpEqual: "\u224F",
-  le: "\u2264",
-  LessEqual: "\u2264",
-  ge: "\u2265",
-  GreaterEqual: "\u2265",
-  lesseqgtr: "\u22DA",
-  lesseqqgtr: "\u2A8B",
-  greater: ">",
-  less: "<"
-};
-var MATH_ADVANCED = {
-  alefsym: "\u2135",
-  aleph: "\u2135",
-  beth: "\u2136",
-  gimel: "\u2137",
-  daleth: "\u2138",
-  forall: "\u2200",
-  ForAll: "\u2200",
-  part: "\u2202",
-  PartialD: "\u2202",
-  exist: "\u2203",
-  Exists: "\u2203",
-  nexist: "\u2204",
-  nexists: "\u2204",
-  empty: "\u2205",
-  emptyset: "\u2205",
-  emptyv: "\u2205",
-  varnothing: "\u2205",
-  nabla: "\u2207",
-  Del: "\u2207",
-  isin: "\u2208",
-  isinv: "\u2208",
-  in: "\u2208",
-  Element: "\u2208",
-  notin: "\u2209",
-  notinva: "\u2209",
-  ni: "\u220B",
-  niv: "\u220B",
-  SuchThat: "\u220B",
-  ReverseElement: "\u220B",
-  notni: "\u220C",
-  notniva: "\u220C",
-  prod: "\u220F",
-  Product: "\u220F",
-  coprod: "\u2210",
-  Coproduct: "\u2210",
-  sum: "\u2211",
-  Sum: "\u2211",
-  minus: "\u2212",
-  mp: "\u2213",
-  plusdo: "\u2214",
-  dotplus: "\u2214",
-  setminus: "\u2216",
-  lowast: "\u2217",
-  radic: "\u221A",
-  Sqrt: "\u221A",
-  prop: "\u221D",
-  propto: "\u221D",
-  Proportional: "\u221D",
-  varpropto: "\u221D",
-  infin: "\u221E",
-  infintie: "\u29DD",
-  ang: "\u2220",
-  angle: "\u2220",
-  angmsd: "\u2221",
-  measuredangle: "\u2221",
-  angsph: "\u2222",
-  mid: "\u2223",
-  VerticalBar: "\u2223",
-  nmid: "\u2224",
-  nsmid: "\u2224",
-  npar: "\u2226",
-  parallel: "\u2225",
-  spar: "\u2225",
-  nparallel: "\u2226",
-  nspar: "\u2226",
-  and: "\u2227",
-  wedge: "\u2227",
-  or: "\u2228",
-  vee: "\u2228",
-  cap: "\u2229",
-  cup: "\u222A",
-  int: "\u222B",
-  Integral: "\u222B",
-  conint: "\u222E",
-  ContourIntegral: "\u222E",
-  Conint: "\u222F",
-  DoubleContourIntegral: "\u222F",
-  Cconint: "\u2230",
-  there4: "\u2234",
-  therefore: "\u2234",
-  Therefore: "\u2234",
-  becaus: "\u2235",
-  because: "\u2235",
-  Because: "\u2235",
-  ratio: "\u2236",
-  Proportion: "\u2237",
-  minusd: "\u2238",
-  dotminus: "\u2238",
-  mDDot: "\u223A",
-  homtht: "\u223B",
-  sim: "\u223C",
-  bsimg: "\u223D",
-  backsim: "\u223D",
-  ac: "\u223E",
-  mstpos: "\u223E",
-  acd: "\u223F",
-  VerticalTilde: "\u2240",
-  wr: "\u2240",
-  wreath: "\u2240",
-  nsime: "\u2244",
-  nsimeq: "\u2244",
-  ncong: "\u2247",
-  simne: "\u2246",
-  ncongdot: "\u2A6D\u0338",
-  ngsim: "\u2275",
-  nsim: "\u2241",
-  napprox: "\u2249",
-  nap: "\u2249",
-  ngeq: "\u2271",
-  nge: "\u2271",
-  nleq: "\u2270",
-  nle: "\u2270",
-  ngtr: "\u226F",
-  ngt: "\u226F",
-  nless: "\u226E",
-  nlt: "\u226E",
-  nprec: "\u2280",
-  npr: "\u2280",
-  nsucc: "\u2281",
-  nsc: "\u2281"
-};
-var ARROWS = {
-  larr: "\u2190",
-  leftarrow: "\u2190",
-  LeftArrow: "\u2190",
-  uarr: "\u2191",
-  uparrow: "\u2191",
-  UpArrow: "\u2191",
-  rarr: "\u2192",
-  rightarrow: "\u2192",
-  RightArrow: "\u2192",
-  darr: "\u2193",
-  downarrow: "\u2193",
-  DownArrow: "\u2193",
-  harr: "\u2194",
-  leftrightarrow: "\u2194",
-  LeftRightArrow: "\u2194",
-  varr: "\u2195",
-  updownarrow: "\u2195",
-  UpDownArrow: "\u2195",
-  nwarr: "\u2196",
-  nwarrow: "\u2196",
-  UpperLeftArrow: "\u2196",
-  nearr: "\u2197",
-  nearrow: "\u2197",
-  UpperRightArrow: "\u2197",
-  searr: "\u2198",
-  searrow: "\u2198",
-  LowerRightArrow: "\u2198",
-  swarr: "\u2199",
-  swarrow: "\u2199",
-  LowerLeftArrow: "\u2199",
-  lArr: "\u21D0",
-  Leftarrow: "\u21D0",
-  uArr: "\u21D1",
-  Uparrow: "\u21D1",
-  rArr: "\u21D2",
-  Rightarrow: "\u21D2",
-  dArr: "\u21D3",
-  Downarrow: "\u21D3",
-  hArr: "\u21D4",
-  Leftrightarrow: "\u21D4",
-  iff: "\u21D4",
-  vArr: "\u21D5",
-  Updownarrow: "\u21D5",
-  lAarr: "\u21DA",
-  Lleftarrow: "\u21DA",
-  rAarr: "\u21DB",
-  Rrightarrow: "\u21DB",
-  lrarr: "\u21C6",
-  leftrightarrows: "\u21C6",
-  rlarr: "\u21C4",
-  rightleftarrows: "\u21C4",
-  lrhar: "\u21CB",
-  leftrightharpoons: "\u21CB",
-  ReverseEquilibrium: "\u21CB",
-  rlhar: "\u21CC",
-  rightleftharpoons: "\u21CC",
-  Equilibrium: "\u21CC",
-  udarr: "\u21C5",
-  UpArrowDownArrow: "\u21C5",
-  duarr: "\u21F5",
-  DownArrowUpArrow: "\u21F5",
-  llarr: "\u21C7",
-  leftleftarrows: "\u21C7",
-  rrarr: "\u21C9",
-  rightrightarrows: "\u21C9",
-  ddarr: "\u21CA",
-  downdownarrows: "\u21CA",
-  har: "\u21BD",
-  lhard: "\u21BD",
-  leftharpoondown: "\u21BD",
-  lharu: "\u21BC",
-  leftharpoonup: "\u21BC",
-  rhard: "\u21C1",
-  rightharpoondown: "\u21C1",
-  rharu: "\u21C0",
-  rightharpoonup: "\u21C0",
-  lsh: "\u21B0",
-  Lsh: "\u21B0",
-  rsh: "\u21B1",
-  Rsh: "\u21B1",
-  ldsh: "\u21B2",
-  rdsh: "\u21B3",
-  hookleftarrow: "\u21A9",
-  hookrightarrow: "\u21AA",
-  mapstoleft: "\u21A4",
-  mapstoup: "\u21A5",
-  map: "\u21A6",
-  mapsto: "\u21A6",
-  mapstodown: "\u21A7",
-  crarr: "\u21B5",
-  nleftarrow: "\u219A",
-  nleftrightarrow: "\u21AE",
-  nrightarrow: "\u219B",
-  nrarr: "\u219B",
-  larrtl: "\u21A2",
-  rarrtl: "\u21A3",
-  leftarrowtail: "\u21A2",
-  rightarrowtail: "\u21A3",
-  twoheadleftarrow: "\u219E",
-  twoheadrightarrow: "\u21A0",
-  Larr: "\u219E",
-  Rarr: "\u21A0",
-  larrhk: "\u21A9",
-  rarrhk: "\u21AA",
-  larrlp: "\u21AB",
-  looparrowleft: "\u21AB",
-  rarrlp: "\u21AC",
-  looparrowright: "\u21AC",
-  harrw: "\u21AD",
-  leftrightsquigarrow: "\u21AD",
-  nrarrw: "\u219D\u0338",
-  rarrw: "\u219D",
-  rightsquigarrow: "\u219D",
-  larrbfs: "\u291F",
-  rarrbfs: "\u2920",
-  nvHarr: "\u2904",
-  nvlArr: "\u2902",
-  nvrArr: "\u2903",
-  larrfs: "\u291D",
-  rarrfs: "\u291E",
-  Map: "\u2905",
-  larrsim: "\u2973",
-  rarrsim: "\u2974",
-  harrcir: "\u2948",
-  Uarrocir: "\u2949",
-  lurdshar: "\u294A",
-  ldrdhar: "\u2967",
-  ldrushar: "\u294B",
-  rdldhar: "\u2969",
-  lrhard: "\u296D",
-  uharr: "\u21BE",
-  uharl: "\u21BF",
-  dharr: "\u21C2",
-  dharl: "\u21C3",
-  Uarr: "\u219F",
-  Darr: "\u21A1",
-  zigrarr: "\u21DD",
-  nwArr: "\u21D6",
-  neArr: "\u21D7",
-  seArr: "\u21D8",
-  swArr: "\u21D9",
-  nharr: "\u21AE",
-  nhArr: "\u21CE",
-  nlarr: "\u219A",
-  nlArr: "\u21CD",
-  nrArr: "\u21CF",
-  larrb: "\u21E4",
-  LeftArrowBar: "\u21E4",
-  rarrb: "\u21E5",
-  RightArrowBar: "\u21E5"
-};
-var SHAPES = {
-  square: "\u25A1",
-  Square: "\u25A1",
-  squ: "\u25A1",
-  squf: "\u25AA",
-  squarf: "\u25AA",
-  blacksquar: "\u25AA",
-  blacksquare: "\u25AA",
-  FilledVerySmallSquare: "\u25AA",
-  blk34: "\u2593",
-  blk12: "\u2592",
-  blk14: "\u2591",
-  block: "\u2588",
-  srect: "\u25AD",
-  rect: "\u25AD",
-  sdot: "\u22C5",
-  sdotb: "\u22A1",
-  dotsquare: "\u22A1",
-  triangle: "\u25B5",
-  tri: "\u25B5",
-  trine: "\u25B5",
-  utri: "\u25B5",
-  triangledown: "\u25BF",
-  dtri: "\u25BF",
-  tridown: "\u25BF",
-  triangleleft: "\u25C3",
-  ltri: "\u25C3",
-  triangleright: "\u25B9",
-  rtri: "\u25B9",
-  blacktriangle: "\u25B4",
-  utrif: "\u25B4",
-  blacktriangledown: "\u25BE",
-  dtrif: "\u25BE",
-  blacktriangleleft: "\u25C2",
-  ltrif: "\u25C2",
-  blacktriangleright: "\u25B8",
-  rtrif: "\u25B8",
-  loz: "\u25CA",
-  lozenge: "\u25CA",
-  blacklozenge: "\u29EB",
-  lozf: "\u29EB",
-  bigcirc: "\u25EF",
-  xcirc: "\u25EF",
-  circ: "\u02C6",
-  Circle: "\u25CB",
-  cir: "\u25CB",
-  o: "\u25CB",
-  bullet: "\u2022",
-  bull: "\u2022",
-  hellip: "\u2026",
-  mldr: "\u2026",
-  nldr: "\u2025",
-  boxh: "\u2500",
-  HorizontalLine: "\u2500",
-  boxv: "\u2502",
-  boxdr: "\u250C",
-  boxdl: "\u2510",
-  boxur: "\u2514",
-  boxul: "\u2518",
-  boxvr: "\u251C",
-  boxvl: "\u2524",
-  boxhd: "\u252C",
-  boxhu: "\u2534",
-  boxvh: "\u253C",
-  boxH: "\u2550",
-  boxV: "\u2551",
-  boxdR: "\u2552",
-  boxDr: "\u2553",
-  boxDR: "\u2554",
-  boxDl: "\u2555",
-  boxdL: "\u2556",
-  boxDL: "\u2557",
-  boxuR: "\u2558",
-  boxUr: "\u2559",
-  boxUR: "\u255A",
-  boxUl: "\u255C",
-  boxuL: "\u255B",
-  boxUL: "\u255D",
-  boxvR: "\u255E",
-  boxVr: "\u255F",
-  boxVR: "\u2560",
-  boxVl: "\u2562",
-  boxvL: "\u2561",
-  boxVL: "\u2563",
-  boxHd: "\u2564",
-  boxhD: "\u2565",
-  boxHD: "\u2566",
-  boxHu: "\u2567",
-  boxhU: "\u2568",
-  boxHU: "\u2569",
-  boxvH: "\u256A",
-  boxVh: "\u256B",
-  boxVH: "\u256C"
-};
-var PUNCTUATION = {
-  excl: "!",
-  iexcl: "\xA1",
-  brvbar: "\xA6",
-  sect: "\xA7",
-  uml: "\xA8",
-  copy: "\xA9",
-  ordf: "\xAA",
-  laquo: "\xAB",
-  not: "\xAC",
-  shy: "\xAD",
-  reg: "\xAE",
-  macr: "\xAF",
-  deg: "\xB0",
-  plusmn: "\xB1",
-  sup2: "\xB2",
-  sup3: "\xB3",
-  acute: "\xB4",
-  micro: "\xB5",
-  para: "\xB6",
-  middot: "\xB7",
-  cedil: "\xB8",
-  sup1: "\xB9",
-  ordm: "\xBA",
-  raquo: "\xBB",
-  frac14: "\xBC",
-  frac12: "\xBD",
-  frac34: "\xBE",
-  iquest: "\xBF",
-  nbsp: "\xA0",
-  comma: ",",
-  period: ".",
-  colon: ":",
-  semi: ";",
-  vert: "|",
-  Verbar: "\u2016",
-  verbar: "|",
-  dblac: "\u02DD",
-  circ: "\u02C6",
-  caron: "\u02C7",
-  breve: "\u02D8",
-  dot: "\u02D9",
-  ring: "\u02DA",
-  ogon: "\u02DB",
-  tilde: "\u02DC",
-  DiacriticalGrave: "`",
-  DiacriticalAcute: "\xB4",
-  DiacriticalTilde: "\u02DC",
-  DiacriticalDot: "\u02D9",
-  DiacriticalDoubleAcute: "\u02DD",
-  grave: "`"
-};
 var CURRENCY = {
   cent: "\xA2",
   pound: "\xA3",
@@ -71867,106 +71151,6 @@ var CURRENCY = {
   won: "\u20A9",
   yuan: "\xA5",
   cedil: "\xB8"
-};
-var FRACTIONS = {
-  frac12: "\xBD",
-  half: "\xBD",
-  frac13: "\u2153",
-  frac14: "\xBC",
-  frac15: "\u2155",
-  frac16: "\u2159",
-  frac18: "\u215B",
-  frac23: "\u2154",
-  frac25: "\u2156",
-  frac34: "\xBE",
-  frac35: "\u2157",
-  frac38: "\u215C",
-  frac45: "\u2158",
-  frac56: "\u215A",
-  frac58: "\u215D",
-  frac78: "\u215E",
-  frasl: "\u2044"
-};
-var MISC_SYMBOLS = {
-  trade: "\u2122",
-  TRADE: "\u2122",
-  telrec: "\u2315",
-  target: "\u2316",
-  ulcorn: "\u231C",
-  ulcorner: "\u231C",
-  urcorn: "\u231D",
-  urcorner: "\u231D",
-  dlcorn: "\u231E",
-  llcorner: "\u231E",
-  drcorn: "\u231F",
-  lrcorner: "\u231F",
-  intercal: "\u22BA",
-  intcal: "\u22BA",
-  oplus: "\u2295",
-  CirclePlus: "\u2295",
-  ominus: "\u2296",
-  CircleMinus: "\u2296",
-  otimes: "\u2297",
-  CircleTimes: "\u2297",
-  osol: "\u2298",
-  odot: "\u2299",
-  CircleDot: "\u2299",
-  oast: "\u229B",
-  circledast: "\u229B",
-  odash: "\u229D",
-  circleddash: "\u229D",
-  ocirc: "\u229A",
-  circledcirc: "\u229A",
-  boxplus: "\u229E",
-  plusb: "\u229E",
-  boxminus: "\u229F",
-  minusb: "\u229F",
-  boxtimes: "\u22A0",
-  timesb: "\u22A0",
-  boxdot: "\u22A1",
-  sdotb: "\u22A1",
-  veebar: "\u22BB",
-  vee: "\u2228",
-  barvee: "\u22BD",
-  and: "\u2227",
-  wedge: "\u2227",
-  Cap: "\u22D2",
-  Cup: "\u22D3",
-  Fork: "\u22D4",
-  pitchfork: "\u22D4",
-  epar: "\u22D5",
-  ltlarr: "\u2976",
-  nvap: "\u224D\u20D2",
-  nvsim: "\u223C\u20D2",
-  nvge: "\u2265\u20D2",
-  nvle: "\u2264\u20D2",
-  nvlt: "<\u20D2",
-  nvgt: ">\u20D2",
-  nvltrie: "\u22B4\u20D2",
-  nvrtrie: "\u22B5\u20D2",
-  Vdash: "\u22A9",
-  dashv: "\u22A3",
-  vDash: "\u22A8",
-  Vvdash: "\u22AA",
-  nvdash: "\u22AC",
-  nvDash: "\u22AD",
-  nVdash: "\u22AE",
-  nVDash: "\u22AF"
-};
-var ALL_ENTITIES = {
-  ...BASIC_LATIN,
-  ...LATIN_ACCENTS,
-  ...LATIN_EXTENDED,
-  ...GREEK,
-  ...CYRILLIC,
-  ...MATH,
-  ...MATH_ADVANCED,
-  ...ARROWS,
-  ...SHAPES,
-  ...PUNCTUATION,
-  ...CURRENCY,
-  ...FRACTIONS,
-  ...MISC_SYMBOLS
 };
 var XML = {
   amp: "&",
@@ -72630,8 +71814,35 @@ var buildRegexes = (startChar, char, flags = "") => {
 };
 var regexes10 = buildRegexes(nameStartChar10, nameChar10);
 var regexes11 = buildRegexes(nameStartChar11, nameChar11, "u");
-var getRegexes = (xmlVersion = "1.0") => xmlVersion === "1.1" ? regexes11 : regexes10;
-var qName = (str, { xmlVersion = "1.0" } = {}) => getRegexes(xmlVersion).qName.test(str);
+var nameStartCharAscii = ":A-Za-z_";
+var nameCharAscii = nameStartCharAscii + "\\-\\.\\d";
+var regexesAscii = buildRegexes(nameStartCharAscii, nameCharAscii);
+var getRegexes = (xmlVersion = "1.0", asciiOnly = false) => {
+  if (asciiOnly) return regexesAscii;
+  return xmlVersion === "1.1" ? regexes11 : regexes10;
+};
+var qName = (str, { xmlVersion = "1.0", asciiOnly = false } = {}) => getRegexes(xmlVersion, asciiOnly).qName.test(str);
+var PRODUCTIONS = ["name", "ncName", "qName", "nmToken", "nmTokens"];
+var createValidator = (production, { xmlVersion = "1.0", asciiOnly = false, maxCacheSize = 2048 } = {}) => {
+  if (!PRODUCTIONS.includes(production)) {
+    throw new TypeError(
+      `Unknown production "${production}". Must be one of: ${PRODUCTIONS.join(", ")}`
+    );
+  }
+  const regex = getRegexes(xmlVersion, asciiOnly)[production];
+  let cache = /* @__PURE__ */ new Map();
+  const validator = (str) => {
+    const cached = cache.get(str);
+    if (cached !== void 0) return cached;
+    const result = regex.test(str);
+    if (cache.size < maxCacheSize) cache.set(str, result);
+    return result;
+  };
+  validator.reset = () => {
+    cache = /* @__PURE__ */ new Map();
+  };
+  return validator;
+};
 
 // node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
 var DocTypeReader = class {
@@ -73793,17 +73004,16 @@ var Matcher = class {
       this.path[this.path.length - 1].values = void 0;
     }
     const currentLevel = this.path.length;
-    if (!this.siblingStacks[currentLevel]) {
-      this.siblingStacks[currentLevel] = /* @__PURE__ */ new Map();
+    let level = this.siblingStacks[currentLevel];
+    if (!level) {
+      level = { counts: /* @__PURE__ */ new Map(), total: 0 };
+      this.siblingStacks[currentLevel] = level;
     }
-    const siblings = this.siblingStacks[currentLevel];
     const siblingKey = namespace ? `${namespace}:${tagName}` : tagName;
-    const counter = siblings.get(siblingKey) || 0;
-    let position = 0;
-    for (const count of siblings.values()) {
-      position += count;
-    }
-    siblings.set(siblingKey, counter + 1);
+    const counter = level.counts.get(siblingKey) || 0;
+    const position = level.total;
+    level.counts.set(siblingKey, counter + 1);
+    level.total++;
     const node = {
       tag: tagName,
       position,
@@ -74112,7 +73322,7 @@ var Matcher = class {
   snapshot() {
     return {
       path: this.path.map((node) => ({ ...node })),
-      siblingStacks: this.siblingStacks.map((map) => new Map(map)),
+      siblingStacks: this.siblingStacks.map((level) => level ? { counts: new Map(level.counts), total: level.total } : level),
       keptAttrs: this._keptAttrs.map((entry) => ({ ...entry }))
     };
   }
@@ -74123,7 +73333,7 @@ var Matcher = class {
   restore(snapshot2) {
     this._pathStringCache = null;
     this.path = snapshot2.path.map((node) => ({ ...node }));
-    this.siblingStacks = snapshot2.siblingStacks.map((map) => new Map(map));
+    this.siblingStacks = snapshot2.siblingStacks.map((level) => level ? { counts: new Map(level.counts), total: level.total } : level);
     this._keptAttrs = (snapshot2.keptAttrs || []).map((entry) => ({ ...entry }));
   }
   /**
@@ -74461,27 +73671,6 @@ var SQL_PATTERNS = [
 ];
 var sql_default = SQL_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/sql-strict.js
-var SQL_STRICT_EXTRA = [
-  {
-    id: "sql-line-comment",
-    description: "SQL line comment: -- followed by whitespace or end of string",
-    pattern: /--(?:\s|$)/
-  },
-  {
-    id: "sql-stacked-query",
-    description: "Stacked queries: semicolon immediately followed by a SQL keyword",
-    pattern: /;\s{0,10}(?:SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC)\b/i
-  },
-  {
-    id: "sql-hex-encoding",
-    description: "Hex-encoded string injection: 0x41414141 style (MySQL)",
-    pattern: /\b0x[0-9a-f]{4,}/i
-  }
-];
-var SQL_STRICT_PATTERNS = [...sql_default, ...SQL_STRICT_EXTRA];
-var sql_strict_default = SQL_STRICT_PATTERNS;
-
 // node_modules/is-unsafe/src/contexts/shell.js
 var SHELL_PATTERNS = [
   {
@@ -74793,8 +73982,38 @@ var LOG_PATTERNS = [
 ];
 var log_default = LOG_PATTERNS;
 
-// node_modules/is-unsafe/src/registry.js
-var CONTEXT_REGISTRY = {
+// node_modules/is-unsafe/src/contexts/sql-strict.js
+var SQL_STRICT_EXTRA = [
+  {
+    id: "sql-line-comment",
+    description: "SQL line comment: -- followed by whitespace or end of string",
+    pattern: /--(?:\s|$)/
+  },
+  {
+    id: "sql-stacked-query",
+    description: "Stacked queries: semicolon immediately followed by a SQL keyword",
+    pattern: /;\s{0,10}(?:SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC)\b/i
+  },
+  {
+    id: "sql-hex-encoding",
+    description: "Hex-encoded string injection: 0x41414141 style (MySQL)",
+    pattern: /\b0x[0-9a-f]{4,}/i
+  }
+];
+var SQL_STRICT_PATTERNS = [...sql_default, ...SQL_STRICT_EXTRA];
+var sql_strict_default = SQL_STRICT_PATTERNS;
+
+// node_modules/is-unsafe/src/index.js
+html_default.label = "HTML";
+xml_default.label = "XML";
+svg_default.label = "SVG";
+sql_default.label = "SQL";
+sql_strict_default.label = "SQL-STRICT";
+shell_default.label = "SHELL";
+redos_default.label = "REDOS";
+nosql_default.label = "NOSQL";
+log_default.label = "LOG";
+var VALID_CONTEXTS = Object.freeze({
   HTML: html_default,
   XML: xml_default,
   SVG: svg_default,
@@ -74804,13 +74023,7 @@ var CONTEXT_REGISTRY = {
   REDOS: redos_default,
   NOSQL: nosql_default,
   LOG: log_default
-};
-var registry_default = CONTEXT_REGISTRY;
-var VALID_CONTEXTS = Object.freeze(
-  Object.fromEntries(Object.keys(CONTEXT_REGISTRY).map((k) => [k, k]))
-);
-
-// node_modules/is-unsafe/src/index.js
+});
 function assertString(value) {
   if (typeof value !== "string") {
     throw new TypeError(
@@ -74820,36 +74033,35 @@ function assertString(value) {
 }
 function assertContext(context5) {
   if (context5 instanceof RegExp) return;
-  if (typeof context5 === "string") {
-    if (!registry_default[context5]) {
-      throw new TypeError(
-        `is-unsafe: unknown context "${context5}". Valid contexts: ${Object.keys(VALID_CONTEXTS).join(", ")}`
-      );
-    }
-    return;
-  }
   if (Array.isArray(context5)) {
     if (context5.length === 0) {
-      throw new TypeError("is-unsafe: context array must not be empty");
+      throw new TypeError("is-unsafe: context must not be an empty array");
     }
-    for (const c of context5) {
-      if (typeof c !== "string" || !registry_default[c]) {
-        throw new TypeError(
-          `is-unsafe: unknown context "${c}" in array. Valid contexts: ${Object.keys(VALID_CONTEXTS).join(", ")}`
-        );
+    if (Array.isArray(context5[0])) {
+      for (const list of context5) {
+        if (!Array.isArray(list) || list.length === 0) {
+          throw new TypeError(
+            "is-unsafe: each context in the array must be a non-empty pattern array (PatternList)"
+          );
+        }
       }
     }
     return;
   }
   throw new TypeError(
-    `is-unsafe: second argument must be a context string, array of context strings, or RegExp. Got: ${typeof context5}`
+    `is-unsafe: second argument must be a PatternList (e.g. HTML), an array of PatternLists (e.g. [HTML, XML]), or a RegExp. Got: ${typeof context5}`
   );
 }
-function matchContext(value, contextName) {
-  const patterns = registry_default[contextName];
-  for (const rule of patterns) {
+function normalise(context5) {
+  if (context5 instanceof RegExp) return { lists: null, regex: context5 };
+  if (Array.isArray(context5[0])) return { lists: context5, regex: null };
+  return { lists: [context5], regex: null };
+}
+function matchList(value, list) {
+  const label = list.label ?? "CUSTOM";
+  for (const rule of list) {
     if (rule.pattern.test(value)) {
-      return { context: contextName, id: rule.id, description: rule.description, pattern: rule.pattern };
+      return { context: label, id: rule.id, description: rule.description, pattern: rule.pattern };
     }
   }
   return null;
@@ -74857,14 +74069,10 @@ function matchContext(value, contextName) {
 function isUnsafe(value, context5) {
   assertString(value);
   assertContext(context5);
-  if (context5 instanceof RegExp) {
-    return context5.test(value);
-  }
-  if (typeof context5 === "string") {
-    return matchContext(value, context5) !== null;
-  }
-  for (const c of context5) {
-    if (matchContext(value, c) !== null) return true;
+  const { lists, regex } = normalise(context5);
+  if (regex) return regex.test(value);
+  for (const list of lists) {
+    if (matchList(value, list) !== null) return true;
   }
   return false;
 }
@@ -74913,6 +74121,7 @@ var OrderedObjParser = class {
     this.ignoreAttributesFn = getIgnoreAttributesFn(this.options.ignoreAttributes);
     this.entityExpansionCount = 0;
     this.currentExpandedLength = 0;
+    this.doctypefound = false;
     let namedEntities = { ...XML };
     if (this.options.entityDecoder) {
       this.entityDecoder = this.options.entityDecoder;
@@ -74930,7 +74139,7 @@ var OrderedObjParser = class {
         // onExternalEntity: (name, value) => isUnsafe(value) ? 'block' : 'allow',
         onInputEntity: (name, value) => (
           //TODO: VALID_CONTEXTS.HTML should be set only if this.options.htmlEntities
-          isUnsafe(value, [VALID_CONTEXTS.HTML, VALID_CONTEXTS.XML]) ? ENTITY_ACTION.BLOCK : ENTITY_ACTION.ALLOW
+          isUnsafe(value, [html_default, xml_default]) ? ENTITY_ACTION.BLOCK : ENTITY_ACTION.ALLOW
         )
         //postCheck: resolved => resolved
       });
@@ -75064,6 +74273,7 @@ var parseXml = function(xmlData) {
   this.entityDecoder.reset();
   this.entityExpansionCount = 0;
   this.currentExpandedLength = 0;
+  this.doctypefound = false;
   const options = this.options;
   const docTypeReader = new DocTypeReader(options.processEntities);
   const xmlLen = xmlData.length;
@@ -75126,6 +74336,8 @@ var parseXml = function(xmlData) {
         }
         i = endIndex;
       } else if (c1 === 33 && xmlData.charCodeAt(i + 2) === 68) {
+        if (this.doctypefound) throw new Error("Multiple DOCTYPE declarations found.");
+        this.doctypefound = true;
         const result = docTypeReader.readDocType(xmlData, i);
         this.entityDecoder.addInputEntities(result.entities);
         i = result.i;
@@ -75653,9 +74865,9 @@ function detectXmlVersionFromArray(jArray, options) {
   }
   return "1.0";
 }
-function resolveTagName(name, isAttribute2, options, matcher, xmlVersion) {
+function resolveTagName(name, isAttribute2, options, matcher, qNameValidator) {
   if (!options.sanitizeName) return name;
-  if (qName(name, { xmlVersion })) return name;
+  if (qNameValidator(name)) return name;
   return options.sanitizeName(name, { isAttribute: isAttribute2, matcher: matcher.readOnly() });
 }
 function toXml(jArray, options) {
@@ -75675,10 +74887,11 @@ function toXml(jArray, options) {
     }
   }
   const xmlVersion = detectXmlVersionFromArray(jArray, options);
+  const qNameValidator = createValidator("qName", { xmlVersion });
   const matcher = new Matcher();
-  return arrToStr(jArray, options, indentation, matcher, stopNodeExpressions, xmlVersion);
+  return arrToStr(jArray, options, indentation, matcher, stopNodeExpressions, qNameValidator);
 }
-function arrToStr(arr, options, indentation, matcher, stopNodeExpressions, xmlVersion) {
+function arrToStr(arr, options, indentation, matcher, stopNodeExpressions, qNameValidator) {
   let xmlStr = "";
   let isPreviousElementTag = false;
   if (options.maxNestedTags && matcher.getDepth() > options.maxNestedTags) {
@@ -75697,7 +74910,7 @@ function arrToStr(arr, options, indentation, matcher, stopNodeExpressions, xmlVe
     const rawTagName = propName2(tagObj);
     if (rawTagName === void 0) continue;
     const isSpecialName = rawTagName === options.textNodeName || rawTagName === options.cdataPropName || rawTagName === options.commentPropName || rawTagName[0] === "?";
-    const tagName = isSpecialName ? rawTagName : resolveTagName(rawTagName, false, options, matcher, xmlVersion);
+    const tagName = isSpecialName ? rawTagName : resolveTagName(rawTagName, false, options, matcher, qNameValidator);
     const attrValues = extractAttributeValues(tagObj[":@"], options);
     matcher.push(tagName, attrValues);
     const isStopNode = checkStopNode(matcher, stopNodeExpressions);
@@ -75732,7 +74945,7 @@ function arrToStr(arr, options, indentation, matcher, stopNodeExpressions, xmlVe
       matcher.pop();
       continue;
     } else if (tagName[0] === "?") {
-      const attStr2 = attr_to_str(tagObj[":@"], options, isStopNode, matcher, xmlVersion);
+      const attStr2 = attr_to_str(tagObj[":@"], options, isStopNode, matcher, qNameValidator);
       const tempInd = tagName === "?xml" ? "" : indentation;
       xmlStr += tempInd + `<${tagName}${attStr2}?>`;
       isPreviousElementTag = true;
@@ -75743,13 +74956,13 @@ function arrToStr(arr, options, indentation, matcher, stopNodeExpressions, xmlVe
     if (newIdentation !== "") {
       newIdentation += options.indentBy;
     }
-    const attStr = attr_to_str(tagObj[":@"], options, isStopNode, matcher, xmlVersion);
+    const attStr = attr_to_str(tagObj[":@"], options, isStopNode, matcher, qNameValidator);
     const tagStart = indentation + `<${tagName}${attStr}`;
     let tagValue;
     if (isStopNode) {
       tagValue = getRawContent2(tagObj[rawTagName], options);
     } else {
-      tagValue = arrToStr(tagObj[rawTagName], options, newIdentation, matcher, stopNodeExpressions, xmlVersion);
+      tagValue = arrToStr(tagObj[rawTagName], options, newIdentation, matcher, stopNodeExpressions, qNameValidator);
     }
     if (options.unpairedTags.indexOf(tagName) !== -1) {
       if (options.suppressUnpairedNode) xmlStr += tagStart + ">";
@@ -75838,13 +75051,13 @@ function propName2(obj) {
     if (key !== ":@") return key;
   }
 }
-function attr_to_str(attrMap, options, isStopNode, matcher, xmlVersion) {
+function attr_to_str(attrMap, options, isStopNode, matcher, qNameValidator) {
   let attrStr = "";
   if (attrMap && !options.ignoreAttributes) {
     for (let attr in attrMap) {
       if (!Object.prototype.hasOwnProperty.call(attrMap, attr)) continue;
       const cleanAttrName = attr.substr(options.attributeNamePrefix.length);
-      const resolvedAttrName = isStopNode ? cleanAttrName : resolveTagName(cleanAttrName, true, options, matcher, xmlVersion);
+      const resolvedAttrName = isStopNode ? cleanAttrName : resolveTagName(cleanAttrName, true, options, matcher, qNameValidator);
       let attrVal;
       if (isStopNode) {
         attrVal = attrMap[attr];
@@ -75998,9 +75211,9 @@ function detectXmlVersionFromObj(jObj, options) {
   }
   return "1.0";
 }
-function resolveTagName2(name, isAttribute2, options, matcher, xmlVersion) {
+function resolveTagName2(name, isAttribute2, options, matcher, qNameValidator) {
   if (!options.sanitizeName) return name;
-  if (qName(name, { xmlVersion })) return name;
+  if (qNameValidator(name)) return name;
   return options.sanitizeName(name, { isAttribute: isAttribute2, matcher: matcher.readOnly() });
 }
 Builder.prototype.build = function(jObj) {
@@ -76014,10 +75227,11 @@ Builder.prototype.build = function(jObj) {
     }
     const matcher = new Matcher();
     const xmlVersion = detectXmlVersionFromObj(jObj, this.options);
-    return this.j2x(jObj, 0, matcher, xmlVersion).val;
+    const qNameValidator = createValidator("qName", { xmlVersion });
+    return this.j2x(jObj, 0, matcher, qNameValidator).val;
   }
 };
-Builder.prototype.j2x = function(jObj, level, matcher, xmlVersion) {
+Builder.prototype.j2x = function(jObj, level, matcher, qNameValidator) {
   let attrStr = "";
   let val = "";
   if (this.options.maxNestedTags && matcher.getDepth() >= this.options.maxNestedTags) {
@@ -76028,7 +75242,7 @@ Builder.prototype.j2x = function(jObj, level, matcher, xmlVersion) {
   for (let key in jObj) {
     if (!Object.prototype.hasOwnProperty.call(jObj, key)) continue;
     const isSpecialKey = key === this.options.textNodeName || key === this.options.cdataPropName || key === this.options.commentPropName || this.options.attributesGroupName && key === this.options.attributesGroupName || this.isAttribute(key) || key[0] === "?";
-    const resolvedKey = isSpecialKey ? key : resolveTagName2(key, false, this.options, matcher, xmlVersion);
+    const resolvedKey = isSpecialKey ? key : resolveTagName2(key, false, this.options, matcher, qNameValidator);
     if (typeof jObj[key] === "undefined") {
       if (this.isAttribute(key)) {
         val += "";
@@ -76048,7 +75262,7 @@ Builder.prototype.j2x = function(jObj, level, matcher, xmlVersion) {
     } else if (typeof jObj[key] !== "object") {
       const attr = this.isAttribute(key);
       if (attr && !this.ignoreAttributesFn(attr, jPath)) {
-        const resolvedAttr = resolveTagName2(attr, true, this.options, matcher, xmlVersion);
+        const resolvedAttr = resolveTagName2(attr, true, this.options, matcher, qNameValidator);
         attrStr += this.buildAttrPairStr(resolvedAttr, "" + jObj[key], isCurrentStopNode);
       } else if (!attr) {
         if (key === this.options.textNodeName) {
@@ -76083,14 +75297,14 @@ Builder.prototype.j2x = function(jObj, level, matcher, xmlVersion) {
         } else if (typeof item === "object") {
           if (this.options.oneListGroup) {
             matcher.push(resolvedKey);
-            const result = this.j2x(item, level + 1, matcher, xmlVersion);
+            const result = this.j2x(item, level + 1, matcher, qNameValidator);
             matcher.pop();
             listTagVal += result.val;
             if (this.options.attributesGroupName && item.hasOwnProperty(this.options.attributesGroupName)) {
               listTagAttr += result.attrStr;
             }
           } else {
-            listTagVal += this.processTextOrObjNode(item, resolvedKey, level, matcher, xmlVersion);
+            listTagVal += this.processTextOrObjNode(item, resolvedKey, level, matcher, qNameValidator);
           }
         } else {
           if (this.options.oneListGroup) {
@@ -76123,11 +75337,11 @@ Builder.prototype.j2x = function(jObj, level, matcher, xmlVersion) {
         const Ks = Object.keys(jObj[key]);
         const L = Ks.length;
         for (let j = 0; j < L; j++) {
-          const resolvedAttr = resolveTagName2(Ks[j], true, this.options, matcher, xmlVersion);
+          const resolvedAttr = resolveTagName2(Ks[j], true, this.options, matcher, qNameValidator);
           attrStr += this.buildAttrPairStr(resolvedAttr, "" + jObj[key][Ks[j]], isCurrentStopNode);
         }
       } else {
-        val += this.processTextOrObjNode(jObj[key], resolvedKey, level, matcher, xmlVersion);
+        val += this.processTextOrObjNode(jObj[key], resolvedKey, level, matcher, qNameValidator);
       }
     }
   }
@@ -76142,7 +75356,7 @@ Builder.prototype.buildAttrPairStr = function(attrName, val, isStopNode) {
     return " " + attrName;
   } else return " " + attrName + '="' + escapeAttribute(val) + '"';
 };
-function processTextOrObjNode(object, key, level, matcher, xmlVersion) {
+function processTextOrObjNode(object, key, level, matcher, qNameValidator) {
   const attrValues = this.extractAttributes(object);
   matcher.push(key, attrValues);
   const isStopNode = this.checkStopNode(matcher);
@@ -76152,7 +75366,7 @@ function processTextOrObjNode(object, key, level, matcher, xmlVersion) {
     matcher.pop();
     return this.buildObjectNode(rawContent2, key, attrStr, level);
   }
-  const result = this.j2x(object, level + 1, matcher, xmlVersion);
+  const result = this.j2x(object, level + 1, matcher, qNameValidator);
   matcher.pop();
   if (key[0] === "?") {
     return this.buildTextValNode("", key, result.attrStr, level, matcher);
@@ -76244,7 +75458,7 @@ Builder.prototype.buildAttributesForStopNode = function(obj) {
       if (val === true && this.options.suppressBooleanAttributes) {
         attrStr += " " + cleanKey;
       } else {
-        attrStr += " " + cleanKey + '="' + val + '"';
+        attrStr += " " + cleanKey + '="' + escapeAttribute(val) + '"';
       }
     }
   } else {
@@ -76256,7 +75470,7 @@ Builder.prototype.buildAttributesForStopNode = function(obj) {
         if (val === true && this.options.suppressBooleanAttributes) {
           attrStr += " " + attr;
         } else {
-          attrStr += " " + attr + '="' + val + '"';
+          attrStr += " " + attr + '="' + escapeAttribute(val) + '"';
         }
       }
     }
@@ -76281,7 +75495,7 @@ Builder.prototype.buildObjectNode = function(val, key, attrStr, level) {
     if ((attrStr || attrStr === "") && val.indexOf("<") === -1) {
       return this.indentate(level) + "<" + key + attrStr + piClosingChar + ">" + val + tagEndExp;
     } else if (this.options.commentPropName !== false && key === this.options.commentPropName && piClosingChar.length === 0) {
-      return this.indentate(level) + `<!--${val}-->` + this.newLine;
+      return this.indentate(level) + `<!--${safeComment(val)}-->` + this.newLine;
     } else {
       return this.indentate(level) + "<" + key + attrStr + piClosingChar + this.tagEndChar + val + this.indentate(level) + tagEndExp;
     }
@@ -76410,7 +75624,8 @@ async function parseXML(str, opts = {}) {
     delete parsedXml["?xml"];
   }
   if (!opts.includeRoot) {
-    for (const key of Object.keys(parsedXml)) {
+    const key = Object.keys(parsedXml)[0];
+    if (key !== void 0) {
       const value = parsedXml[key];
       return typeof value === "object" ? { ...value } : value;
     }
@@ -81032,8 +80247,8 @@ var UserDelegationKeyCredential = class {
 };
 
 // node_modules/@azure/storage-blob/dist/esm/utils/constants.js
-var SDK_VERSION3 = "12.32.0";
-var SERVICE_VERSION = "2026-04-06";
+var SDK_VERSION3 = "12.33.0";
+var SERVICE_VERSION = "2026-06-06";
 var BLOCK_BLOB_MAX_UPLOAD_BLOB_BYTES = 256 * 1024 * 1024;
 var BLOCK_BLOB_MAX_STAGE_BLOCK_BYTES = 4e3 * 1024 * 1024;
 var BLOCK_BLOB_MAX_BLOCKS = 5e4;
@@ -83072,7 +82287,8 @@ var BlobPropertiesInternal = {
             "Hot",
             "Cool",
             "Archive",
-            "Cold"
+            "Cold",
+            "Smart"
           ]
         }
       },
@@ -83091,7 +82307,33 @@ var BlobPropertiesInternal = {
           allowedValues: [
             "rehydrate-pending-to-hot",
             "rehydrate-pending-to-cool",
-            "rehydrate-pending-to-cold"
+            "rehydrate-pending-to-cold",
+            "rehydrate-pending-to-smart"
+          ]
+        }
+      },
+      smartAccessTier: {
+        serializedName: "SmartAccessTier",
+        xmlName: "SmartAccessTier",
+        type: {
+          name: "Enum",
+          allowedValues: [
+            "P4",
+            "P6",
+            "P10",
+            "P15",
+            "P20",
+            "P30",
+            "P40",
+            "P50",
+            "P60",
+            "P70",
+            "P80",
+            "Hot",
+            "Cool",
+            "Archive",
+            "Cold",
+            "Smart"
           ]
         }
       },
@@ -86235,6 +85477,13 @@ var BlobGetPropertiesHeaders = {
         xmlName: "x-ms-access-tier-change-time",
         type: {
           name: "DateTimeRfc1123"
+        }
+      },
+      smartAccessTier: {
+        serializedName: "x-ms-smart-access-tier",
+        xmlName: "x-ms-smart-access-tier",
+        type: {
+          name: "String"
         }
       },
       versionId: {
@@ -90223,7 +89472,7 @@ var timeoutInSeconds = {
 var version2 = {
   parameterPath: "version",
   mapper: {
-    defaultValue: "2026-04-06",
+    defaultValue: "2026-06-06",
     isConstant: true,
     serializedName: "x-ms-version",
     type: {
@@ -91129,7 +90378,8 @@ var tier = {
         "Hot",
         "Cool",
         "Archive",
-        "Cold"
+        "Cold",
+        "Smart"
       ]
     }
   }
@@ -91367,7 +90617,8 @@ var tier1 = {
         "Hot",
         "Cool",
         "Archive",
-        "Cold"
+        "Cold",
+        "Smart"
       ]
     }
   }
@@ -95003,7 +94254,7 @@ var StorageClient = class extends ExtendedServiceClient {
     const defaults2 = {
       requestContentType: "application/json; charset=utf-8"
     };
-    const packageDetails = `azsdk-js-azure-storage-blob/12.32.0`;
+    const packageDetails = `azsdk-js-azure-storage-blob/12.33.0`;
     const userAgentPrefix = options.userAgentOptions && options.userAgentOptions.userAgentPrefix ? `${options.userAgentOptions.userAgentPrefix} ${packageDetails}` : `${packageDetails}`;
     const optionsWithDefaults = {
       ...defaults2,
@@ -95015,7 +94266,7 @@ var StorageClient = class extends ExtendedServiceClient {
     };
     super(optionsWithDefaults);
     this.url = url2;
-    this.version = options.version || "2026-04-06";
+    this.version = options.version || "2026-06-06";
     this.service = new ServiceImpl(this);
     this.container = new ContainerImpl(this);
     this.blob = new BlobImpl(this);
@@ -95043,6 +94294,13 @@ var StorageContextClient = class extends StorageClient {
 };
 
 // node_modules/@azure/storage-blob/dist/esm/utils/utils.common.js
+var accountNameSuffixes = [
+  "-secondary-ipv6",
+  "-secondary-dualstack",
+  "-ipv6",
+  "-dualstack",
+  "-secondary"
+];
 function escapeURLPath(url2) {
   const urlParsed = new URL(url2);
   let path9 = urlParsed.pathname;
@@ -95222,6 +94480,13 @@ function getAccountNameFromUrl(url2) {
   try {
     if (parsedUrl.hostname.split(".")[1] === "blob") {
       accountName = parsedUrl.hostname.split(".")[0];
+      for (let i = 0; i < accountNameSuffixes.length; ++i) {
+        const suffix = accountNameSuffixes[i];
+        if (accountName.endsWith(suffix)) {
+          accountName = accountName.substring(0, accountName.length - suffix.length);
+          break;
+        }
+      }
     } else if (isIpEndpointStyle(parsedUrl)) {
       accountName = parsedUrl.pathname.split("/")[1];
     } else {
@@ -96019,6 +95284,10 @@ var SASQueryParameters = class {
    * Keys for request query parameters required in the SAS token
    */
   requestQueryParameterKeys;
+  /** To indicate the depth of the virtual blob directory specified
+   * in the canonicalizedresource field of the string-to-sign.
+   */
+  directoryDepth;
   /**
    * Optional. IP range allowed for this SAS.
    *
@@ -96033,7 +95302,7 @@ var SASQueryParameters = class {
     }
     return void 0;
   }
-  constructor(version3, signature, permissionsOrOptions, services, resourceTypes, protocol, startsOn, expiresOn2, ipRange, identifier, resource, cacheControl, contentDisposition, contentEncoding, contentLanguage, contentType2, userDelegationKey, preauthorizedAgentObjectId, correlationId, encryptionScope2, delegatedUserObjectId, requestHeaderKeys, requestQueryParameterKeys) {
+  constructor(version3, signature, permissionsOrOptions, services, resourceTypes, protocol, startsOn, expiresOn2, ipRange, identifier, resource, cacheControl, contentDisposition, contentEncoding, contentLanguage, contentType2, userDelegationKey, preauthorizedAgentObjectId, correlationId, encryptionScope2, delegatedUserObjectId, requestHeaderKeys, requestQueryParameterKeys, directoryDepth) {
     this.version = version3;
     this.signature = signature;
     if (permissionsOrOptions !== void 0 && typeof permissionsOrOptions !== "string") {
@@ -96055,6 +95324,7 @@ var SASQueryParameters = class {
       this.contentType = permissionsOrOptions.contentType;
       this.requestHeaderKeys = permissionsOrOptions.requestHeaderKeys;
       this.requestQueryParameterKeys = permissionsOrOptions.requestQueryParameterKeys;
+      this.directoryDepth = permissionsOrOptions.directoryDepth;
       if (permissionsOrOptions.userDelegationKey) {
         this.signedOid = permissionsOrOptions.userDelegationKey.signedObjectId;
         this.signedTenantId = permissionsOrOptions.userDelegationKey.signedTenantId;
@@ -96085,6 +95355,7 @@ var SASQueryParameters = class {
       this.contentType = contentType2;
       this.requestHeaderKeys = requestHeaderKeys;
       this.requestQueryParameterKeys = requestQueryParameterKeys;
+      this.directoryDepth = directoryDepth;
       if (userDelegationKey) {
         this.signedOid = userDelegationKey.signedObjectId;
         this.signedTenantId = userDelegationKey.signedTenantId;
@@ -96134,6 +95405,7 @@ var SASQueryParameters = class {
       "rsct",
       "saoid",
       "scid",
+      "sdd",
       "sduoid",
       // Signed key user delegation object ID
       "skdutid",
@@ -96234,6 +95506,9 @@ var SASQueryParameters = class {
         case "srq":
           this.tryAppendQueryParameter(queries, param, this.requestQueryParameterKeys);
           break;
+        case "sdd":
+          this.tryAppendQueryParameter(queries, param, this.directoryDepth !== void 0 ? this.directoryDepth.toString() : "");
+          break;
       }
     }
     return queries.join("&");
@@ -96286,7 +95561,11 @@ function generateBlobSASQueryParametersInternal(blobSASSignatureValues, sharedKe
   }
   if (version3 >= "2018-11-09") {
     if (sharedKeyCredential !== void 0) {
-      return generateBlobSASQueryParameters20181109(blobSASSignatureValues, sharedKeyCredential);
+      if (version3 >= "2020-02-10") {
+        return generateBlobSASQueryParameters20200210(blobSASSignatureValues, sharedKeyCredential);
+      } else {
+        return generateBlobSASQueryParameters20181109(blobSASSignatureValues, sharedKeyCredential);
+      }
     } else {
       if (version3 >= "2020-02-10") {
         return generateBlobSASQueryParametersUDK20200210(blobSASSignatureValues, userDelegationKeyCredential);
@@ -96389,6 +95668,59 @@ function generateBlobSASQueryParameters20181109(blobSASSignatureValues, sharedKe
     stringToSign
   };
 }
+function generateBlobSASQueryParameters20200210(blobSASSignatureValues, sharedKeyCredential) {
+  blobSASSignatureValues = SASSignatureValuesSanityCheckAndAutofill(blobSASSignatureValues);
+  if (!blobSASSignatureValues.identifier && !(blobSASSignatureValues.permissions && blobSASSignatureValues.expiresOn)) {
+    throw new RangeError("Must provide 'permissions' and 'expiresOn' for Blob SAS generation when 'identifier' is not provided.");
+  }
+  let resource = "c";
+  let timestamp = blobSASSignatureValues.snapshotTime;
+  let directoryDepth = void 0;
+  if (blobSASSignatureValues.blobName) {
+    if (blobSASSignatureValues.isDirectory === true) {
+      resource = "d";
+      directoryDepth = trimBlobName(blobSASSignatureValues.blobName).split("/").length;
+    } else {
+      resource = "b";
+      if (blobSASSignatureValues.snapshotTime) {
+        resource = "bs";
+      } else if (blobSASSignatureValues.versionId) {
+        resource = "bv";
+        timestamp = blobSASSignatureValues.versionId;
+      }
+    }
+  }
+  let verifiedPermissions;
+  if (blobSASSignatureValues.permissions) {
+    if (blobSASSignatureValues.blobName) {
+      verifiedPermissions = BlobSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+    } else {
+      verifiedPermissions = ContainerSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+    }
+  }
+  const stringToSign = [
+    verifiedPermissions ? verifiedPermissions : "",
+    blobSASSignatureValues.startsOn ? truncatedISO8061Date(blobSASSignatureValues.startsOn, false) : "",
+    blobSASSignatureValues.expiresOn ? truncatedISO8061Date(blobSASSignatureValues.expiresOn, false) : "",
+    getCanonicalName(sharedKeyCredential.accountName, blobSASSignatureValues.containerName, blobSASSignatureValues.blobName),
+    blobSASSignatureValues.identifier,
+    blobSASSignatureValues.ipRange ? ipRangeToString(blobSASSignatureValues.ipRange) : "",
+    blobSASSignatureValues.protocol ? blobSASSignatureValues.protocol : "",
+    blobSASSignatureValues.version,
+    resource,
+    timestamp,
+    blobSASSignatureValues.cacheControl ? blobSASSignatureValues.cacheControl : "",
+    blobSASSignatureValues.contentDisposition ? blobSASSignatureValues.contentDisposition : "",
+    blobSASSignatureValues.contentEncoding ? blobSASSignatureValues.contentEncoding : "",
+    blobSASSignatureValues.contentLanguage ? blobSASSignatureValues.contentLanguage : "",
+    blobSASSignatureValues.contentType ? blobSASSignatureValues.contentType : ""
+  ].join("\n");
+  const signature = sharedKeyCredential.computeHMACSHA256(stringToSign);
+  return {
+    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, void 0, void 0, void 0, void 0, void 0, void 0, void 0, directoryDepth),
+    stringToSign
+  };
+}
 function generateBlobSASQueryParameters20201206(blobSASSignatureValues, sharedKeyCredential) {
   blobSASSignatureValues = SASSignatureValuesSanityCheckAndAutofill(blobSASSignatureValues);
   if (!blobSASSignatureValues.identifier && !(blobSASSignatureValues.permissions && blobSASSignatureValues.expiresOn)) {
@@ -96396,13 +95728,19 @@ function generateBlobSASQueryParameters20201206(blobSASSignatureValues, sharedKe
   }
   let resource = "c";
   let timestamp = blobSASSignatureValues.snapshotTime;
+  let directoryDepth = void 0;
   if (blobSASSignatureValues.blobName) {
-    resource = "b";
-    if (blobSASSignatureValues.snapshotTime) {
-      resource = "bs";
-    } else if (blobSASSignatureValues.versionId) {
-      resource = "bv";
-      timestamp = blobSASSignatureValues.versionId;
+    if (blobSASSignatureValues.isDirectory === true) {
+      resource = "d";
+      directoryDepth = trimBlobName(blobSASSignatureValues.blobName).split("/").length;
+    } else {
+      resource = "b";
+      if (blobSASSignatureValues.snapshotTime) {
+        resource = "bs";
+      } else if (blobSASSignatureValues.versionId) {
+        resource = "bv";
+        timestamp = blobSASSignatureValues.versionId;
+      }
     }
   }
   let verifiedPermissions;
@@ -96433,7 +95771,7 @@ function generateBlobSASQueryParameters20201206(blobSASSignatureValues, sharedKe
   ].join("\n");
   const signature = sharedKeyCredential.computeHMACSHA256(stringToSign);
   return {
-    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, void 0, void 0, void 0, blobSASSignatureValues.encryptionScope),
+    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, void 0, void 0, void 0, blobSASSignatureValues.encryptionScope, void 0, void 0, void 0, directoryDepth),
     stringToSign
   };
 }
@@ -96496,13 +95834,19 @@ function generateBlobSASQueryParametersUDK20200210(blobSASSignatureValues, userD
   }
   let resource = "c";
   let timestamp = blobSASSignatureValues.snapshotTime;
+  let directoryDepth = void 0;
   if (blobSASSignatureValues.blobName) {
-    resource = "b";
-    if (blobSASSignatureValues.snapshotTime) {
-      resource = "bs";
-    } else if (blobSASSignatureValues.versionId) {
-      resource = "bv";
-      timestamp = blobSASSignatureValues.versionId;
+    if (blobSASSignatureValues.isDirectory === true) {
+      resource = "d";
+      directoryDepth = trimBlobName(blobSASSignatureValues.blobName).split("/").length;
+    } else {
+      resource = "b";
+      if (blobSASSignatureValues.snapshotTime) {
+        resource = "bs";
+      } else if (blobSASSignatureValues.versionId) {
+        resource = "bv";
+        timestamp = blobSASSignatureValues.versionId;
+      }
     }
   }
   let verifiedPermissions;
@@ -96541,7 +95885,7 @@ function generateBlobSASQueryParametersUDK20200210(blobSASSignatureValues, userD
   ].join("\n");
   const signature = userDelegationKeyCredential.computeHMACSHA256(stringToSign);
   return {
-    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId),
+    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId, void 0, void 0, void 0, void 0, directoryDepth),
     stringToSign
   };
 }
@@ -96552,13 +95896,19 @@ function generateBlobSASQueryParametersUDK20201206(blobSASSignatureValues, userD
   }
   let resource = "c";
   let timestamp = blobSASSignatureValues.snapshotTime;
+  let directoryDepth = void 0;
   if (blobSASSignatureValues.blobName) {
-    resource = "b";
-    if (blobSASSignatureValues.snapshotTime) {
-      resource = "bs";
-    } else if (blobSASSignatureValues.versionId) {
-      resource = "bv";
-      timestamp = blobSASSignatureValues.versionId;
+    if (blobSASSignatureValues.isDirectory === true) {
+      resource = "d";
+      directoryDepth = trimBlobName(blobSASSignatureValues.blobName).split("/").length;
+    } else {
+      resource = "b";
+      if (blobSASSignatureValues.snapshotTime) {
+        resource = "bs";
+      } else if (blobSASSignatureValues.versionId) {
+        resource = "bv";
+        timestamp = blobSASSignatureValues.versionId;
+      }
     }
   }
   let verifiedPermissions;
@@ -96598,7 +95948,7 @@ function generateBlobSASQueryParametersUDK20201206(blobSASSignatureValues, userD
   ].join("\n");
   const signature = userDelegationKeyCredential.computeHMACSHA256(stringToSign);
   return {
-    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId, blobSASSignatureValues.encryptionScope),
+    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId, blobSASSignatureValues.encryptionScope, void 0, void 0, void 0, directoryDepth),
     stringToSign
   };
 }
@@ -96609,13 +95959,19 @@ function generateBlobSASQueryParametersUDK20250705(blobSASSignatureValues, userD
   }
   let resource = "c";
   let timestamp = blobSASSignatureValues.snapshotTime;
+  let directoryDepth = void 0;
   if (blobSASSignatureValues.blobName) {
-    resource = "b";
-    if (blobSASSignatureValues.snapshotTime) {
-      resource = "bs";
-    } else if (blobSASSignatureValues.versionId) {
-      resource = "bv";
-      timestamp = blobSASSignatureValues.versionId;
+    if (blobSASSignatureValues.isDirectory === true) {
+      resource = "d";
+      directoryDepth = trimBlobName(blobSASSignatureValues.blobName).split("/").length;
+    } else {
+      resource = "b";
+      if (blobSASSignatureValues.snapshotTime) {
+        resource = "bs";
+      } else if (blobSASSignatureValues.versionId) {
+        resource = "bv";
+        timestamp = blobSASSignatureValues.versionId;
+      }
     }
   }
   let verifiedPermissions;
@@ -96658,7 +96014,7 @@ function generateBlobSASQueryParametersUDK20250705(blobSASSignatureValues, userD
   ].join("\n");
   const signature = userDelegationKeyCredential.computeHMACSHA256(stringToSign);
   return {
-    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId, blobSASSignatureValues.encryptionScope, blobSASSignatureValues.delegatedUserObjectId),
+    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId, blobSASSignatureValues.encryptionScope, blobSASSignatureValues.delegatedUserObjectId, void 0, void 0, directoryDepth),
     stringToSign
   };
 }
@@ -96669,13 +96025,19 @@ function generateBlobSASQueryParametersUDK20260406(blobSASSignatureValues, userD
   }
   let resource = "c";
   let timestamp = blobSASSignatureValues.snapshotTime;
+  let directoryDepth = void 0;
   if (blobSASSignatureValues.blobName) {
-    resource = "b";
-    if (blobSASSignatureValues.snapshotTime) {
-      resource = "bs";
-    } else if (blobSASSignatureValues.versionId) {
-      resource = "bv";
-      timestamp = blobSASSignatureValues.versionId;
+    if (blobSASSignatureValues.isDirectory === true) {
+      resource = "d";
+      directoryDepth = trimBlobName(blobSASSignatureValues.blobName).split("/").length;
+    } else {
+      resource = "b";
+      if (blobSASSignatureValues.snapshotTime) {
+        resource = "bs";
+      } else if (blobSASSignatureValues.versionId) {
+        resource = "bv";
+        timestamp = blobSASSignatureValues.versionId;
+      }
     }
   }
   let verifiedPermissions;
@@ -96720,7 +96082,7 @@ function generateBlobSASQueryParametersUDK20260406(blobSASSignatureValues, userD
   ].join("\n");
   const signature = userDelegationKeyCredential.computeHMACSHA256(stringToSign);
   return {
-    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId, blobSASSignatureValues.encryptionScope, blobSASSignatureValues.delegatedUserObjectId, getKeysOfRequestHeaders(blobSASSignatureValues.requestHeaders), getKeysOfRequestHeaders(blobSASSignatureValues.requestQueryParameters)),
+    sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, void 0, void 0, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId, blobSASSignatureValues.encryptionScope, blobSASSignatureValues.delegatedUserObjectId, getKeysOfRequestHeaders(blobSASSignatureValues.requestHeaders), getKeysOfRequestHeaders(blobSASSignatureValues.requestQueryParameters), directoryDepth),
     stringToSign
   };
 }
@@ -96806,6 +96168,16 @@ function SASSignatureValuesSanityCheckAndAutofill(blobSASSignatureValues) {
   }
   blobSASSignatureValues.version = version3;
   return blobSASSignatureValues;
+}
+function trimBlobName(blobName) {
+  let internalName = blobName;
+  while (internalName.startsWith("/")) {
+    internalName = internalName.substring(1);
+  }
+  while (internalName.endsWith("/")) {
+    internalName = internalName.substring(0, internalName.length - 1);
+  }
+  return internalName;
 }
 
 // node_modules/@azure/storage-blob/dist/esm/BlobLeaseClient.js
@@ -99322,6 +98694,7 @@ var BlobClient = class _BlobClient extends StorageClient2 {
    * ```ts snippet:ReadmeSampleDownloadBlob_Node
    * import { BlobServiceClient } from "@azure/storage-blob";
    * import { DefaultAzureCredential } from "@azure/identity";
+   * import { buffer } from "node:stream/consumers";
    *
    * const account = "<account>";
    * const blobServiceClient = new BlobServiceClient(
@@ -99338,22 +98711,10 @@ var BlobClient = class _BlobClient extends StorageClient2 {
    * // In Node.js, get downloaded data by accessing downloadBlockBlobResponse.readableStreamBody
    * const downloadBlockBlobResponse = await blobClient.download();
    * if (downloadBlockBlobResponse.readableStreamBody) {
-   *   const downloaded = await streamToString(downloadBlockBlobResponse.readableStreamBody);
-   *   console.log(`Downloaded blob content: ${downloaded}`);
-   * }
-   *
-   * async function streamToString(stream: NodeJS.ReadableStream): Promise<string> {
-   *   const result = await new Promise<Buffer<ArrayBuffer>>((resolve, reject) => {
-   *     const chunks: Buffer[] = [];
-   *     stream.on("data", (data) => {
-   *       chunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
-   *     });
-   *     stream.on("end", () => {
-   *       resolve(Buffer.concat(chunks));
-   *     });
-   *     stream.on("error", reject);
-   *   });
-   *   return result.toString();
+   *   // Download the raw bytes of the blob. Use `text` from "node:stream/consumers"
+   *   // instead if you want to read the content as a string directly.
+   *   const downloaded = await buffer(downloadBlockBlobResponse.readableStreamBody);
+   *   console.log(`Downloaded blob content: ${downloaded.toString()}`);
    * }
    * ```
    *
@@ -100616,6 +99977,7 @@ var BlockBlobClient = class _BlockBlobClient extends BlobClient {
    * ```ts snippet:ClientsQuery
    * import { BlobServiceClient } from "@azure/storage-blob";
    * import { DefaultAzureCredential } from "@azure/identity";
+   * import { buffer } from "node:stream/consumers";
    *
    * const account = "<account>";
    * const blobServiceClient = new BlobServiceClient(
@@ -100631,22 +99993,10 @@ var BlockBlobClient = class _BlockBlobClient extends BlobClient {
    * // Query and convert a blob to a string
    * const queryBlockBlobResponse = await blockBlobClient.query("select from BlobStorage");
    * if (queryBlockBlobResponse.readableStreamBody) {
-   *   const downloadedBuffer = await streamToBuffer(queryBlockBlobResponse.readableStreamBody);
-   *   const downloaded = downloadedBuffer.toString();
-   *   console.log(`Query blob content: ${downloaded}`);
-   * }
-   *
-   * async function streamToBuffer(readableStream: NodeJS.ReadableStream): Promise<Buffer> {
-   *   return new Promise((resolve, reject) => {
-   *     const chunks: Buffer[] = [];
-   *     readableStream.on("data", (data) => {
-   *       chunks.push(data instanceof Buffer ? data : Buffer.from(data));
-   *     });
-   *     readableStream.on("end", () => {
-   *       resolve(Buffer.concat(chunks));
-   *     });
-   *     readableStream.on("error", reject);
-   *   });
+   *   // Read the response bytes. Use `text` from "node:stream/consumers" instead
+   *   // if you want the response as a string directly.
+   *   const downloadedBuffer = await buffer(queryBlockBlobResponse.readableStreamBody);
+   *   console.log(`Query blob content: ${downloadedBuffer.toString()}`);
    * }
    * ```
    *
@@ -101922,7 +101272,7 @@ var KnownEncryptionAlgorithmType2;
 })(KnownEncryptionAlgorithmType2 || (KnownEncryptionAlgorithmType2 = {}));
 
 // node_modules/@actions/artifact/lib/internal/upload/blob-upload.js
-import * as crypto3 from "crypto";
+import * as crypto2 from "crypto";
 import * as stream from "stream";
 var __awaiter12 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
@@ -101986,7 +101336,7 @@ function uploadToBlobStorage(authenticatedUploadURL, uploadStream, contentType2)
     };
     let sha256Hash = void 0;
     const blobUploadStream = new stream.PassThrough();
-    const hashStream = crypto3.createHash("sha256");
+    const hashStream = crypto2.createHash("sha256");
     uploadStream.pipe(blobUploadStream);
     uploadStream.pipe(hashStream).setEncoding("hex");
     info("Beginning upload of artifact content to blob storage");
@@ -102343,7 +101693,7 @@ function uploadArtifact(name, files, rootDirectory, options) {
 // node_modules/@actions/artifact/lib/internal/download/download-artifact.js
 import fs7 from "fs/promises";
 import * as fsSync from "fs";
-import * as crypto4 from "crypto";
+import * as crypto3 from "crypto";
 import * as stream3 from "stream";
 import * as path8 from "path";
 
@@ -102907,40 +102257,214 @@ var noiseValue = /^-?\d+n+$/;
 var originalStringify = JSON.stringify;
 var originalParse = JSON.parse;
 var customFormat = /^-?\d+n$/;
-var bigIntsStringify = /([\[:])?"(-?\d+)n"($|([\\n]|\s)*(\s|[\\n])*[,\}\]])/g;
-var noiseStringify = /([\[:])?("-?\d+n+)n("$|"([\\n]|\s)*(\s|[\\n])*[,\}\]])/g;
+var bigIntsStringify = /([\[:])?"(-?\d+)n"($|\s*[,\}\]])/g;
+var noiseStringify = /([\[:])?("-?\d+n+)n("$|"\s*[,\}\]])/g;
+var isUnstringifiable = (val) => val === void 0 || typeof val === "function" || typeof val === "symbol";
+var isRawJSON = (val) => val !== null && typeof val === "object" && val.constructor && val.constructor.name === "RawJSON";
+var stringifyIteratively = (rootValue, replacer, spaceParam) => {
+  let space = "";
+  if (typeof spaceParam === "number") {
+    space = " ".repeat(Math.min(10, Math.max(0, Math.floor(spaceParam))));
+  } else if (typeof spaceParam === "string") {
+    space = spaceParam.slice(0, 10);
+  }
+  const isFunctionReplacer = typeof replacer === "function";
+  const propertyList = Array.isArray(replacer) ? new Set(replacer.map(String)) : null;
+  const prepareVal = (parent, key, val) => {
+    const isObject2 = val !== null && typeof val === "object";
+    const hasToJSON = isObject2 && typeof val.toJSON === "function";
+    if (hasToJSON) {
+      val = val.toJSON(key);
+    }
+    const isNoise = typeof val === "string" && noiseValue.test(val);
+    if (isNoise) return val + "n";
+    const isBigInt = typeof val === "bigint";
+    if (isBigInt) {
+      const supportsRawJSON = "rawJSON" in JSON;
+      if (supportsRawJSON) return JSON.rawJSON(val.toString());
+      return val.toString() + "n";
+    }
+    if (isFunctionReplacer) {
+      val = replacer.call(parent, key, val);
+    }
+    const isPostReplacerObject = val !== null && typeof val === "object";
+    if (isPostReplacerObject) {
+      const isPrimitiveWrapper = val instanceof Number || val instanceof String || val instanceof Boolean;
+      if (isPrimitiveWrapper) {
+        val = val.valueOf();
+      }
+    }
+    return val;
+  };
+  const rootProcessed = prepareVal({ "": rootValue }, "", rootValue);
+  if (isUnstringifiable(rootProcessed)) {
+    return void 0;
+  }
+  const isRootPrimitive = rootProcessed === null || typeof rootProcessed !== "object";
+  const isRootNativeRawJSON = isRawJSON(rootProcessed);
+  if (isRootPrimitive || isRootNativeRawJSON) {
+    return originalStringify(rootProcessed);
+  }
+  const chunks = [];
+  let level = 0;
+  const stack = [
+    {
+      parent: { "": rootProcessed },
+      key: "",
+      val: rootProcessed,
+      isArray: Array.isArray(rootProcessed),
+      keys: Array.isArray(rootProcessed) ? null : Object.keys(rootProcessed),
+      index: 0,
+      first: true
+    }
+  ];
+  const visited = new WeakSet([rootProcessed]);
+  while (stack.length > 0) {
+    const node = stack[stack.length - 1];
+    if (node.index === 0) {
+      chunks.push(node.isArray ? "[" : "{");
+      level++;
+    }
+    let isDone = false;
+    if (node.isArray) {
+      if (node.index < node.val.length) {
+        if (!node.first) chunks.push(",");
+        if (space) chunks.push("\n" + space.repeat(level));
+        const childRaw = node.val[node.index];
+        const childVal = prepareVal(node.val, String(node.index), childRaw);
+        if (isUnstringifiable(childVal)) {
+          chunks.push("null");
+          node.first = false;
+          node.index++;
+        } else {
+          const isComplexObject = childVal !== null && typeof childVal === "object";
+          const isNativeRaw = isRawJSON(childVal);
+          if (isComplexObject && !isNativeRaw) {
+            if (visited.has(childVal)) {
+              throw new TypeError("Converting circular structure to JSON");
+            }
+            visited.add(childVal);
+            stack.push({
+              parent: node.val,
+              key: String(node.index),
+              val: childVal,
+              isArray: Array.isArray(childVal),
+              keys: Array.isArray(childVal) ? null : Object.keys(childVal),
+              index: 0,
+              first: true
+            });
+            node.first = false;
+            node.index++;
+          } else {
+            chunks.push(originalStringify(childVal));
+            node.first = false;
+            node.index++;
+          }
+        }
+      } else {
+        isDone = true;
+      }
+    } else {
+      while (node.index < node.keys.length) {
+        const k = node.keys[node.index++];
+        const isFilteredOutByArray = propertyList && !propertyList.has(k);
+        if (isFilteredOutByArray) continue;
+        const childRaw = node.val[k];
+        const childVal = prepareVal(node.val, k, childRaw);
+        if (isUnstringifiable(childVal)) continue;
+        if (!node.first) chunks.push(",");
+        if (space) {
+          chunks.push("\n" + space.repeat(level) + originalStringify(k) + ": ");
+        } else {
+          chunks.push(originalStringify(k) + ":");
+        }
+        const isComplexObject = childVal !== null && typeof childVal === "object";
+        const isNativeRaw = isRawJSON(childVal);
+        if (isComplexObject && !isNativeRaw) {
+          if (visited.has(childVal)) {
+            throw new TypeError("Converting circular structure to JSON");
+          }
+          visited.add(childVal);
+          stack.push({
+            parent: node.val,
+            key: k,
+            val: childVal,
+            isArray: Array.isArray(childVal),
+            keys: Array.isArray(childVal) ? null : Object.keys(childVal),
+            index: 0,
+            first: true
+          });
+          node.first = false;
+          break;
+        } else {
+          chunks.push(originalStringify(childVal));
+          node.first = false;
+        }
+      }
+      const isNodeFullyProcessed = node.index >= node.keys.length && stack[stack.length - 1] === node;
+      if (isNodeFullyProcessed) {
+        isDone = true;
+      }
+    }
+    if (isDone) {
+      level--;
+      if (!node.first && space) chunks.push("\n" + space.repeat(level));
+      chunks.push(node.isArray ? "]" : "}");
+      visited.delete(node.val);
+      stack.pop();
+    }
+  }
+  return chunks.join("");
+};
 var JSONStringify = (value, replacer, space) => {
-  if ("rawJSON" in JSON) {
-    return originalStringify(
+  try {
+    const supportsRawJSON = "rawJSON" in JSON;
+    if (supportsRawJSON) {
+      return originalStringify(
+        value,
+        (key, val) => {
+          if (typeof val === "bigint") return JSON.rawJSON(val.toString());
+          const hasFunctionReplacer = typeof replacer === "function";
+          if (hasFunctionReplacer) return replacer(key, val);
+          const isKeyInArrayReplacer = Array.isArray(replacer) && replacer.includes(key);
+          if (isKeyInArrayReplacer) return val;
+          return val;
+        },
+        space
+      );
+    }
+    if (!value) return originalStringify(value, replacer, space);
+    const convertedToCustomJSON = originalStringify(
       value,
-      (key, value2) => {
-        if (typeof value2 === "bigint") return JSON.rawJSON(value2.toString());
-        if (typeof replacer === "function") return replacer(key, value2);
-        if (Array.isArray(replacer) && replacer.includes(key)) return value2;
-        return value2;
+      (key, val) => {
+        const isNoise = typeof val === "string" && noiseValue.test(val);
+        if (isNoise) return val.toString() + "n";
+        if (typeof val === "bigint") return val.toString() + "n";
+        const hasFunctionReplacer = typeof replacer === "function";
+        if (hasFunctionReplacer) return replacer(key, val);
+        const isKeyInArrayReplacer = Array.isArray(replacer) && replacer.includes(key);
+        if (isKeyInArrayReplacer) return val;
+        return val;
       },
       space
     );
+    const processedJSON = convertedToCustomJSON.replace(
+      bigIntsStringify,
+      "$1$2$3"
+    );
+    const denoisedJSON = processedJSON.replace(noiseStringify, "$1$2$3");
+    return denoisedJSON;
+  } catch (error2) {
+    if (error2 instanceof RangeError) {
+      const convertedJSON = stringifyIteratively(value, replacer, space);
+      if (convertedJSON === void 0) return void 0;
+      const supportsRawJSON = "rawJSON" in JSON;
+      if (supportsRawJSON) return convertedJSON;
+      const processedJSON = convertedJSON.replace(bigIntsStringify, "$1$2$3");
+      return processedJSON.replace(noiseStringify, "$1$2$3");
+    }
+    throw error2;
   }
-  if (!value) return originalStringify(value, replacer, space);
-  const convertedToCustomJSON = originalStringify(
-    value,
-    (key, value2) => {
-      const isNoise = typeof value2 === "string" && noiseValue.test(value2);
-      if (isNoise) return value2.toString() + "n";
-      if (typeof value2 === "bigint") return value2.toString() + "n";
-      if (typeof replacer === "function") return replacer(key, value2);
-      if (Array.isArray(replacer) && replacer.includes(key)) return value2;
-      return value2;
-    },
-    space
-  );
-  const processedJSON = convertedToCustomJSON.replace(
-    bigIntsStringify,
-    "$1$2$3"
-  );
-  const denoisedJSON = processedJSON.replace(noiseStringify, "$1$2$3");
-  return denoisedJSON;
 };
 var featureCache = /* @__PURE__ */ new Map();
 var isContextSourceSupported = () => {
@@ -102965,16 +102489,20 @@ var convertMarkedBigIntsReviver = (key, value, context5, userReviver) => {
   if (isCustomFormatBigInt) return BigInt(value.slice(0, -1));
   const isNoiseValue = typeof value === "string" && noiseValue.test(value);
   if (isNoiseValue) return value.slice(0, -1);
-  if (typeof userReviver !== "function") return value;
+  const hasUserReviver = typeof userReviver === "function";
+  if (!hasUserReviver) return value;
   return userReviver(key, value, context5);
 };
 var JSONParseV2 = (text, reviver) => {
   return JSON.parse(text, (key, value, context5) => {
-    const isBigNumber = typeof value === "number" && (value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER);
+    const isNumber = typeof value === "number";
+    const isOutOfBounds = value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER;
+    const isBigNumber = isNumber && isOutOfBounds;
     const isInt = context5 && intRegex.test(context5.source);
     const isBigInt = isBigNumber && isInt;
     if (isBigInt) return BigInt(context5.source);
-    if (typeof reviver !== "function") return value;
+    const hasCustomReviver = typeof reviver === "function";
+    if (!hasCustomReviver) return value;
     return reviver(key, value, context5);
   });
 };
@@ -102982,26 +102510,80 @@ var MAX_INT = Number.MAX_SAFE_INTEGER.toString();
 var MAX_DIGITS = MAX_INT.length;
 var stringsOrLargeNumbers = /"(?:\\.|[^"])*"|-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?/g;
 var noiseValueWithQuotes = /^"-?\d+n+"$/;
-var JSONParse = (text, reviver) => {
-  if (!text) return originalParse(text, reviver);
-  if (isContextSourceSupported()) return JSONParseV2(text, reviver);
-  const serializedData = text.replace(
+var applyReviverIteratively = (parsed, userReviver) => {
+  const rootHolder = { "": parsed };
+  const stack = [{ parent: rootHolder, key: "", visited: false }];
+  while (stack.length > 0) {
+    const node = stack[stack.length - 1];
+    if (!node.visited) {
+      node.visited = true;
+      const value = node.parent[node.key];
+      const isComplexObject = value !== null && typeof value === "object";
+      if (isComplexObject) {
+        const keys = Object.keys(value);
+        for (let i = keys.length - 1; i >= 0; i--) {
+          stack.push({ parent: value, key: keys[i], visited: false });
+        }
+      }
+    } else {
+      const { parent, key } = node;
+      let value = parent[key];
+      if (typeof value === "string") {
+        const isCustomFormatBigInt = customFormat.test(value);
+        if (isCustomFormatBigInt) {
+          value = BigInt(value.slice(0, -1));
+        } else {
+          const isNoise = noiseValue.test(value);
+          if (isNoise) value = value.slice(0, -1);
+        }
+      }
+      const hasUserReviver = typeof userReviver === "function";
+      if (hasUserReviver) {
+        value = userReviver.call(parent, key, value);
+      }
+      const isDeleted = value === void 0;
+      if (isDeleted) {
+        delete parent[key];
+      } else {
+        parent[key] = value;
+      }
+      stack.pop();
+    }
+  }
+  return rootHolder[""];
+};
+var serializeBigInts = (text) => {
+  return text.replace(
     stringsOrLargeNumbers,
-    (text2, digits, fractional, exponential) => {
-      const isString = text2[0] === '"';
-      const isNoise = isString && noiseValueWithQuotes.test(text2);
-      if (isNoise) return text2.substring(0, text2.length - 1) + 'n"';
-      const isFractionalOrExponential = fractional || exponential;
+    (match, digits, fractional, exponential) => {
+      const isString = match[0] === '"';
+      const isNoise = isString && noiseValueWithQuotes.test(match);
+      if (isNoise) return match.substring(0, match.length - 1) + 'n"';
+      const hasFractionalOrExponential = fractional || exponential;
       const isLessThanMaxSafeInt = digits && (digits.length < MAX_DIGITS || digits.length === MAX_DIGITS && digits <= MAX_INT);
-      if (isString || isFractionalOrExponential || isLessThanMaxSafeInt)
-        return text2;
-      return '"' + text2 + 'n"';
+      const isStandardValue = isString || hasFractionalOrExponential || isLessThanMaxSafeInt;
+      if (isStandardValue) return match;
+      return '"' + match + 'n"';
     }
   );
-  return originalParse(
-    serializedData,
-    (key, value, context5) => convertMarkedBigIntsReviver(key, value, context5, reviver)
-  );
+};
+var JSONParse = (text, reviver) => {
+  if (!text) return originalParse(text, reviver);
+  try {
+    if (isContextSourceSupported()) return JSONParseV2(text, reviver);
+    const serializedData = serializeBigInts(text);
+    return originalParse(
+      serializedData,
+      (key, value, context5) => convertMarkedBigIntsReviver(key, value, context5, reviver)
+    );
+  } catch (error2) {
+    if (error2 instanceof RangeError) {
+      const serializedData = serializeBigInts(text);
+      const parsed = originalParse(serializedData);
+      return applyReviverIteratively(parsed, reviver);
+    }
+    throw error2;
+  }
 };
 
 // node_modules/@octokit/request-error/dist-src/index.js
@@ -103044,7 +102626,7 @@ var RequestError = class extends Error {
 };
 
 // node_modules/@octokit/request/dist-bundle/index.js
-var VERSION2 = "10.0.10";
+var VERSION2 = "10.0.11";
 var defaults_default = {
   headers: {
     "user-agent": `octokit-request.js/${VERSION2} ${getUserAgent()}`
@@ -103190,9 +102772,10 @@ function toErrorMessage(data) {
   if (data instanceof ArrayBuffer) {
     return "Unknown error";
   }
-  if ("message" in data) {
-    const suffix = "documentation_url" in data ? ` - ${data.documentation_url}` : "";
-    return Array.isArray(data.errors) ? `${data.message}: ${data.errors.map((v) => JSON.stringify(v)).join(", ")}${suffix}` : `${data.message}${suffix}`;
+  if (typeof data === "object" && data !== null && "message" in data) {
+    const objectData = data;
+    const suffix = "documentation_url" in objectData ? ` - ${objectData.documentation_url}` : "";
+    return Array.isArray(objectData.errors) ? `${objectData.message}: ${objectData.errors.map((v) => JSON.stringify(v)).join(", ")}${suffix}` : `${objectData.message}${suffix}`;
   }
   return `Unknown error: ${JSON.stringify(data)}`;
 }
@@ -106191,7 +105774,7 @@ function streamExtractExternal(url_1, directory_1) {
         clearTimeout(timer);
         reject(error2);
       };
-      const hashStream = crypto4.createHash("sha256").setEncoding("hex");
+      const hashStream = crypto3.createHash("sha256").setEncoding("hex");
       const passThrough = new stream3.PassThrough().on("data", () => {
         timer.refresh();
       }).on("error", onError);
@@ -107157,7 +106740,7 @@ function resolveActionVersion(explicit) {
   if (explicit) {
     return explicit;
   }
-  return "0.6.2" ? "0.6.2" : "unknown";
+  return "0.6.3" ? "0.6.3" : "unknown";
 }
 function telemetryDisabled(env) {
   const flag = String(env.POSTMAN_ACTIONS_TELEMETRY ?? "").trim().toLowerCase();
@@ -109480,7 +109063,7 @@ async function ensurePostmanCli(apiKey, options) {
   const lookupCommand = platform2 === "win32" ? "where.exe postman" : "command -v postman";
   const which2 = await commandRunner(lookupCommand, { mask: options.mask });
   if (which2.exitCode !== 0) {
-    const installCommand = platform2 === "win32" ? 'powershell.exe -NoProfile -InputFormat None -ExecutionPolicy AllSigned -Command "[System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString($env:POSTMAN_CLI_INSTALL_URL))"' : 'curl -fsSL "$POSTMAN_CLI_INSTALL_URL" | sh';
+    const installCommand = platform2 === "win32" ? 'pwsh.exe -NoProfile -InputFormat None -ExecutionPolicy AllSigned -Command "[System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString($env:POSTMAN_CLI_INSTALL_URL))"' : 'curl -fsSL "$POSTMAN_CLI_INSTALL_URL" | sh';
     const install = await commandRunner(installCommand, {
       env: { POSTMAN_CLI_INSTALL_URL: options.cliInstallUrl },
       mask: options.mask
@@ -112220,7 +111803,7 @@ function readActionInputs() {
   };
 }
 function resolveActionVersion2() {
-  return "0.6.2" ? "0.6.2" : "unknown";
+  return "0.6.3" ? "0.6.3" : "unknown";
 }
 async function runAction(options = {}) {
   const telemetry = createTelemetryContext({
