@@ -157,7 +157,7 @@ export async function ensurePostmanCli(
   if (which.exitCode !== 0) {
     const installCommand =
       platform === 'win32'
-        ? 'powershell.exe -NoProfile -InputFormat None -ExecutionPolicy AllSigned -Command "[System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString($env:POSTMAN_CLI_INSTALL_URL))"'
+        ? 'pwsh.exe -NoProfile -InputFormat None -ExecutionPolicy AllSigned -Command "[System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString($env:POSTMAN_CLI_INSTALL_URL))"'
         : 'curl -fsSL "$POSTMAN_CLI_INSTALL_URL" | sh';
     const install = await commandRunner(installCommand, {
       env: { POSTMAN_CLI_INSTALL_URL: options.cliInstallUrl },

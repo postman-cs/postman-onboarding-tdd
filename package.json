@@ -1,6 +1,6 @@
 {
   "name": "@postman-cse/onboarding-tdd",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Postman onboarding TDD preview GitHub Action.",
   "type": "module",
   "main": "dist/action.mjs",

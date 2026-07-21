@@ -88,7 +88,7 @@ describe('Postman CLI installation', () => {
     );
     expect(commandRunner).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('powershell.exe -NoProfile -InputFormat None -ExecutionPolicy AllSigned'),
+      expect.stringContaining('pwsh.exe -NoProfile -InputFormat None -ExecutionPolicy AllSigned'),
       expect.objectContaining({
         env: { POSTMAN_CLI_INSTALL_URL: 'https://dl-cli.pstmn.io/install/win64.ps1' },
         mask
