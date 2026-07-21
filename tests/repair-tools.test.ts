@@ -78,7 +78,7 @@ describe('repair tools', () => {
 
     expect(result.error).toBeUndefined();
     expect(result.touchedPaths).toEqual(['src/app.js']);
-    expect(readFileSync(join(context.repoRoot, 'src', 'app.js'), 'utf8')).toBe(
+    expect(readFileSync(join(context.repoRoot, 'src', 'app.js'), 'utf8').replace(/\r\n/g, '\n')).toBe(
       'export const status = "fixed";\nexport const owner = "postman";\n'
     );
   });
@@ -96,6 +96,6 @@ describe('repair tools', () => {
     }, context);
 
     expect(result.error).toContain('Patch touches non-writable path: api/openapi.yaml');
-    expect(readFileSync(join(context.repoRoot, 'api', 'openapi.yaml'), 'utf8')).toBe('openapi: 3.0.3\n');
+    expect(readFileSync(join(context.repoRoot, 'api', 'openapi.yaml'), 'utf8').replace(/\r\n/g, '\n')).toBe('openapi: 3.0.3\n');
   });
 });

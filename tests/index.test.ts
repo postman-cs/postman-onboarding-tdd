@@ -153,7 +153,7 @@ tdd:
     })).rejects.toThrow('tdd.baseUrl is required');
 
     expect(postmanCalls).toEqual([]);
-    expect(uploads).toEqual([{
+    expect(uploads.map((u) => ({ ...u, files: u.files.map((f) => f.replace(/\\/g, '/')) }))).toEqual([{
       files: [
         '.postman-tdd/agent-task.md',
         '.postman-tdd/failures.json',
