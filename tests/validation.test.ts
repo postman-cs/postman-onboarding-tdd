@@ -103,8 +103,8 @@ describe('validate mode', () => {
 
     await expect(runAction()).rejects.toThrow('Postman TDD setup validation failed with 1 error');
     const outputs = parseGitHubOutputs();
-    expect(outputs.get('validation-error-count')).toBe('1');
-    expect(outputs.get('failure-phase')).toBe('config');
+    expect((outputs.get('validation-error-count') ?? '').replace(/\r/g, '')).toBe('1');
+    expect((outputs.get('failure-phase') ?? '').replace(/\r/g, '')).toBe('config');
     const summary = outputs.get('validation-summary') ?? '';
     expect(summary).toContain('To fix:');
     expect(summary).toContain('.agents/references/repair-loop.md');
@@ -115,8 +115,8 @@ describe('validate mode', () => {
 
     await expect(runAction()).resolves.toBeUndefined();
     const outputs = parseGitHubOutputs();
-    expect(outputs.get('validation-error-count')).toBe('0');
-    expect(outputs.get('failure-phase')).toBe('none');
+    expect((outputs.get('validation-error-count') ?? '').replace(/\r/g, '')).toBe('0');
+    expect((outputs.get('failure-phase') ?? '').replace(/\r/g, '')).toBe('none');
     const summary = outputs.get('validation-summary') ?? '';
     expect(summary).not.toContain('To fix:');
   });
