@@ -15,7 +15,10 @@ import {
   startBackgroundCommand,
   waitForHealth
 } from '../runner.js';
-import type { PostmanEndpointProfile } from '../postman/base-urls.js';
+import {
+  resolvePostmanCliInstallUrl,
+  type PostmanEndpointProfile
+} from '../postman/base-urls.js';
 import type { PostmanClient } from '../postman/client.js';
 import type { ActionInputs, AgentFailureDocument, PrMetadata, PreviewAssetState, RepairCheckpointPayload, RepairProvider, RepairStatus, SignedRepairCheckpoint } from '../types.js';
 import type { SecretMasker } from '../secrets.js';
@@ -136,7 +139,7 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
 
   core.info('[postman-tdd] Repair ensuring Postman CLI is available and authenticated.');
   await ensurePostmanCli(options.inputs.postmanApiKey, {
-    cliInstallUrl: options.endpointProfile.cliInstallUrl,
+    cliInstallUrl: resolvePostmanCliInstallUrl(options.endpointProfile),
     mask: options.mask,
     postmanRegion: options.inputs.postmanRegion
   });

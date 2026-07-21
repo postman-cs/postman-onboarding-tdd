@@ -1,6 +1,6 @@
 {
   "name": "@postman-cse/onboarding-tdd",
-  "version": "0.1.0",
+  "version": "0.6.2",
   "description": "Postman onboarding TDD preview GitHub Action.",
   "type": "module",
   "main": "dist/action.mjs",
@@ -15,7 +15,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "npm run typecheck && rm -rf dist && esbuild src/main.ts --bundle --platform=node --target=node24 --format=esm --banner:js='import { createRequire as __createRequire } from \"node:module\"; const require = __createRequire(import.meta.url);' --define:__ACTION_VERSION__=\\\"$npm_package_version\\\" --outfile=dist/action.mjs",
+    "build": "npm run typecheck && node scripts/build.mjs",
     "check:dist": "npm run build && git diff --exit-code -- dist",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",

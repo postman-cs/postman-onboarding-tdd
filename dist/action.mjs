@@ -107157,7 +107157,7 @@ function resolveActionVersion(explicit) {
   if (explicit) {
     return explicit;
   }
-  return "0.1.0" ? "0.1.0" : "unknown";
+  return "0.6.2" ? "0.6.2" : "unknown";
 }
 function telemetryDisabled(env) {
   const flag = String(env.POSTMAN_ACTIONS_TELEMETRY ?? "").trim().toLowerCase();
@@ -109475,18 +109475,27 @@ function isSensitiveEnvName(name) {
   return normalized.startsWith("INPUT_") || normalized.includes("TOKEN") || normalized.includes("SECRET") || normalized.includes("PASSWORD") || normalized.includes("API_KEY") || normalized.includes("API-KEY") || normalized.includes("ACCESS_KEY") || normalized.includes("ACCESS-KEY") || normalized.includes("PRIVATE_KEY") || normalized.includes("PRIVATE-KEY") || normalized === "SSH_AUTH_SOCK" || normalized === "GIT_ASKPASS" || normalized === "SSH_ASKPASS";
 }
 async function ensurePostmanCli(apiKey, options) {
-  const which2 = await runCommand("command -v postman", { mask: options.mask });
+  const commandRunner = options.commandRunner ?? runCommand;
+  const platform2 = options.platform ?? process.platform;
+  const lookupCommand = platform2 === "win32" ? "where.exe postman" : "command -v postman";
+  const which2 = await commandRunner(lookupCommand, { mask: options.mask });
   if (which2.exitCode !== 0) {
-    const install = await runCommand('curl -fsSL "$POSTMAN_CLI_INSTALL_URL" | sh', {
+    const installCommand = platform2 === "win32" ? 'powershell.exe -NoProfile -InputFormat None -ExecutionPolicy AllSigned -Command "[System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString($env:POSTMAN_CLI_INSTALL_URL))"' : 'curl -fsSL "$POSTMAN_CLI_INSTALL_URL" | sh';
+    const install = await commandRunner(installCommand, {
       env: { POSTMAN_CLI_INSTALL_URL: options.cliInstallUrl },
       mask: options.mask
     });
     if (install.exitCode !== 0) {
       throw new Error(`Failed to install Postman CLI: ${install.logExcerpt}`);
     }
+    const installed = await commandRunner(lookupCommand, { mask: options.mask });
+    if (installed.exitCode !== 0) {
+      throw new Error(`Postman CLI installation completed but the postman command is unavailable: ${installed.logExcerpt}`);
+    }
   }
   const regionArg = options.postmanRegion === "eu" ? " --region eu" : "";
-  const login = await runCommand(`postman login --with-api-key "$POSTMAN_API_KEY"${regionArg}`, {
+  const apiKeyReference = platform2 === "win32" ? "%POSTMAN_API_KEY%" : "$POSTMAN_API_KEY";
+  const login = await commandRunner(`postman login --with-api-key "${apiKeyReference}"${regionArg}`, {
     env: { POSTMAN_API_KEY: apiKey },
     mask: options.mask
   });
@@ -109527,9 +109536,13 @@ async function waitForHealth(healthUrl, running, timeoutSeconds, mask) {
     logExcerpt: running.logs()
   };
 }
-async function runTddCollection(collectionId, baseUrl2, mask) {
-  return runCommand(
-    'postman collection run "$POSTMAN_TDD_COLLECTION_ID" --env-var "baseUrl=$POSTMAN_TDD_BASE_URL"',
+async function runTddCollection(collectionId, baseUrl2, mask, options = {}) {
+  const commandRunner = options.commandRunner ?? runCommand;
+  const platform2 = options.platform ?? process.platform;
+  const collectionReference = platform2 === "win32" ? "%POSTMAN_TDD_COLLECTION_ID%" : "$POSTMAN_TDD_COLLECTION_ID";
+  const baseUrlReference = platform2 === "win32" ? "%POSTMAN_TDD_BASE_URL%" : "$POSTMAN_TDD_BASE_URL";
+  return commandRunner(
+    `postman collection run "${collectionReference}" --env-var "baseUrl=${baseUrlReference}"`,
     {
       env: {
         POSTMAN_TDD_BASE_URL: baseUrl2,
@@ -109538,6 +109551,47 @@ async function runTddCollection(collectionId, baseUrl2, mask) {
       mask
     }
   );
+}
+
+// src/postman/base-urls.ts
+var POSTMAN_ENDPOINT_PROFILES = {
+  prod: {
+    apiBaseUrl: "https://api.getpostman.com",
+    cliInstallUrl: "https://dl-cli.pstmn.io/install/unix.sh",
+    cliWindowsInstallUrl: "https://dl-cli.pstmn.io/install/win64.ps1"
+  },
+  beta: {
+    apiBaseUrl: "https://api.getpostman-beta.com",
+    cliInstallUrl: "https://dl-cli.pstmn-beta.io/install/unix.sh",
+    cliWindowsInstallUrl: "https://dl-cli.pstmn-beta.io/install/win64.ps1"
+  }
+};
+function resolvePostmanCliInstallUrl(profile, platform2 = process.platform) {
+  return platform2 === "win32" ? profile.cliWindowsInstallUrl || profile.cliInstallUrl : profile.cliInstallUrl;
+}
+function parsePostmanRegion(value) {
+  const normalized = String(value || "us").trim().toLowerCase();
+  if (normalized === "us" || normalized === "eu") {
+    return normalized;
+  }
+  throw new Error(`Unsupported postman-region "${value}". Supported values: us, eu`);
+}
+function parsePostmanStack(value) {
+  const normalized = String(value || "prod").trim().toLowerCase();
+  if (normalized === "prod" || normalized === "beta") {
+    return normalized;
+  }
+  throw new Error(`Unsupported postman-stack "${value}". Supported values: prod, beta`);
+}
+function resolvePostmanEndpointProfile(stack, region) {
+  if (stack === "beta" && region !== "us") {
+    throw new Error("postman-region=eu is only supported with postman-stack=prod");
+  }
+  const profile = POSTMAN_ENDPOINT_PROFILES[stack];
+  return {
+    ...profile,
+    apiBaseUrl: region === "eu" ? "https://api.eu.postman.com" : profile.apiBaseUrl
+  };
 }
 
 // src/repair/git.ts
@@ -111011,7 +111065,7 @@ async function runRepairMode(options) {
   info(`[postman-tdd] Repair assets ready: workspace=${state3.workspaceId}, spec=${state3.specId}, collection=${state3.collectionId}.`);
   info("[postman-tdd] Repair ensuring Postman CLI is available and authenticated.");
   await ensurePostmanCli(options.inputs.postmanApiKey, {
-    cliInstallUrl: options.endpointProfile.cliInstallUrl,
+    cliInstallUrl: resolvePostmanCliInstallUrl(options.endpointProfile),
     mask: options.mask,
     postmanRegion: options.inputs.postmanRegion
   });
@@ -111569,42 +111623,6 @@ function buildCheckpoint(commit, provider, attempts, escalated, attemptFingerpri
     return signRepairCheckpoint(payload, signingKey);
   }
   return payload;
-}
-
-// src/postman/base-urls.ts
-var POSTMAN_ENDPOINT_PROFILES = {
-  prod: {
-    apiBaseUrl: "https://api.getpostman.com",
-    cliInstallUrl: "https://dl-cli.pstmn.io/install/unix.sh"
-  },
-  beta: {
-    apiBaseUrl: "https://api.getpostman-beta.com",
-    cliInstallUrl: "https://dl-cli.pstmn-beta.io/install/unix.sh"
-  }
-};
-function parsePostmanRegion(value) {
-  const normalized = String(value || "us").trim().toLowerCase();
-  if (normalized === "us" || normalized === "eu") {
-    return normalized;
-  }
-  throw new Error(`Unsupported postman-region "${value}". Supported values: us, eu`);
-}
-function parsePostmanStack(value) {
-  const normalized = String(value || "prod").trim().toLowerCase();
-  if (normalized === "prod" || normalized === "beta") {
-    return normalized;
-  }
-  throw new Error(`Unsupported postman-stack "${value}". Supported values: prod, beta`);
-}
-function resolvePostmanEndpointProfile(stack, region) {
-  if (stack === "beta" && region !== "us") {
-    throw new Error("postman-region=eu is only supported with postman-stack=prod");
-  }
-  const profile = POSTMAN_ENDPOINT_PROFILES[stack];
-  return {
-    ...profile,
-    apiBaseUrl: region === "eu" ? "https://api.eu.postman.com" : profile.apiBaseUrl
-  };
 }
 
 // src/utils/http-error.ts
@@ -112202,7 +112220,7 @@ function readActionInputs() {
   };
 }
 function resolveActionVersion2() {
-  return "0.1.0" ? "0.1.0" : "unknown";
+  return "0.6.2" ? "0.6.2" : "unknown";
 }
 async function runAction(options = {}) {
   const telemetry = createTelemetryContext({
@@ -112447,7 +112465,7 @@ async function runActionInner(options, telemetry) {
     info(`[postman-tdd] Built verification ledger with ${ledger.packets.length} packet(s) from contract index.`);
     info("[postman-tdd] Ensuring Postman CLI is available and authenticated.");
     await ensurePostmanCli(inputs.postmanApiKey, {
-      cliInstallUrl: endpointProfile.cliInstallUrl,
+      cliInstallUrl: resolvePostmanCliInstallUrl(endpointProfile),
       mask,
       postmanRegion: inputs.postmanRegion
     });

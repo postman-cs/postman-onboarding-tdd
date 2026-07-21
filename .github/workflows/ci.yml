@@ -56,3 +56,19 @@ jobs:
         with:
           name: expected-dist
           path: dist/
+
+  windows:
+    name: Windows gate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run check:dist

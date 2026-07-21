@@ -3,18 +3,30 @@ import type { PostmanRegion, PostmanStack } from '../types.js';
 export interface PostmanEndpointProfile {
   apiBaseUrl: string;
   cliInstallUrl: string;
+  cliWindowsInstallUrl?: string;
 }
 
 const POSTMAN_ENDPOINT_PROFILES: Record<PostmanStack, PostmanEndpointProfile> = {
   prod: {
     apiBaseUrl: 'https://api.getpostman.com',
-    cliInstallUrl: 'https://dl-cli.pstmn.io/install/unix.sh'
+    cliInstallUrl: 'https://dl-cli.pstmn.io/install/unix.sh',
+    cliWindowsInstallUrl: 'https://dl-cli.pstmn.io/install/win64.ps1'
   },
   beta: {
     apiBaseUrl: 'https://api.getpostman-beta.com',
-    cliInstallUrl: 'https://dl-cli.pstmn-beta.io/install/unix.sh'
+    cliInstallUrl: 'https://dl-cli.pstmn-beta.io/install/unix.sh',
+    cliWindowsInstallUrl: 'https://dl-cli.pstmn-beta.io/install/win64.ps1'
   }
 };
+
+export function resolvePostmanCliInstallUrl(
+  profile: PostmanEndpointProfile,
+  platform: NodeJS.Platform = process.platform
+): string {
+  return platform === 'win32'
+    ? profile.cliWindowsInstallUrl || profile.cliInstallUrl
+    : profile.cliInstallUrl;
+}
 
 export function parsePostmanRegion(value: string | undefined): PostmanRegion {
   const normalized = String(value || 'us').trim().toLowerCase();

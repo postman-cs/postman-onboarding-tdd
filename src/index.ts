@@ -26,7 +26,12 @@ import { buildLedgerPackets, mergePersistedState, ratchetLedger, scoreLedger, to
 import { runRepairMode } from './repair/orchestrator.js';
 import { defaultRepairModel } from './repair/provider-dispatcher.js';
 import { createAssetNames, resolveTddWorkspace, upsertPreviewAssets } from './preview-assets.js';
-import { resolvePostmanEndpointProfile, parsePostmanRegion, parsePostmanStack } from './postman/base-urls.js';
+import {
+  parsePostmanRegion,
+  parsePostmanStack,
+  resolvePostmanCliInstallUrl,
+  resolvePostmanEndpointProfile
+} from './postman/base-urls.js';
 import type { PostmanEndpointProfile } from './postman/base-urls.js';
 import { PostmanClient } from './postman/client.js';
 import { renderJUnit } from './reporting/junit.js';
@@ -400,7 +405,7 @@ async function runActionInner(
 
     core.info('[postman-tdd] Ensuring Postman CLI is available and authenticated.');
     await ensurePostmanCli(inputs.postmanApiKey, {
-      cliInstallUrl: endpointProfile.cliInstallUrl,
+      cliInstallUrl: resolvePostmanCliInstallUrl(endpointProfile),
       mask,
       postmanRegion: inputs.postmanRegion
     });
