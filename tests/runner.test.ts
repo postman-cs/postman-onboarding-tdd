@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { createCustomerCommandEnv, runCommand } from '../src/runner.js';
+import { createCustomerCommandEnv, ensurePostmanCli, runCommand, runTddCollection } from '../src/runner.js';
 
 describe('customer command environment', () => {
   const mask = (value: string) => value;
@@ -59,5 +59,75 @@ describe('customer command environment', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
     expect(result.stdout).toBe('visible');
+  });
+});
+
+describe('Postman CLI installation', () => {
+  const mask = (value: string) => value;
+
+  it('uses the official Windows installer and verifies the command before login', async () => {
+    const commandRunner = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 1, logExcerpt: '', stderr: '', stdout: '' })
+      .mockResolvedValueOnce({ exitCode: 0, logExcerpt: '', stderr: '', stdout: '' })
+      .mockResolvedValueOnce({ exitCode: 0, logExcerpt: '', stderr: '', stdout: 'postman.exe' })
+      .mockResolvedValueOnce({ exitCode: 0, logExcerpt: '', stderr: '', stdout: '' });
+
+    await ensurePostmanCli('PMAK-test', {
+      cliInstallUrl: 'https://dl-cli.pstmn.io/install/win64.ps1',
+      commandRunner,
+      mask,
+      platform: 'win32',
+      postmanRegion: 'us'
+    });
+
+    expect(commandRunner).toHaveBeenNthCalledWith(
+      1,
+      'where.exe postman',
+      expect.objectContaining({ mask })
+    );
+    expect(commandRunner).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('powershell.exe -NoProfile -InputFormat None -ExecutionPolicy AllSigned'),
+      expect.objectContaining({
+        env: { POSTMAN_CLI_INSTALL_URL: 'https://dl-cli.pstmn.io/install/win64.ps1' },
+        mask
+      })
+    );
+    expect(commandRunner).toHaveBeenNthCalledWith(
+      3,
+      'where.exe postman',
+      expect.objectContaining({ mask })
+    );
+    expect(commandRunner).toHaveBeenNthCalledWith(
+      4,
+      'postman login --with-api-key "%POSTMAN_API_KEY%"',
+      expect.objectContaining({ env: { POSTMAN_API_KEY: 'PMAK-test' }, mask })
+    );
+  });
+
+  it('uses cmd.exe environment expansion for Windows collection runs', async () => {
+    const commandRunner = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      logExcerpt: '',
+      stderr: '',
+      stdout: ''
+    });
+
+    await runTddCollection('collection-1', 'http://localhost:4010', mask, {
+      commandRunner,
+      platform: 'win32'
+    });
+
+    expect(commandRunner).toHaveBeenCalledWith(
+      'postman collection run "%POSTMAN_TDD_COLLECTION_ID%" --env-var "baseUrl=%POSTMAN_TDD_BASE_URL%"',
+      expect.objectContaining({
+        env: {
+          POSTMAN_TDD_BASE_URL: 'http://localhost:4010',
+          POSTMAN_TDD_COLLECTION_ID: 'collection-1'
+        },
+        mask
+      })
+    );
   });
 });

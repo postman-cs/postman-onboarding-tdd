@@ -144,23 +144,37 @@ export async function ensurePostmanCli(
   apiKey: string,
   options: {
     cliInstallUrl: string;
+    commandRunner?: typeof runCommand;
     mask: SecretMasker;
+    platform?: NodeJS.Platform;
     postmanRegion: 'us' | 'eu';
   }
 ): Promise<void> {
-  const which = await runCommand('command -v postman', { mask: options.mask });
+  const commandRunner = options.commandRunner ?? runCommand;
+  const platform = options.platform ?? process.platform;
+  const lookupCommand = platform === 'win32' ? 'where.exe postman' : 'command -v postman';
+  const which = await commandRunner(lookupCommand, { mask: options.mask });
   if (which.exitCode !== 0) {
-    const install = await runCommand('curl -fsSL "$POSTMAN_CLI_INSTALL_URL" | sh', {
+    const installCommand =
+      platform === 'win32'
+        ? 'powershell.exe -NoProfile -InputFormat None -ExecutionPolicy AllSigned -Command "[System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString($env:POSTMAN_CLI_INSTALL_URL))"'
+        : 'curl -fsSL "$POSTMAN_CLI_INSTALL_URL" | sh';
+    const install = await commandRunner(installCommand, {
       env: { POSTMAN_CLI_INSTALL_URL: options.cliInstallUrl },
       mask: options.mask
     });
     if (install.exitCode !== 0) {
       throw new Error(`Failed to install Postman CLI: ${install.logExcerpt}`);
     }
+    const installed = await commandRunner(lookupCommand, { mask: options.mask });
+    if (installed.exitCode !== 0) {
+      throw new Error(`Postman CLI installation completed but the postman command is unavailable: ${installed.logExcerpt}`);
+    }
   }
 
   const regionArg = options.postmanRegion === 'eu' ? ' --region eu' : '';
-  const login = await runCommand(`postman login --with-api-key "$POSTMAN_API_KEY"${regionArg}`, {
+  const apiKeyReference = platform === 'win32' ? '%POSTMAN_API_KEY%' : '$POSTMAN_API_KEY';
+  const login = await commandRunner(`postman login --with-api-key "${apiKeyReference}"${regionArg}`, {
     env: { POSTMAN_API_KEY: apiKey },
     mask: options.mask
   });
@@ -214,10 +228,22 @@ export async function waitForHealth(
 export async function runTddCollection(
   collectionId: string,
   baseUrl: string,
-  mask: SecretMasker
+  mask: SecretMasker,
+  options: {
+    commandRunner?: typeof runCommand;
+    platform?: NodeJS.Platform;
+  } = {}
 ): Promise<CommandResult> {
-  return runCommand(
-    'postman collection run "$POSTMAN_TDD_COLLECTION_ID" --env-var "baseUrl=$POSTMAN_TDD_BASE_URL"',
+  const commandRunner = options.commandRunner ?? runCommand;
+  const platform = options.platform ?? process.platform;
+  const collectionReference = platform === 'win32'
+    ? '%POSTMAN_TDD_COLLECTION_ID%'
+    : '$POSTMAN_TDD_COLLECTION_ID';
+  const baseUrlReference = platform === 'win32'
+    ? '%POSTMAN_TDD_BASE_URL%'
+    : '$POSTMAN_TDD_BASE_URL';
+  return commandRunner(
+    `postman collection run "${collectionReference}" --env-var "baseUrl=${baseUrlReference}"`,
     {
       env: {
         POSTMAN_TDD_BASE_URL: baseUrl,
