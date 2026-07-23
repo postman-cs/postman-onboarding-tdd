@@ -10,15 +10,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   gate:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -27,32 +27,52 @@ jobs:
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.11 "$RUNNER_TEMP"
           echo "ACTIONLINT_BIN=$RUNNER_TEMP/actionlint" >> "$GITHUB_ENV"
-      # All checks run in parallel as backgrounded shell processes on one runner,
-      # so wall-clock is max(gate), not sum, and setup/npm-ci run once. Failures
-      # aggregate under ::group:: logs, so one pass shows every result.
+      - run: npm run build
+      # Keep at most two read-only checks active on the two-vCPU runner. Every
+      # gate reports under ::group:: logs, so one pass shows every result.
       - name: Run gates
         run: |
           set -uo pipefail
-          declare -A pid
-          run() { local n=$1; shift; ( "$@" ) >"$n.log" 2>&1 & pid[$n]=$!; }
+          declare -A pid=()
+          declare -A result=()
+          declare -a names=()
+          MAX_PARALLEL_GATES=2
+          finish_one() {
+            local finished_pid status n
+            if wait -n -p finished_pid "${pid[@]}"; then status=0; else status=$?; fi
+            for n in "${!pid[@]}"; do
+              if [ "${pid[$n]}" = "$finished_pid" ]; then
+                result[$n]=$status
+                unset 'pid[$n]'
+                return
+              fi
+            done
+          }
+          run() {
+            while [ "${#pid[@]}" -ge "$MAX_PARALLEL_GATES" ]; do finish_one; done
+            local n=$1; shift
+            names+=("$n")
+            ( "$@" ) >"$n.log" 2>&1 & pid[$n]=$!
+          }
 
           run lint       npm run lint
           run test       npm test
           run typecheck  npm run typecheck
-          run dist       npm run check:dist
+          run dist       npm run check:dist:assert
           run actionlint "$ACTIONLINT_BIN" .github/workflows/*.yml .postman-template/workflows/*.yml .postman-template/workflows/agents/*.yml
 
+          while [ "${#pid[@]}" -gt 0 ]; do finish_one; done
           fail=0
-          for n in "${!pid[@]}"; do
-            if wait "${pid[$n]}"; then echo "gate:$n=pass"; else echo "gate:$n=fail"; fail=1; fi
+          for n in "${names[@]}"; do
+            if [ "${result[$n]}" -eq 0 ]; then echo "gate:$n=pass"; else echo "gate:$n=fail"; fail=1; fi
           done
-          for n in "${!pid[@]}"; do
+          for n in "${names[@]}"; do
             echo "::group::$n"; cat "$n.log"; echo "::endgroup::"
           done
           exit $fail
       - name: Upload expected dist on mismatch
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: expected-dist
           path: dist/
@@ -61,14 +81,51 @@ jobs:
     name: Windows gate
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm test
-      - run: npm run typecheck
       - run: npm run build
-      - run: npm run check:dist
+      - name: Run gates
+        shell: pwsh
+        run: |
+          $MAX_PARALLEL_GATES = 2
+          $active = [System.Collections.ArrayList]::new()
+          $results = [ordered]@{}
+          $gates = @(
+            @{ Name = 'lint'; Arguments = @('run', 'lint') },
+            @{ Name = 'test'; Arguments = @('test') },
+            @{ Name = 'typecheck'; Arguments = @('run', 'typecheck') },
+            @{ Name = 'dist'; Arguments = @('run', 'check:dist:assert') }
+          )
+
+          function Complete-One {
+            while ($true) {
+              foreach ($gate in @($active)) {
+                if ($gate.Process.HasExited) {
+                  $results[$gate.Name] = $gate.Process.ExitCode
+                  [void] $active.Remove($gate)
+                  return
+                }
+              }
+              Start-Sleep -Milliseconds 100
+            }
+          }
+
+          foreach ($gate in $gates) {
+            while ($active.Count -ge $MAX_PARALLEL_GATES) { Complete-One }
+            $process = Start-Process -FilePath 'npm.cmd' -ArgumentList $gate.Arguments -PassThru -NoNewWindow -RedirectStandardOutput "$($gate.Name).out.log" -RedirectStandardError "$($gate.Name).err.log"
+            [void] $active.Add([PSCustomObject]@{ Name = $gate.Name; Process = $process })
+          }
+          while ($active.Count -gt 0) { Complete-One }
+
+          $failed = $false
+          foreach ($gate in $gates) {
+            if ($results[$gate.Name] -eq 0) { Write-Output "gate:$($gate.Name)=pass" } else { Write-Output "gate:$($gate.Name)=fail"; $failed = $true }
+            Write-Output "::group::$($gate.Name)"
+            Get-Content "$($gate.Name).out.log", "$($gate.Name).err.log"
+            Write-Output '::endgroup::'
+          }
+          if ($failed) { exit 1 }
