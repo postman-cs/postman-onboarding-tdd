@@ -677,10 +677,21 @@ tdd:
     stickyBody: string;
     signingKey?: string;
     escalationModel?: string;
+    visibleAttemptDetails?: number;
+    repairCheckpoint?: SignedRepairCheckpoint | RepairCheckpointPayload;
   }): Promise<{ providerCalls: number; checkpointWritten: boolean; blockedReason?: string }> {
     let capturedSummary: { blockedReason?: string } | undefined;
     const github = {
       findStickyComment: async () => ({ body: options.stickyBody, id: 1 }),
+      findRepairSummary: async () => options.visibleAttemptDetails === undefined && !options.repairCheckpoint ? undefined : ({
+        attemptDetails: Array.from({ length: options.visibleAttemptDetails ?? 0 }, (_, index) => ({ attempt: index + 1 })),
+        attempts: options.visibleAttemptDetails ?? 0,
+        checkpointRef: options.repairCheckpoint,
+        message: 'Prior repair run.',
+        prNumber: 123,
+        schemaVersion: 2,
+        status: 'blocked'
+      }),
       getPullRequest: async () => ({
         baseRepository: 'postman-cs/pavan-test-TDD',
         headBranch: 'repair-branch',
@@ -758,6 +769,25 @@ tdd:
     expect(checkpointWritten).toBe(true);
   });
 
+  it('resumes from a signed checkpoint serialized in the repair sticky comment', async () => {
+    const signed = signRepairCheckpoint({
+      schemaVersion: 1,
+      attempts: 2,
+      attemptFingerprints: ['fp1', 'fp2'],
+      commit: 'head-sha',
+      escalated: true,
+      provider: 'openai-responses'
+    }, 'signing-key');
+
+    const { providerCalls } = await runResume({
+      repairCheckpoint: signed,
+      signingKey: 'signing-key',
+      stickyBody: failureBody()
+    });
+
+    expect(providerCalls).toBe(1);
+  });
+
   it('restarts from attempts=0 when the signed checkpoint signature is tampered', async () => {
     const payload = {
       schemaVersion: 1 as const,
@@ -781,7 +811,7 @@ tdd:
     expect(providerCalls).toBe(3);
   });
 
-  it('advisory-resumes from an unsigned checkpoint, recomputing attempts from fingerprints', async () => {
+  it('advisory-resumes from an unsigned checkpoint, revalidating attempts from visible attemptDetails', async () => {
     const payload = {
       schemaVersion: 1 as const,
       attempts: 99,
@@ -792,12 +822,13 @@ tdd:
     };
 
     const { providerCalls } = await runResume({
-      stickyBody: failureBody(payload)
+      stickyBody: failureBody(payload),
+      visibleAttemptDetails: 1
     });
 
-    // Advisory: attempts recomputed from fingerprintFingerprints.length=2, NOT trusted attempts=99.
-    // startAttempts=2, maxAttempts=3 → 1 new provider turn.
-    expect(providerCalls).toBe(1);
+    // Advisory: attempts are recomputed from one visible attempt detail, not
+    // the checkpoint's attempts=99 or its two opaque fingerprints.
+    expect(providerCalls).toBe(2);
   });
 
   it('writes the checkpoint.json artifact each attempt', async () => {
