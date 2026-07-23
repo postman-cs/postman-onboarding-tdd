@@ -25,7 +25,7 @@ jobs:
       - run: npm ci
       - name: Install actionlint
         run: |
-          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.11 "$RUNNER_TEMP"
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/393031adb9afb225ee52ae2ccd7a5af5525e03e8/scripts/download-actionlint.bash) 1.7.11 "$RUNNER_TEMP"
           echo "ACTIONLINT_BIN=$RUNNER_TEMP/actionlint" >> "$GITHUB_ENV"
       - run: npm run build
       # Keep at most two read-only checks active on the two-vCPU runner. Every
@@ -85,47 +85,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - name: Run gates
-        shell: pwsh
-        run: |
-          $MAX_PARALLEL_GATES = 2
-          $active = [System.Collections.ArrayList]::new()
-          $results = [ordered]@{}
-          $gates = @(
-            @{ Name = 'lint'; Arguments = @('run', 'lint') },
-            @{ Name = 'test'; Arguments = @('test') },
-            @{ Name = 'typecheck'; Arguments = @('run', 'typecheck') },
-            @{ Name = 'dist'; Arguments = @('run', 'check:dist:assert') }
-          )
-
-          function Complete-One {
-            while ($true) {
-              foreach ($gate in @($active)) {
-                if ($gate.Process.HasExited) {
-                  $results[$gate.Name] = $gate.Process.ExitCode
-                  [void] $active.Remove($gate)
-                  return
-                }
-              }
-              Start-Sleep -Milliseconds 100
-            }
-          }
-
-          foreach ($gate in $gates) {
-            while ($active.Count -ge $MAX_PARALLEL_GATES) { Complete-One }
-            $process = Start-Process -FilePath 'npm.cmd' -ArgumentList $gate.Arguments -PassThru -NoNewWindow -RedirectStandardOutput "$($gate.Name).out.log" -RedirectStandardError "$($gate.Name).err.log"
-            [void] $active.Add([PSCustomObject]@{ Name = $gate.Name; Process = $process })
-          }
-          while ($active.Count -gt 0) { Complete-One }
-
-          $failed = $false
-          foreach ($gate in $gates) {
-            if ($results[$gate.Name] -eq 0) { Write-Output "gate:$($gate.Name)=pass" } else { Write-Output "gate:$($gate.Name)=fail"; $failed = $true }
-            Write-Output "::group::$($gate.Name)"
-            Get-Content "$($gate.Name).out.log", "$($gate.Name).err.log"
-            Write-Output '::endgroup::'
-          }
-          if ($failed) { exit 1 }
+      - id: windows-node-modules
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: node_modules
+          key: Windows/node-24/exact-${{ hashFiles('package-lock.json') }}
+      - if: steps.windows-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+      - run: npm test
