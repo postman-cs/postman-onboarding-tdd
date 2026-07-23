@@ -287,8 +287,12 @@ paths:
     const renderedComments: string[] = [];
     const summaries: PrCommentSummary[] = [];
     const github = createMockGitHubClient(renderedComments, summaries);
+    const uploads: string[][] = [];
     const artifactClient = {
-      uploadArtifact: async () => ({ digest: 'sha256:abc', id: 123 })
+      uploadArtifact: async (_name: string, files: string[]) => {
+        uploads.push(files.map((file) => file.replace(/\\/g, '/')));
+        return { digest: 'sha256:abc', id: 123 };
+      }
     };
 
     await expect(runAction({
@@ -316,6 +320,10 @@ paths:
     });
     expect(markerState?.ledger?.packets[0]?.key).toBe('getWidgets');
     expect(markerState?.ledger?.packets[0]?.passes).toBe(false);
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]).toContain('.postman-tdd/junit.xml');
+    expect(new Set(uploads[0]).size).toBe(uploads[0]?.length);
+    expect(summaries[0]?.failureDocument?.artifact?.junit).toBe('junit.xml');
   });
 
   it('flips packets to passes:true on a passing collection run', async () => {
@@ -453,8 +461,12 @@ paths:
 
     const summaries: PrCommentSummary[] = [];
     const github = createRatchetGithubClient([], summaries);
+    const uploads: string[][] = [];
     const artifactClient = {
-      uploadArtifact: async () => ({ digest: 'sha256:abc', id: 123 })
+      uploadArtifact: async (_name: string, files: string[]) => {
+        uploads.push(files.map((file) => file.replace(/\\/g, '/')));
+        return { digest: 'sha256:abc', id: 123 };
+      }
     };
 
     await expect(runAction({
@@ -467,6 +479,9 @@ paths:
     expect(summaries[0]?.failurePhase).toBe('test_ratchet');
     expect(summaries[0]?.failureDocument?.phase).toBe('test_ratchet');
     expect(summaries[0]?.failureDocument?.failures[0]?.message).toContain('oldOp');
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]).toContain('.postman-tdd/junit.xml');
+    expect(summaries[0]?.failureDocument?.artifact?.junit).toBe('junit.xml');
   });
 
   it('drops the removed packet and falls through to collection_run when the escape-hatch label is present', async () => {
@@ -562,7 +577,7 @@ tdd:
     const failureDocument = parseFailureDocument(body);
     expect(failureDocument?.runUrl).toBe('https://github.com/postman-cs/run-url-service/actions/runs/99999');
     expect(failureDocument?.failedJobs).toEqual(['postman-tdd:config']);
-    expect(failureDocument?.artifact?.junit).toBe('junit.xml');
+    expect(failureDocument?.artifact?.junit).toBeUndefined();
   });
 
   it('leaves runUrl undefined when GitHub runner env is absent', async () => {
@@ -626,9 +641,9 @@ tdd:
     const body = renderedComments[0] || '';
     const failureDocument = parseFailureDocument(body);
     expect(failureDocument?.runUrl).toBeUndefined();
-    // failedJobs + artifact are still populated (they don't depend on runner env).
+    // failedJobs is still populated; absent ledger means no JUnit file or metadata.
     expect(failureDocument?.failedJobs).toEqual(['postman-tdd:config']);
-    expect(failureDocument?.artifact?.junit).toBe('junit.xml');
+    expect(failureDocument?.artifact?.junit).toBeUndefined();
     // Document still serializes (round-tripped through render -> parse).
     expect(failureDocument?.status).toBe('failed');
   });
