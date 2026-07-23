@@ -112346,7 +112346,10 @@ async function publishFailure(options) {
   info(`[postman-tdd] Publishing failure context: phase=${options.document.phase}, failures=${options.document.failures.length}.`);
   options.document.runUrl ??= resolveRunUrl();
   options.document.failedJobs ??= [`postman-tdd:${options.document.phase}`];
-  options.document.artifact = { ...options.document.artifact, junit: "junit.xml" };
+  const junitPath = options.document.ledger ? join11(AGENT_CONTEXT_DIR, "junit.xml") : void 0;
+  if (junitPath) {
+    options.document.artifact = { ...options.document.artifact, junit: "junit.xml" };
+  }
   const paths = writeAgentContext(options.document, AGENT_CONTEXT_DIR);
   info(`[postman-tdd] Wrote agent context files: ${paths.agentTaskPath}, ${paths.failuresJsonPath}, ${paths.immutableSpecGuardPath}.`);
   setOutput("failure-phase", options.document.phase);
@@ -112369,7 +112372,7 @@ async function publishFailure(options) {
     info(`[postman-tdd] Uploading agent context artifact "${AGENT_CONTEXT_ARTIFACT_NAME}".`);
     artifact = await options.artifactClient.uploadArtifact(
       AGENT_CONTEXT_ARTIFACT_NAME,
-      [paths.agentTaskPath, paths.failuresJsonPath, paths.immutableSpecGuardPath],
+      [paths.agentTaskPath, paths.failuresJsonPath, paths.immutableSpecGuardPath, ...junitPath ? [junitPath] : []],
       "."
     );
     setOutput("agent-context-artifact", AGENT_CONTEXT_ARTIFACT_NAME);
