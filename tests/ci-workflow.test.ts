@@ -150,14 +150,14 @@ describe('CI workflow contract', () => {
     expect(windows.match(/^\s*- run: npm ci\s*$/gm) ?? []).toHaveLength(0);
   });
 
-  it('runs sole direct unconditional unfiltered npm test on Windows with no queue', () => {
-    expect(windows.match(/^\s*- run: npm test\s*$/gm) ?? []).toHaveLength(1);
-    expect(windows).not.toMatch(/npm test --/);
-    expect(windows).not.toMatch(/npm test -/);
+  it('runs sole direct unconditional unfiltered node --run test on Windows with no queue', () => {
+    expect(windows.match(/^\s*- run: node --run test\s*$/gm) ?? []).toHaveLength(1);
+    expect(windows).not.toMatch(/node --run test --/);
+    expect(windows).not.toMatch(/node --run test -/);
 
     const cacheIdx = windows.indexOf('id: windows-node-modules');
     const missInstallIdx = windows.indexOf('npm ci --prefer-offline --no-audit --no-fund');
-    const testIdx = windows.indexOf('- run: npm test');
+    const testIdx = windows.indexOf('- run: node --run test');
     expect(cacheIdx).toBeGreaterThanOrEqual(0);
     expect(missInstallIdx).toBeGreaterThan(cacheIdx);
     expect(testIdx).toBeGreaterThan(missInstallIdx);
@@ -177,10 +177,10 @@ describe('CI workflow contract', () => {
     expect(windows).not.toContain('actionlint');
   });
 
-  it('keeps native where.exe/PowerShell/cmd runtime tests reachable via unfiltered Windows npm test', () => {
+  it('keeps native where.exe/PowerShell/cmd runtime tests reachable via unfiltered Windows node --run test', () => {
     // Unfiltered suite is the only Windows runtime command — no path/name filters.
-    expect(windows.match(/^\s*- run: npm test\s*$/gm) ?? []).toHaveLength(1);
-    expect(windows).not.toMatch(/npm test --/);
+    expect(windows.match(/^\s*- run: node --run test\s*$/gm) ?? []).toHaveLength(1);
+    expect(windows).not.toMatch(/node --run test --/);
 
     expect(runnerTest).toContain('where.exe postman');
     expect(runnerTest).toContain('pwsh.exe');
