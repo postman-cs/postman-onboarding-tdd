@@ -164,7 +164,10 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
   let resumedEscalated = false;
   let attemptFingerprints: string[] = [];
   let currentCheckpointRef: SignedRepairCheckpoint | RepairCheckpointPayload | undefined;
-  const priorCheckpoint = failure.checkpointRef;
+  let priorRepair: RepairSummary | undefined;
+  const priorCheckpoint = failure.checkpointRef || (priorRepair = typeof options.github.findRepairSummary === 'function'
+    ? await options.github.findRepairSummary(options.pr.number)
+    : undefined)?.checkpointRef;
   if (priorCheckpoint) {
     const checkpointPayload = 'signature' in priorCheckpoint ? priorCheckpoint.payload : priorCheckpoint;
     if (checkpointPayload.commit === prDetails.headSha) {
@@ -180,12 +183,17 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
         }
       } else {
         // Unsigned payload, or signed checkpoint with no signing key configured → ADVISORY resume.
-        // Re-verify the attempts budget from the visible fingerprint history, not the trusted counter.
-        startAttempts = Math.min(checkpointPayload.attemptFingerprints.length, maxAttempts);
-        resumedEscalated = checkpointPayload.escalated;
-        attemptFingerprints = [...checkpointPayload.attemptFingerprints];
+        // Re-verify budgets from the independently visible repair-comment
+        // attempt timeline; unsigned checkpoint counters are never trusted.
+        priorRepair ||= typeof options.github.findRepairSummary === 'function'
+          ? await options.github.findRepairSummary(options.pr.number)
+          : undefined;
+        const visibleAttempts = priorRepair?.attemptDetails?.length ?? 0;
+        startAttempts = Math.min(visibleAttempts, maxAttempts);
+        resumedEscalated = Boolean(priorRepair?.checkpointRef && checkpointPayload.escalated);
+        attemptFingerprints = checkpointPayload.attemptFingerprints.slice(0, visibleAttempts);
         currentCheckpointRef = priorCheckpoint;
-        core.info(`[postman-tdd] Advisory resume from checkpoint: recomputed attempts=${startAttempts} from fingerprint history.`);
+        core.info(`[postman-tdd] Advisory resume from checkpoint: revalidated attempts=${startAttempts} from visible repair-comment history.`);
       }
     } else {
       core.info(`[postman-tdd] Checkpoint commit mismatch; restarting from attempts=0.`);
@@ -303,6 +311,9 @@ export async function runRepairMode(options: RepairModeOptions): Promise<void> {
       };
       attempt.outcome = 'oracle_passed';
       attemptDetails.push(attempt);
+      currentCheckpointRef = buildCheckpoint(
+        prDetails.headSha, repairProvider, attempts, escalated, attemptFingerprints, options.inputs.immutableStateSigningKey
+      );
       core.info('[postman-tdd] Verifying immutable path hashes before commit.');
       verifyPathHashes(repoRoot, immutableHashes);
       const changedPaths = verifyChangedPaths(repoRoot, patchPolicy);

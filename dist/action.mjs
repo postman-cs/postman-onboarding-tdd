@@ -107879,8 +107879,17 @@ function writeRepairSummary(summary2) {
   return SUMMARY_PATH;
 }
 function renderRepairComment(summary2) {
+  const markerSummary = {
+    ...summary2,
+    ...summary2.attemptDetails ? {
+      attemptDetails: summary2.attemptDetails.map((attempt) => ({
+        ...attempt,
+        ...attempt.oracle ? { oracle: { ...attempt.oracle, failures: void 0 } } : {}
+      }))
+    } : {}
+  };
   const marker2 = `${REPAIR_MARKER_START}
-${JSON.stringify({ prNumber: summary2.prNumber, schemaVersion: 1 })}
+${JSON.stringify(markerSummary)}
 ${REPAIR_MARKER_END}`;
   const statusLabel = summary2.status.toUpperCase();
   const lines = [
@@ -108070,6 +108079,23 @@ function truncate2(value, maxLength) {
 function isRepairComment(body2) {
   return Boolean(body2?.includes(REPAIR_MARKER_START));
 }
+function parseRepairSummary(body2) {
+  if (!body2) return void 0;
+  const start = body2.indexOf(REPAIR_MARKER_START);
+  if (start < 0) return void 0;
+  const end = body2.indexOf(REPAIR_MARKER_END, start);
+  if (end < 0) return void 0;
+  try {
+    const raw = body2.slice(start + REPAIR_MARKER_START.length, end).trim();
+    const parsed = JSON.parse(raw);
+    if (parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2 || typeof parsed.attempts !== "number" || typeof parsed.message !== "string" || typeof parsed.prNumber !== "number" || !["blocked", "failed", "repaired", "skipped"].includes(parsed.status || "")) {
+      return void 0;
+    }
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
 
 // src/github/pr-comment.ts
 var MARKER_START = "<!-- postman-tdd-preview";
@@ -108123,6 +108149,16 @@ var GitHubPrClient = class {
       labels,
       number: data.number
     };
+  }
+  async findRepairSummary(prNumber) {
+    const comments = await this.octokit.paginate(this.octokit.rest.issues.listComments, {
+      issue_number: prNumber,
+      owner: this.owner,
+      per_page: 100,
+      repo: this.repo
+    });
+    const found = comments.find((comment) => isRepairComment(comment.body));
+    return parseRepairSummary(found?.body);
   }
   async upsertRepairComment(prNumber, summary2) {
     const comments = await this.octokit.paginate(this.octokit.rest.issues.listComments, {
@@ -110670,7 +110706,8 @@ async function runRepairMode(options) {
   let resumedEscalated = false;
   let attemptFingerprints = [];
   let currentCheckpointRef;
-  const priorCheckpoint = failure.checkpointRef;
+  let priorRepair;
+  const priorCheckpoint = failure.checkpointRef || (priorRepair = typeof options.github.findRepairSummary === "function" ? await options.github.findRepairSummary(options.pr.number) : void 0)?.checkpointRef;
   if (priorCheckpoint) {
     const checkpointPayload = "signature" in priorCheckpoint ? priorCheckpoint.payload : priorCheckpoint;
     if (checkpointPayload.commit === prDetails.headSha) {
@@ -110685,11 +110722,13 @@ async function runRepairMode(options) {
           info("[postman-tdd] Signed checkpoint failed verification; restarting from attempts=0.");
         }
       } else {
-        startAttempts = Math.min(checkpointPayload.attemptFingerprints.length, maxAttempts);
-        resumedEscalated = checkpointPayload.escalated;
-        attemptFingerprints = [...checkpointPayload.attemptFingerprints];
+        priorRepair ||= typeof options.github.findRepairSummary === "function" ? await options.github.findRepairSummary(options.pr.number) : void 0;
+        const visibleAttempts = priorRepair?.attemptDetails?.length ?? 0;
+        startAttempts = Math.min(visibleAttempts, maxAttempts);
+        resumedEscalated = Boolean(priorRepair?.checkpointRef && checkpointPayload.escalated);
+        attemptFingerprints = checkpointPayload.attemptFingerprints.slice(0, visibleAttempts);
         currentCheckpointRef = priorCheckpoint;
-        info(`[postman-tdd] Advisory resume from checkpoint: recomputed attempts=${startAttempts} from fingerprint history.`);
+        info(`[postman-tdd] Advisory resume from checkpoint: revalidated attempts=${startAttempts} from visible repair-comment history.`);
       }
     } else {
       info(`[postman-tdd] Checkpoint commit mismatch; restarting from attempts=0.`);
@@ -110807,6 +110846,14 @@ async function runRepairMode(options) {
       };
       attempt.outcome = "oracle_passed";
       attemptDetails.push(attempt);
+      currentCheckpointRef = buildCheckpoint(
+        prDetails.headSha,
+        repairProvider,
+        attempts,
+        escalated,
+        attemptFingerprints,
+        options.inputs.immutableStateSigningKey
+      );
       info("[postman-tdd] Verifying immutable path hashes before commit.");
       verifyPathHashes(repoRoot, immutableHashes);
       const changedPaths2 = verifyChangedPaths(repoRoot, patchPolicy);

@@ -65,7 +65,16 @@ export function writeRepairSummary(summary: RepairSummary): string {
 }
 
 export function renderRepairComment(summary: RepairSummary): string {
-  const marker = `${REPAIR_MARKER_START}\n${JSON.stringify({ prNumber: summary.prNumber, schemaVersion: 1 })}\n${REPAIR_MARKER_END}`;
+  const markerSummary = {
+    ...summary,
+    ...(summary.attemptDetails ? {
+      attemptDetails: summary.attemptDetails.map((attempt) => ({
+        ...attempt,
+        ...(attempt.oracle ? { oracle: { ...attempt.oracle, failures: undefined } } : {})
+      }))
+    } : {})
+  };
+  const marker = `${REPAIR_MARKER_START}\n${JSON.stringify(markerSummary)}\n${REPAIR_MARKER_END}`;
   const statusLabel = summary.status.toUpperCase();
   const lines = [
     marker,
@@ -275,4 +284,26 @@ function truncate(value: string, maxLength: number): string {
 
 export function isRepairComment(body: string | undefined): boolean {
   return Boolean(body?.includes(REPAIR_MARKER_START));
+}
+
+export function parseRepairSummary(body: string | undefined): RepairSummary | undefined {
+  if (!body) return undefined;
+  const start = body.indexOf(REPAIR_MARKER_START);
+  if (start < 0) return undefined;
+  const end = body.indexOf(REPAIR_MARKER_END, start);
+  if (end < 0) return undefined;
+  try {
+    const raw = body.slice(start + REPAIR_MARKER_START.length, end).trim();
+    const parsed = JSON.parse(raw) as Partial<RepairSummary>;
+    if ((parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2)
+      || typeof parsed.attempts !== 'number'
+      || typeof parsed.message !== 'string'
+      || typeof parsed.prNumber !== 'number'
+      || !['blocked', 'failed', 'repaired', 'skipped'].includes(parsed.status || '')) {
+      return undefined;
+    }
+    return parsed as RepairSummary;
+  } catch {
+    return undefined;
+  }
 }

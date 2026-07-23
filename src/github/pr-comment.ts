@@ -1,6 +1,6 @@
 import { context, getOctokit } from '@actions/github';
 
-import { isRepairComment, renderRepairComment, type RepairSummary } from '../repair/summary.js';
+import { isRepairComment, parseRepairSummary, renderRepairComment, type RepairSummary } from '../repair/summary.js';
 import type { ActionStatus, AgentFailureDocument, FailurePhase, LedgerSummary, PreviewAssetState, PrMetadata } from '../types.js';
 
 const MARKER_START = '<!-- postman-tdd-preview';
@@ -92,6 +92,17 @@ export class GitHubPrClient {
       labels,
       number: data.number
     };
+  }
+
+  async findRepairSummary(prNumber: number): Promise<RepairSummary | undefined> {
+    const comments = await this.octokit.paginate(this.octokit.rest.issues.listComments, {
+      issue_number: prNumber,
+      owner: this.owner,
+      per_page: 100,
+      repo: this.repo
+    });
+    const found = comments.find((comment) => isRepairComment(comment.body));
+    return parseRepairSummary(found?.body);
   }
 
   async upsertRepairComment(prNumber: number, summary: RepairSummary): Promise<number> {

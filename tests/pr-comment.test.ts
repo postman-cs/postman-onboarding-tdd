@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { parseAssetState, parseFailureDocument, renderStickyComment } from '../src/github/pr-comment.js';
 import { createImmutableStatePayload, signImmutableState } from '../src/immutable-state.js';
 import { toLedgerSummary } from '../src/ledger.js';
-import { isRepairComment, renderRepairComment } from '../src/repair/summary.js';
+import { isRepairComment, parseRepairSummary, renderRepairComment } from '../src/repair/summary.js';
 import type { Ledger, LedgerSummary } from '../src/types.js';
 
 describe('PR sticky comment marker', () => {
@@ -250,6 +250,11 @@ describe('PR sticky comment marker', () => {
 
     expect(isRepairComment(body)).toBe(true);
     expect(body).toContain('Postman TDD Repair (BLOCKED)');
+    expect(parseRepairSummary(body)).toMatchObject({
+      attempts: 1,
+      checkpointRef: expect.objectContaining({ signature: 'hmac-sha256:abc123' }),
+      schemaVersion: 2
+    });
   });
 
   it('still renders a v1 repair summary without checkpointRef (backward compat)', () => {
@@ -265,6 +270,7 @@ describe('PR sticky comment marker', () => {
     expect(isRepairComment(body)).toBe(true);
     expect(body).toContain('Postman TDD Repair (BLOCKED)');
     expect(body).toContain('`stale_failure`');
+    expect(parseRepairSummary(body)).toMatchObject({ attempts: 0, schemaVersion: 1 });
   });
 
   it('renders blocked repair comments with failed attempt diagnostics', () => {
