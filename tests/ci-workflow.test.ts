@@ -7,6 +7,7 @@ const ciWorkflow = readFileSync(join(process.cwd(), '.github/workflows/ci.yml'),
 const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as {
   scripts: Record<string, string>;
 };
+const runnerTest = readFileSync(join(process.cwd(), 'tests/runner.test.ts'), 'utf8');
 
 /** Extract one top-level job block: `  <id>:` through the next job header or EOF. */
 function jobText(workflow: string, jobId: string): string {
@@ -66,6 +67,12 @@ describe('CI workflow contract', () => {
 
     // Shallow checkout default: this TDD maintainer CI has no commitlint full-history need.
     expect(ciWorkflow).not.toMatch(/^\s*fetch-depth:\s*/m);
+
+    // Permissions and check names stay fixed; jobs stay independent (no needs).
+    expect(ciWorkflow).toContain('permissions:\n  contents: read');
+    expect(linux).toMatch(/^ {2}gate:\n/);
+    expect(windows).toContain('name: Windows gate');
+    expect(ciWorkflow).not.toMatch(/^\s*needs:/m);
   });
 
   it('builds once before a bounded Linux read-only gate queue', () => {
@@ -115,50 +122,84 @@ describe('CI workflow contract', () => {
     expect(runGates).toContain('::group::$n');
   });
 
-  it('retains Windows coverage with a bounded PowerShell read-only gate queue', () => {
+  it('caches Windows node_modules with exact key and miss-only prefer-offline npm ci', () => {
     expect(windows).toContain('name: Windows gate');
     expect(windows).toContain('runs-on: windows-latest');
     // Job must stay required — no soft-fail or skip (C3/R8 / C4/R9).
     expect(windows).not.toMatch(/continue-on-error:/);
     expect(windows).not.toMatch(/^[ ]{4}if:/m);
-    expect(windows.match(/^\s*- run: npm run build\s*$/gm) ?? []).toHaveLength(1);
-    expect(windows.indexOf('- run: npm run build')).toBeLessThan(windows.indexOf('- name: Run gates'));
 
-    const runGates = namedStep(windows, 'Run gates');
-    expect(runGates).toContain('$MAX_PARALLEL_GATES = 2');
-    expect(runGates).toContain('while ($active.Count -ge $MAX_PARALLEL_GATES) { Complete-One }');
-    expect(runGates).toContain('while ($active.Count -gt 0) { Complete-One }');
-    expect(runGates).toContain('Start-Process');
+    expect(windows).toContain('node-version: 24');
+    expect(windows).not.toMatch(/^\s*cache:\s*npm\s*$/m);
 
-    // Cap enforcement before Start-Process; drain after launch block and before reporting (C1/R1).
-    expectBefore(
-      runGates,
-      'while ($active.Count -ge $MAX_PARALLEL_GATES) { Complete-One }',
-      'Start-Process',
+    expect(windows).toContain('id: windows-node-modules');
+    expect(windows).toContain(
+      'uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0',
     );
-    expectBefore(runGates, 'Start-Process', 'while ($active.Count -gt 0) { Complete-One }');
-    expectBefore(runGates, 'while ($active.Count -gt 0) { Complete-One }', 'gate:$($gate.Name)=pass');
-    // Pass/fail reporting before aggregate exit (C3/R8).
-    expectBefore(runGates, 'gate:$($gate.Name)=pass', 'if ($failed) { exit 1 }');
-    expectBefore(runGates, 'gate:$($gate.Name)=fail', 'if ($failed) { exit 1 }');
+    expect(windows).toContain('path: node_modules');
+    expect(windows).toContain(
+      "key: Windows/node-24/exact-${{ hashFiles('package-lock.json') }}",
+    );
+    expect(windows).not.toContain('restore-keys');
+    expect(windows).not.toContain('restore-key');
 
-    expect(runGates).toContain("@{ Name = 'lint'; Arguments = @('run', 'lint') }");
-    expect(runGates).toContain("@{ Name = 'test'; Arguments = @('test') }");
-    expect(runGates).toContain("@{ Name = 'typecheck'; Arguments = @('run', 'typecheck') }");
-    expect(runGates).toContain("@{ Name = 'dist'; Arguments = @('run', 'check:dist:assert') }");
-    expect(runGates.match(/@\{ Name = '[^']+'; Arguments = @[^}]+\}/g) ?? []).toHaveLength(4);
+    // Exact hit skips only install; miss runs the exact prefer-offline flags once.
+    expect(windows).toContain("if: steps.windows-node-modules.outputs.cache-hit != 'true'");
+    expect(windows).toContain('run: npm ci --prefer-offline --no-audit --no-fund');
+    expect(windows.match(/npm ci --prefer-offline --no-audit --no-fund/g) ?? []).toHaveLength(1);
+    expect(windows.match(/^\s*- run: npm ci\s*$/gm) ?? []).toHaveLength(0);
+  });
 
-    // Queue stays read-only: no mutating build / check:dist in PowerShell gate args.
-    expect(runGates).not.toMatch(/Arguments = @\('run', 'build'\)/);
-    expect(runGates).not.toMatch(/Arguments = @\('run', 'check:dist'\)/);
-    expect(runGates).toContain('gate:$($gate.Name)=pass');
-    expect(runGates).toContain('gate:$($gate.Name)=fail');
-    expect(runGates).toContain('::group::$($gate.Name)');
+  it('runs sole direct unconditional unfiltered npm test on Windows with no queue', () => {
+    expect(windows.match(/^\s*- run: npm test\s*$/gm) ?? []).toHaveLength(1);
+    expect(windows).not.toMatch(/npm test --/);
+    expect(windows).not.toMatch(/npm test -/);
+
+    const cacheIdx = windows.indexOf('id: windows-node-modules');
+    const missInstallIdx = windows.indexOf('npm ci --prefer-offline --no-audit --no-fund');
+    const testIdx = windows.indexOf('- run: npm test');
+    expect(cacheIdx).toBeGreaterThanOrEqual(0);
+    expect(missInstallIdx).toBeGreaterThan(cacheIdx);
+    expect(testIdx).toBeGreaterThan(missInstallIdx);
+
+    expect(windows).not.toContain('- name: Run gates');
+    expect(windows).not.toContain('shell: pwsh');
+    expect(windows).not.toContain('$MAX_PARALLEL_GATES');
+    expect(windows).not.toContain('MAX_PARALLEL_GATES');
+    expect(windows).not.toContain('Start-Process');
+    expect(windows).not.toContain('Start-Job');
+    expect(windows).not.toMatch(/@\{ Name = '/);
+
+    expect(windows).not.toContain('npm run build');
+    expect(windows).not.toContain('npm run lint');
+    expect(windows).not.toContain('npm run typecheck');
+    expect(windows).not.toContain('check:dist');
+    expect(windows).not.toContain('actionlint');
+  });
+
+  it('keeps native where.exe/PowerShell/cmd runtime tests reachable via unfiltered Windows npm test', () => {
+    // Unfiltered suite is the only Windows runtime command — no path/name filters.
+    expect(windows.match(/^\s*- run: npm test\s*$/gm) ?? []).toHaveLength(1);
+    expect(windows).not.toMatch(/npm test --/);
+
+    expect(runnerTest).toContain('where.exe postman');
+    expect(runnerTest).toContain('pwsh.exe');
+    expect(runnerTest).toContain('uses cmd.exe environment expansion for Windows collection runs');
+    expect(runnerTest).toContain(
+      'postman collection run "%POSTMAN_TDD_COLLECTION_ID%" --env-var "baseUrl=%POSTMAN_TDD_BASE_URL%"',
+    );
   });
 
   it('uses the pinned actionlint binary without Go', () => {
-    expect(ciWorkflow).toContain('1.7.11 "$RUNNER_TEMP"');
-    expect(ciWorkflow).toContain('ACTIONLINT_BIN=$RUNNER_TEMP/actionlint');
+    const install = namedStep(linux, 'Install actionlint');
+    expect(install.length).toBeGreaterThan(0);
+    expect(install).toContain(
+      'https://raw.githubusercontent.com/rhysd/actionlint/393031adb9afb225ee52ae2ccd7a5af5525e03e8/scripts/download-actionlint.bash',
+    );
+    expect(install.match(/393031adb9afb225ee52ae2ccd7a5af5525e03e8/)?.[0]).toHaveLength(40);
+    expect(install).toContain('download-actionlint.bash) 1.7.11 "$RUNNER_TEMP"');
+    expect(install).toContain('ACTIONLINT_BIN=$RUNNER_TEMP/actionlint');
+    expect(ciWorkflow).not.toContain('/main/scripts/download-actionlint.bash');
     expect(ciWorkflow).not.toContain('actions/setup-go');
     expect(ciWorkflow).not.toContain('go install github.com/rhysd/actionlint');
   });
