@@ -66168,7 +66168,7 @@ function createLoggerContext(options) {
   function shouldEnable(logger7) {
     return Boolean(logLevel && levelMap[logger7.level] <= levelMap[logLevel]);
   }
-  function createLogger2(parent, level) {
+  function createLogger3(parent, level) {
     const logger7 = Object.assign(parent.extend(level), {
       level
     });
@@ -66187,10 +66187,10 @@ function createLoggerContext(options) {
     const clientRootLogger = clientLogger.extend(namespace);
     patchLogMethod(clientLogger, clientRootLogger);
     return {
-      error: createLogger2(clientRootLogger, "error"),
-      warning: createLogger2(clientRootLogger, "warning"),
-      info: createLogger2(clientRootLogger, "info"),
-      verbose: createLogger2(clientRootLogger, "verbose")
+      error: createLogger3(clientRootLogger, "error"),
+      warning: createLogger3(clientRootLogger, "warning"),
+      info: createLogger3(clientRootLogger, "info"),
+      verbose: createLogger3(clientRootLogger, "verbose")
     };
   }
   return {
@@ -106486,7 +106486,7 @@ If the error persists, please check whether Actions and API requests are operati
 // node_modules/@actions/artifact/lib/artifact.js
 var client = new DefaultArtifactClient();
 
-// node_modules/@postman-cse/automation-telemetry-core/dist/ci-context.js
+// node_modules/@postman-cse/automation-core/dist/ci-context.js
 function norm(value) {
   const trimmed = (value ?? "").trim();
   return trimmed.length > 0 ? trimmed : void 0;
@@ -106637,7 +106637,7 @@ function detectCiProviderContext(env = process.env) {
   return { ciProvider: "unknown", runnerKind: "unknown" };
 }
 
-// node_modules/@postman-cse/automation-telemetry-core/dist/repo-context.js
+// node_modules/@postman-cse/automation-core/dist/repo-context.js
 function normalize2(value) {
   const trimmed = (value ?? "").trim();
   return trimmed.length > 0 ? trimmed : void 0;
@@ -106726,7 +106726,7 @@ function detectRepoContext(input, env = process.env) {
   };
 }
 
-// node_modules/@postman-cse/automation-telemetry-core/dist/telemetry.js
+// node_modules/@postman-cse/automation-core/dist/telemetry.js
 var import_undici3 = __toESM(require_undici(), 1);
 import { createHash as createHash3 } from "node:crypto";
 var SCHEMA_VERSION = 3;
@@ -106736,9 +106736,13 @@ var proxyDispatcher;
 function getProxyDispatcher() {
   return proxyDispatcher ??= new import_undici3.EnvHttpProxyAgent();
 }
-function resolveActionVersion(explicit) {
+function resolveActionVersion(explicit, env = process.env) {
   if (explicit) {
     return explicit;
+  }
+  const ref = env.GITHUB_ACTION_REF?.trim();
+  if (ref) {
+    return ref;
   }
   return "0.6.3" ? "0.6.3" : "unknown";
 }
@@ -106822,7 +106826,7 @@ async function send(event, options) {
 function createTelemetryContext(options) {
   const env = options.env ?? process.env;
   const now = options.now ?? Date.now;
-  const actionVersion = resolveActionVersion(options.actionVersion);
+  const actionVersion = resolveActionVersion(options.actionVersion, env);
   let teamId = "";
   let accountType = "unknown";
   let emitted = false;
