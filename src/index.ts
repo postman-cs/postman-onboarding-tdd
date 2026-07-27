@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { DefaultArtifactClient } from '@actions/artifact';
-import { createTelemetryContext } from '@postman-cse/automation-core';
+import { actionSink, createLogger, createTelemetryContext, type Logger } from '@postman-cse/automation-core';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -71,6 +71,8 @@ export interface RunActionOptions {
   artifactClient?: AgentContextArtifactClient;
   githubClient?: GitHubPrClient;
   postmanClient?: PostmanClient;
+  /** Injected by tests; otherwise built over @actions/core when the run starts. */
+  logger?: Logger;
 }
 
 export function readActionInputs(): ActionInputs {
@@ -142,13 +144,20 @@ function resolveActionVersion(): string {
 }
 
 export async function runAction(options: RunActionOptions = {}): Promise<void> {
+  const actionVersion = resolveActionVersion();
+  const logger =
+    options.logger ??
+    createLogger({
+      sink: actionSink(core),
+      fields: { action: 'postman-onboarding-tdd', action_version: actionVersion }
+    });
   const telemetry = createTelemetryContext({
     action: 'postman-onboarding-tdd',
-    actionVersion: resolveActionVersion(),
+    actionVersion,
     logger: core
   });
   try {
-    await runActionInner(options, telemetry);
+    await runActionInner(options, telemetry, logger);
     telemetry.emitCompletion('success');
   } catch (error) {
     telemetry.emitCompletion('failure');
@@ -158,7 +167,8 @@ export async function runAction(options: RunActionOptions = {}): Promise<void> {
 
 async function runActionInner(
   options: RunActionOptions,
-  telemetry: ReturnType<typeof createTelemetryContext>
+  telemetry: ReturnType<typeof createTelemetryContext>,
+  logger: Logger
 ): Promise<void> {
   const inputs = readActionInputs();
   if (inputs.postmanApiKey) core.setSecret(inputs.postmanApiKey);
@@ -169,7 +179,7 @@ async function runActionInner(
   if (inputs.anthropicApiKey) core.setSecret(inputs.anthropicApiKey);
   if (inputs.repairGithubToken) core.setSecret(inputs.repairGithubToken);
 
-  const mask = createSecretMasker([
+  const secrets = [
     inputs.postmanApiKey,
     inputs.githubToken,
     inputs.postmanAccessToken,
@@ -177,10 +187,19 @@ async function runActionInner(
     inputs.openaiApiKey,
     inputs.anthropicApiKey,
     inputs.repairGithubToken
-  ]);
+  ];
+  // Register before any phase can run: a credential that reaches the logger
+  // after the first line is a credential that already leaked once.
+  for (const secret of secrets) logger.addSecret(secret);
+  logger.debug('resolved inputs', {
+    mode: inputs.mode,
+    repair_provider: inputs.repairProvider,
+    workspace_team_id: inputs.workspaceTeamId || undefined
+  });
+  const mask = createSecretMasker(secrets);
   if (inputs.workspaceTeamId) telemetry.setTeamId(inputs.workspaceTeamId);
   if (inputs.mode === 'validate') {
-    await runValidateMode({ inputs, mask });
+    await logger.phase('validate', async () => runValidateMode({ inputs, mask }));
     return;
   }
   const endpointProfile = resolvePostmanEndpointProfile(inputs.postmanStack, inputs.postmanRegion);
@@ -195,14 +214,16 @@ async function runActionInner(
   logActionContext({ endpointProfile, inputs, pr });
 
   if (inputs.mode === 'repair') {
-    await runRepairMode({
-      endpointProfile,
-      github,
-      inputs,
-      mask,
-      postman,
-      pr
-    });
+    await logger.phase('repair', async () =>
+      runRepairMode({
+        endpointProfile,
+        github,
+        inputs,
+        mask,
+        postman,
+        pr
+      })
+    );
     return;
   }
   let prCommentId = '';
@@ -593,6 +614,8 @@ async function runActionInner(
     core.setOutput('failure-phase', 'none');
     core.setOutput('pr-comment-id', prCommentId);
   } catch (error) {
+    // setFailed names that the run died, not where. Pin the phase to the line.
+    logger.failure('action failed', error, { phase: currentPhase, mode: inputs.mode });
     core.info(`[postman-tdd] Action failed during phase=${currentPhase}.`);
     if (!failurePublished && inputs.mode === 'run' && currentPhase === 'config') {
       try {
