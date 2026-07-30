@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { commitConfigWriteback } from '../src/github/repo-mutation.js';
+import { commitConfigWriteback, type CommandExecutor } from '../src/github/repo-mutation.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,6 +14,20 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
   const { stdout } = await execFileAsync('git', args, { cwd });
   return stdout.trim();
 }
+
+const runGitCommand: CommandExecutor = async (command, args) => {
+  try {
+    const { stderr, stdout } = await execFileAsync(command, args);
+    return { exitCode: 0, stderr, stdout };
+  } catch (error: unknown) {
+    const result = error as { code?: number; stderr?: string; stdout?: string };
+    return {
+      exitCode: typeof result.code === 'number' ? result.code : 1,
+      stderr: result.stderr ?? '',
+      stdout: result.stdout ?? ''
+    };
+  }
+};
 
 describe('commitConfigWriteback push reconciliation', () => {
   let workRoot: string;
@@ -116,6 +130,41 @@ describe('commitConfigWriteback push reconciliation', () => {
     expect(log).toContain('chore: persist Postman TDD workspace id');
   }, 30000);
 
+  it('keeps the writeback config when concurrent history changes the same file', async () => {
+    await writeFile(path.join(checkoutDir, 'postman-tdd.yaml'), 'workspaceId: ws-base\n');
+    await git(checkoutDir, 'add', 'postman-tdd.yaml');
+    await git(checkoutDir, 'commit', '-m', 'seed config');
+    await git(checkoutDir, 'push', 'origin', 'HEAD:refs/heads/main');
+
+    const peerDir = path.join(workRoot, 'peer-config');
+    await execFileAsync('git', ['clone', remoteDir, peerDir]);
+    await git(peerDir, 'config', 'user.name', 'Peer');
+    await git(peerDir, 'config', 'user.email', 'peer@example.com');
+    await writeFile(path.join(peerDir, 'postman-tdd.yaml'), 'workspaceId: ws-peer\n');
+    await git(peerDir, 'add', 'postman-tdd.yaml');
+    await git(peerDir, 'commit', '-m', 'peer: config change');
+    await git(peerDir, 'push', 'origin', 'HEAD:refs/heads/main');
+
+    await writeFile(path.join(checkoutDir, 'postman-tdd.yaml'), 'workspaceId: ws-writeback\n');
+    const originalRemote = await git(checkoutDir, 'remote', 'get-url', 'origin');
+    const result = await commitConfigWriteback({
+      committerEmail: 'bot@example.com',
+      committerName: 'Bot',
+      configPath: 'postman-tdd.yaml',
+      githubToken: 'test-token',
+      mode: 'commit-and-push',
+      pushRemoteUrl: remoteDir,
+      repository: 'postman-cs/does-not-matter'
+    });
+
+    const remoteHead = await git(remoteDir, 'rev-parse', 'refs/heads/main');
+    expect(await git(remoteDir, 'show', 'refs/heads/main:postman-tdd.yaml')).toBe('workspaceId: ws-writeback');
+    expect(await git(remoteDir, 'log', '--format=%s', 'refs/heads/main')).toContain('peer: config change');
+    expect(await git(remoteDir, 'log', '--format=%s', 'refs/heads/main')).toContain('chore: persist Postman TDD workspace id');
+    expect(remoteHead).toBe(result.commitSha);
+    expect(await git(checkoutDir, 'remote', 'get-url', 'origin')).toBe(originalRemote);
+  }, 30000);
+
   it('restores the original origin URL after pushing', async () => {
     await writeFile(path.join(checkoutDir, 'postman-tdd.yaml'), 'workspaceId: ws-3\n');
     const before = await git(checkoutDir, 'remote', 'get-url', 'origin');
@@ -132,5 +181,65 @@ describe('commitConfigWriteback push reconciliation', () => {
 
     const after = await git(checkoutDir, 'remote', 'get-url', 'origin');
     expect(after).toBe(before);
+  }, 30000);
+
+  it('uses the bounded config fallback when origin restoration initially fails', async () => {
+    await writeFile(path.join(checkoutDir, 'postman-tdd.yaml'), 'workspaceId: ws-4\n');
+    const originalRemote = await git(checkoutDir, 'remote', 'get-url', 'origin');
+    let restoreAttempts = 0;
+    let originSetUrlCalls = 0;
+    const executeCommand: CommandExecutor = async (command, args) => {
+      if (args.join('\0') === ['remote', 'set-url', 'origin', originalRemote].join('\0')) {
+        originSetUrlCalls += 1;
+        if (originSetUrlCalls === 2) {
+          restoreAttempts += 1;
+          return { exitCode: 1, stderr: 'restore command failed: test-token', stdout: '' };
+        }
+      }
+      return runGitCommand(command, args);
+    };
+
+    await expect(commitConfigWriteback({
+      committerEmail: 'bot@example.com',
+      committerName: 'Bot',
+      configPath: 'postman-tdd.yaml',
+      githubToken: 'test-token',
+      mode: 'commit-and-push',
+      pushRemoteUrl: remoteDir,
+      repository: 'postman-cs/does-not-matter',
+      executeCommand
+    })).resolves.toMatchObject({ pushed: true });
+
+    expect(restoreAttempts).toBe(1);
+    expect(await git(checkoutDir, 'remote', 'get-url', 'origin')).toBe(originalRemote);
+  }, 30000);
+
+  it('rejects a failed origin restoration without exposing the token', async () => {
+    await writeFile(path.join(checkoutDir, 'postman-tdd.yaml'), 'workspaceId: ws-5\n');
+    const originalRemote = await git(checkoutDir, 'remote', 'get-url', 'origin');
+    let originSetUrlCalls = 0;
+    const executeCommand: CommandExecutor = async (command, args) => {
+      if (args.join('\0') === ['remote', 'set-url', 'origin', originalRemote].join('\0')) {
+        originSetUrlCalls += 1;
+        if (originSetUrlCalls === 2) {
+          return { exitCode: 1, stderr: 'restore command failed: test-token', stdout: '' };
+        }
+      }
+      if (args.join('\0') === ['config', 'remote.origin.url', originalRemote].join('\0')) {
+        return { exitCode: 1, stderr: 'restore command failed: test-token', stdout: '' };
+      }
+      return runGitCommand(command, args);
+    };
+
+    await expect(commitConfigWriteback({
+      committerEmail: 'bot@example.com',
+      committerName: 'Bot',
+      configPath: 'postman-tdd.yaml',
+      githubToken: 'test-token',
+      mode: 'commit-and-push',
+      pushRemoteUrl: remoteDir,
+      repository: 'postman-cs/does-not-matter',
+      executeCommand
+    })).rejects.toThrow(/Could not restore origin remote URL.*\*\*\*/);
   }, 30000);
 });

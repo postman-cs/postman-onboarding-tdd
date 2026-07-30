@@ -13,15 +13,19 @@ export interface CommitConfigWritebackOptions {
   /** Test seam: overrides the authenticated push remote URL (default builds the
    * x-access-token github.com URL from githubToken + repository). */
   pushRemoteUrl?: string;
+  /** Test seam: overrides command execution while production uses spawn. */
+  executeCommand?: CommandExecutor;
 }
 
-interface ExecResult {
+export interface CommandResult {
   exitCode: number;
   stderr: string;
   stdout: string;
 }
 
-function execFile(command: string, args: string[]): Promise<ExecResult> {
+export type CommandExecutor = (command: string, args: string[]) => Promise<CommandResult>;
+
+function execFile(command: string, args: string[]): Promise<CommandResult> {
   return new Promise((resolve) => {
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     const stdout: Buffer[] = [];
@@ -38,12 +42,34 @@ function execFile(command: string, args: string[]): Promise<ExecResult> {
   });
 }
 
-async function mustExec(command: string, args: string[], mask: (value: string) => string): Promise<ExecResult> {
-  const result = await execFile(command, args);
+async function mustExec(
+  command: string,
+  args: string[],
+  mask: (value: string) => string,
+  executeCommand: CommandExecutor
+): Promise<CommandResult> {
+  const result = await executeCommand(command, args);
   if (result.exitCode !== 0) {
     throw new Error(mask(result.stderr || result.stdout || `${command} ${args.join(' ')} failed`));
   }
   return result;
+}
+
+async function restoreOrigin(
+  originalRemote: string,
+  mask: (value: string) => string,
+  executeCommand: CommandExecutor
+): Promise<void> {
+  const restore = await executeCommand('git', ['remote', 'set-url', 'origin', originalRemote]);
+  if (restore.exitCode === 0) return;
+
+  const fallback = await executeCommand('git', ['config', 'remote.origin.url', originalRemote]);
+  if (fallback.exitCode === 0) return;
+
+  throw new Error(mask(
+    `Could not restore origin remote URL: ${restore.stderr || restore.stdout || 'remote set-url failed'}; ` +
+    `fallback failed: ${fallback.stderr || fallback.stdout || 'git config failed'}`
+  ));
 }
 
 function normalizeBranch(value: string | undefined): string {
@@ -62,16 +88,17 @@ export async function commitConfigWriteback(
   }
 
   const mask = createSecretMasker([options.githubToken]);
-  await mustExec('git', ['config', 'user.name', options.committerName], mask);
-  await mustExec('git', ['config', 'user.email', options.committerEmail], mask);
-  await mustExec('git', ['add', '--', options.configPath], mask);
-  const diff = await execFile('git', ['diff', '--cached', '--quiet']);
+  const executeCommand = options.executeCommand ?? execFile;
+  await mustExec('git', ['config', 'user.name', options.committerName], mask, executeCommand);
+  await mustExec('git', ['config', 'user.email', options.committerEmail], mask, executeCommand);
+  await mustExec('git', ['add', '--', options.configPath], mask, executeCommand);
+  const diff = await executeCommand('git', ['diff', '--cached', '--quiet']);
   if (diff.exitCode === 0) {
     return { commitSha: '', pushed: false };
   }
 
-  await mustExec('git', ['commit', '-m', 'chore: persist Postman TDD workspace id'], mask);
-  const commitSha = (await mustExec('git', ['rev-parse', 'HEAD'], mask)).stdout.trim();
+  await mustExec('git', ['commit', '-m', 'chore: persist Postman TDD workspace id'], mask, executeCommand);
+  const commitSha = (await mustExec('git', ['rev-parse', 'HEAD'], mask, executeCommand)).stdout.trim();
 
   if (options.mode !== 'commit-and-push') {
     return { commitSha, pushed: false };
@@ -84,9 +111,9 @@ export async function commitConfigWriteback(
     throw new Error('Could not resolve current branch for config-write-mode=commit-and-push');
   }
 
-  const originalRemote = (await mustExec('git', ['remote', 'get-url', 'origin'], mask)).stdout.trim();
+  const originalRemote = (await mustExec('git', ['remote', 'get-url', 'origin'], mask, executeCommand)).stdout.trim();
   try {
-    await execFile('git', ['config', '--unset-all', 'http.https://github.com/.extraheader']);
+    await executeCommand('git', ['config', '--unset-all', 'http.https://github.com/.extraheader']);
     await mustExec(
       'git',
       [
@@ -96,7 +123,8 @@ export async function commitConfigWriteback(
         options.pushRemoteUrl ??
           `https://x-access-token:${options.githubToken}@github.com/${options.repository}.git`
       ],
-      mask
+      mask,
+      executeCommand
     );
     // A concurrent push (or a checkout that was stale at job start) makes the
     // direct push non-fast-forward. Reconcile by rebasing the writeback commit
@@ -106,7 +134,7 @@ export async function commitConfigWriteback(
     let pushed = false;
     let lastError = '';
     for (let pushAttempt = 0; pushAttempt < 2; pushAttempt += 1) {
-      const push = await execFile('git', ['push', 'origin', `HEAD:refs/heads/${branch}`]);
+      const push = await executeCommand('git', ['push', 'origin', `HEAD:refs/heads/${branch}`]);
       if (push.exitCode === 0) {
         pushed = true;
         break;
@@ -116,10 +144,16 @@ export async function commitConfigWriteback(
       if (!targetAdvanced || pushAttempt === 1) {
         break;
       }
-      await mustExec('git', ['fetch', '--no-tags', 'origin', `refs/heads/${branch}`], mask);
-      const rebase = await execFile('git', ['rebase', '-X', 'theirs', 'FETCH_HEAD']);
+      await mustExec('git', ['fetch', '--no-tags', 'origin', `refs/heads/${branch}`], mask, executeCommand);
+      const rebase = await executeCommand('git', ['rebase', '-X', 'theirs', 'FETCH_HEAD']);
       if (rebase.exitCode !== 0) {
-        await execFile('git', ['rebase', '--abort']);
+        const abort = await executeCommand('git', ['rebase', '--abort']);
+        if (abort.exitCode !== 0) {
+          throw new Error(mask(
+            `Could not rebase config writeback onto ${branch}: ${rebase.stderr || rebase.stdout || 'rebase failed'}; ` +
+            `could not abort rebase: ${abort.stderr || abort.stdout || 'rebase --abort failed'}`
+          ));
+        }
         throw new Error(
           mask(`Could not rebase config writeback onto ${branch}: ${rebase.stderr || rebase.stdout || 'rebase failed'}`)
         );
@@ -129,9 +163,9 @@ export async function commitConfigWriteback(
       throw new Error(mask(lastError));
     }
   } finally {
-    await execFile('git', ['remote', 'set-url', 'origin', originalRemote]);
+    await restoreOrigin(originalRemote, mask, executeCommand);
   }
 
-  const finalSha = (await mustExec('git', ['rev-parse', 'HEAD'], mask)).stdout.trim();
+  const finalSha = (await mustExec('git', ['rev-parse', 'HEAD'], mask, executeCommand)).stdout.trim();
   return { commitSha: finalSha, pushed: true };
 }
