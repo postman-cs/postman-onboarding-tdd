@@ -130,6 +130,54 @@ describe('commitConfigWriteback push reconciliation', () => {
     expect(log).toContain('chore: persist Postman TDD workspace id');
   }, 30000);
 
+  it('aborts a failed rebase and masks its error before restoring origin', async () => {
+    await writeFile(path.join(checkoutDir, 'postman-tdd.yaml'), 'workspaceId: ws-rebase-failure\n');
+    const originalRemote = await git(checkoutDir, 'remote', 'get-url', 'origin');
+    let pushAttempts = 0;
+    let fetchCalls = 0;
+    let abortCalls = 0;
+    const executeCommand: CommandExecutor = async (command, args) => {
+      if (args[0] === 'push') {
+        pushAttempts += 1;
+        return { exitCode: 1, stderr: 'rejected non-fast-forward', stdout: '' };
+      }
+      if (args.join('\0') === ['fetch', '--no-tags', 'origin', 'refs/heads/main'].join('\0')) {
+        fetchCalls += 1;
+      }
+      if (args.join('\0') === ['rebase', '-X', 'theirs', 'FETCH_HEAD'].join('\0')) {
+        return { exitCode: 1, stderr: 'rebase failed: test-token', stdout: '' };
+      }
+      if (args.join('\0') === ['rebase', '--abort'].join('\0')) {
+        abortCalls += 1;
+        return { exitCode: 0, stderr: '', stdout: '' };
+      }
+      return runGitCommand(command, args);
+    };
+
+    const error = await commitConfigWriteback({
+      committerEmail: 'bot@example.com',
+      committerName: 'Bot',
+      configPath: 'postman-tdd.yaml',
+      githubToken: 'test-token',
+      mode: 'commit-and-push',
+      pushRemoteUrl: remoteDir,
+      repository: 'postman-cs/does-not-matter',
+      executeCommand
+    }).then(
+      () => new Error('Expected rebase failure'),
+      (reason: unknown) => reason
+    );
+
+    expect(pushAttempts).toBe(1);
+    expect(fetchCalls).toBe(1);
+    expect(abortCalls).toBe(1);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('Could not rebase config writeback onto main');
+    expect((error as Error).message).toContain('***');
+    expect((error as Error).message).not.toContain('test-token');
+    expect(await git(checkoutDir, 'remote', 'get-url', 'origin')).toBe(originalRemote);
+  }, 30000);
+
   it('keeps the writeback config when concurrent history changes the same file', async () => {
     await writeFile(path.join(checkoutDir, 'postman-tdd.yaml'), 'workspaceId: ws-base\n');
     await git(checkoutDir, 'add', 'postman-tdd.yaml');
