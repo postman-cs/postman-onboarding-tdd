@@ -109056,14 +109056,44 @@ async function commitConfigWriteback(options) {
     await execFile("git", ["config", "--unset-all", "http.https://github.com/.extraheader"]);
     await mustExec(
       "git",
-      ["remote", "set-url", "origin", `https://x-access-token:${options.githubToken}@github.com/${options.repository}.git`],
+      [
+        "remote",
+        "set-url",
+        "origin",
+        options.pushRemoteUrl ?? `https://x-access-token:${options.githubToken}@github.com/${options.repository}.git`
+      ],
       mask
     );
-    await mustExec("git", ["push", "origin", `HEAD:refs/heads/${branch}`], mask);
+    let pushed = false;
+    let lastError = "";
+    for (let pushAttempt = 0; pushAttempt < 2; pushAttempt += 1) {
+      const push = await execFile("git", ["push", "origin", `HEAD:refs/heads/${branch}`]);
+      if (push.exitCode === 0) {
+        pushed = true;
+        break;
+      }
+      lastError = push.stderr || push.stdout || "git push failed";
+      const targetAdvanced = /non-fast-forward|fetch first|remote contains work/i.test(lastError);
+      if (!targetAdvanced || pushAttempt === 1) {
+        break;
+      }
+      await mustExec("git", ["fetch", "--no-tags", "origin", `refs/heads/${branch}`], mask);
+      const rebase = await execFile("git", ["rebase", "-X", "theirs", "FETCH_HEAD"]);
+      if (rebase.exitCode !== 0) {
+        await execFile("git", ["rebase", "--abort"]);
+        throw new Error(
+          mask(`Could not rebase config writeback onto ${branch}: ${rebase.stderr || rebase.stdout || "rebase failed"}`)
+        );
+      }
+    }
+    if (!pushed) {
+      throw new Error(mask(lastError));
+    }
   } finally {
     await execFile("git", ["remote", "set-url", "origin", originalRemote]);
   }
-  return { commitSha, pushed: true };
+  const finalSha = (await mustExec("git", ["rev-parse", "HEAD"], mask)).stdout.trim();
+  return { commitSha: finalSha, pushed: true };
 }
 
 // src/preview-assets.ts
