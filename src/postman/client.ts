@@ -1,4 +1,4 @@
-import { HttpError } from '../utils/http-error.js';
+import { HttpError } from '@postman-cse/automation-core';
 import { createSecretMasker, type SecretMasker } from '../secrets.js';
 
 type JsonRecord = Record<string, unknown>;
@@ -66,11 +66,11 @@ export class PostmanClient {
     }
 
     if (!response.ok) {
-      throw await HttpError.fromResponse(response, {
-        method: init.method || 'GET',
-        secretValues: [this.apiKey],
-        url
-      });
+      const body = await response.text().catch(() => '');
+      throw new HttpError(
+        `${init.method || 'GET'} ${url} failed with ${response.status} ${response.statusText}: ${this.secretMasker(body)}`,
+        response.status
+      );
     }
 
     try {
