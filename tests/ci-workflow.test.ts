@@ -163,9 +163,14 @@ describe('CI workflow contract', () => {
     expect(windows).not.toMatch(/^\s*cache:\s*npm\s*$/m);
 
     expect(windows).toContain('id: windows-node-modules');
-    expect(windows).toContain(
-      'uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0',
-    );
+    // Semantic pin: any 40-char hex SHA, consistent across file, with semver comment
+    {
+      const cachePins = [...ciWorkflow.matchAll(/actions\/cache@([0-9a-f]{40})/g)].map((m) => m[1]!);
+      expect(cachePins.length).toBeGreaterThanOrEqual(1);
+      for (const sha of cachePins) expect(sha).toMatch(/^[0-9a-f]{40}$/);
+      expect(new Set(cachePins).size).toBe(1);
+      expect(windows).toMatch(/uses:\s*actions\/cache@[0-9a-f]{40}\s+#\s*v\d+\.\d+\.\d+/);
+    }
     expect(windows).toContain('path: node_modules');
     expect(windows).toContain(
       "key: Windows/node-24/exact-${{ hashFiles('package-lock.json') }}",
