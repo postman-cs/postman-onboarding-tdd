@@ -58,7 +58,6 @@ jobs:
           run lint       npm run lint
           run test       npm test
           run typecheck  npm run typecheck
-          run dist       npm run check:dist:assert
           run actionlint "$ACTIONLINT_BIN" .github/workflows/*.yml .postman-template/workflows/*.yml .postman-template/workflows/agents/*.yml
 
           while [ "${#pid[@]}" -gt 0 ]; do finish_one; done
@@ -70,6 +69,21 @@ jobs:
             echo "::group::$n"; cat "$n.log"; echo "::endgroup::"
           done
           exit $fail
+
+  dist-parity:
+    needs: gate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check:dist:parity
       - name: Upload expected dist on mismatch
         if: failure()
         uses: actions/upload-artifact@v7
@@ -93,3 +107,21 @@ jobs:
       - if: steps.windows-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
       - run: node --run test
+
+  ready:
+    needs: [gate, dist-parity, windows]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all CI jobs succeeded
+        run: |
+          echo "gate=${{ needs.gate.result }}"
+          echo "dist-parity=${{ needs.dist-parity.result }}"
+          echo "windows=${{ needs.windows.result }}"
+          for result in "${{ needs.gate.result }}" "${{ needs.dist-parity.result }}" "${{ needs.windows.result }}"; do
+            if [ "$result" != "success" ]; then
+              echo "CI not ready: one or more required jobs did not succeed"
+              exit 1
+            fi
+          done
+          echo "CI ready"

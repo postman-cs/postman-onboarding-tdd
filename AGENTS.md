@@ -25,24 +25,30 @@ onboarded repos. Do not conflate two.
 Local, in order, from repo root:
 
 ```
-npm test            # vitest run (P1-P5, incl. tests/repo-drift.test.ts)
-npm run typecheck   # tsc --noEmit -p tsconfig.json
-npm run lint        # eslint .
-npm run build       # typecheck + esbuild src/main.ts -> dist/action.mjs
-npm run check:dist  # build + git diff --exit-code -- dist  (must be clean)
-npm run lint:actions # actionlint over .github/workflows + .postman-template/workflows
+npm test                  # vitest run (P1-P5, incl. tests/repo-drift.test.ts)
+npm run typecheck         # tsc --noEmit -p tsconfig.json
+npm run lint              # eslint .
+npm run build             # typecheck + esbuild src/main.ts -> dist/action.mjs
+npm run check:dist        # build + parity (must be clean)
+npm run check:dist:parity # git diff --exit-code -- dist (read-only)
+npm run check:dist:assert # alias to parity (shape is same as parity here; no artifact verifier)
+npm run lint:actions      # actionlint over .github/workflows + .postman-template/workflows
 ```
 
-CI: one pre-queue `npm run build` (sole mutator), then Linux/PowerShell queues of
-read-only checks at max concurrency two, including `npm run check:dist:assert`
-(post-build `git diff --exit-code -- dist` only; no rebuild).
+CI: one pre-queue `npm run build` (sole mutator), then gate queue of read-only
+checks (lint/test/typecheck/actionlint) at max concurrency two, then separate
+`dist-parity` job (`npm run check:dist:parity` after rebuild) and Windows gate,
+aggregated by `ready`. Shape is same as parity in this repo (no
+`verify-dist-artifact.mjs`); `check:dist:shape` is kept as alias to parity for
+queue symmetry and `check:dist:assert` delegates to `check:dist:parity`.
 
 ## dist is committed
 
 `dist/action.mjs` is checked in. `npm run check:dist` rebuilds and asserts
-`git diff --exit-code -- dist` is clean. Never hand-edit `dist/`; change `src/`,
-run `npm run build`, and commit regenerated `dist/` in same commit. A
-docs/tests-only change must leave `dist/` byte-stable (final gate proves it).
+`npm run check:dist:parity` (`git diff --exit-code -- dist`) is clean. Never
+hand-edit `dist/`; change `src/`, run `npm run build`, and commit regenerated
+`dist/` in same commit. A docs/tests-only change must leave `dist/` byte-stable
+(`dist-parity` gate proves it).
 
 ## Release / tags
 

@@ -16,8 +16,10 @@
   },
   "scripts": {
     "build": "npm run typecheck && node scripts/build.mjs",
-    "check:dist": "npm run build && git diff --exit-code -- dist",
-    "check:dist:assert": "git diff --exit-code -- dist",
+    "check:dist": "npm run build && npm run check:dist:parity",
+    "check:dist:parity": "git diff --exit-code -- dist",
+    "check:dist:shape": "git diff --exit-code -- dist",
+    "check:dist:assert": "npm run check:dist:parity",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
