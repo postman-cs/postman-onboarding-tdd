@@ -106744,7 +106744,7 @@ function resolveActionVersion(explicit, env = process.env) {
   if (ref) {
     return ref;
   }
-  return "0.6.3" ? "0.6.3" : "unknown";
+  return "0.6.6" ? "0.6.6" : "unknown";
 }
 function telemetryDisabled(env) {
   const flag = String(env.POSTMAN_ACTIONS_TELEMETRY ?? "").trim().toLowerCase();
@@ -112218,7 +112218,7 @@ function readActionInputs() {
   };
 }
 function resolveActionVersion2() {
-  return "0.6.3" ? "0.6.3" : "unknown";
+  return "0.6.6" ? "0.6.6" : "unknown";
 }
 async function runAction(options = {}) {
   const actionVersion = resolveActionVersion2();

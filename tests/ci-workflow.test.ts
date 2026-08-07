@@ -47,18 +47,22 @@ function expectBefore(source: string, earlier: string, later: string): void {
 
 const linux = jobText(ciWorkflow, 'gate');
 const windows = jobText(ciWorkflow, 'windows');
+const distParity = jobText(ciWorkflow, 'dist-parity');
+const ready = jobText(ciWorkflow, 'ready');
 
 describe('CI workflow contract', () => {
   it('uses PR-only supersession and approved action majors', () => {
     expect(ciWorkflow).toContain('group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}');
     expect(ciWorkflow).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}");
 
-    // Exact counts — a single existential @v7 match must not mask a missing or major-drifted use.
+    // Exact counts — checkout/setup-node appears in gate, dist-parity, and windows.
     expect(actionUses(ciWorkflow, 'checkout')).toEqual([
+      'uses: actions/checkout@v7',
       'uses: actions/checkout@v7',
       'uses: actions/checkout@v7',
     ]);
     expect(actionUses(ciWorkflow, 'setup-node')).toEqual([
+      'uses: actions/setup-node@v7',
       'uses: actions/setup-node@v7',
       'uses: actions/setup-node@v7',
     ]);
@@ -68,11 +72,12 @@ describe('CI workflow contract', () => {
     // Shallow checkout default: this TDD maintainer CI has no commitlint full-history need.
     expect(ciWorkflow).not.toMatch(/^\s*fetch-depth:\s*/m);
 
-    // Permissions and check names stay fixed; jobs stay independent (no needs).
+    // Permissions and check names stay fixed; ready aggregates required jobs.
     expect(ciWorkflow).toContain('permissions:\n  contents: read');
     expect(linux).toMatch(/^ {2}gate:\n/);
     expect(windows).toContain('name: Windows gate');
-    expect(ciWorkflow).not.toMatch(/^\s*needs:/m);
+    expect(distParity).toContain('needs: gate');
+    expect(ready).toContain('needs: [gate, dist-parity, windows]');
   });
 
   it('builds once before a bounded Linux read-only gate queue', () => {
@@ -101,25 +106,50 @@ describe('CI workflow contract', () => {
     expect(runGates).toContain('run lint       npm run lint');
     expect(runGates).toContain('run test       npm test');
     expect(runGates).toContain('run typecheck  npm run typecheck');
-    expect(runGates).toContain('run dist       npm run check:dist:assert');
     // Pinned binary path — ambient PATH `actionlint` must not satisfy this.
     expect(runGates).toContain(
       'run actionlint "$ACTIONLINT_BIN" .github/workflows/*.yml .postman-template/workflows/*.yml .postman-template/workflows/agents/*.yml',
     );
-    // Exact ordered launches — extras/duplicates must fail (C1/R1).
+    // Exact ordered launches — extras/duplicates must fail (C1/R1). Dist parity is now a separate job.
     expect(linuxGateLaunches(runGates)).toEqual([
       'run lint       npm run lint',
       'run test       npm test',
       'run typecheck  npm run typecheck',
-      'run dist       npm run check:dist:assert',
       'run actionlint "$ACTIONLINT_BIN" .github/workflows/*.yml .postman-template/workflows/*.yml .postman-template/workflows/agents/*.yml',
     ]);
 
     expect(runGates).not.toContain('npm run build');
-    expect(runGates).not.toMatch(/npm run check:dist(?:\s|$)/);
+    expect(runGates).not.toContain('check:dist');
+    expect(runGates).not.toContain('run dist');
     expect(runGates).toContain('gate:$n=pass');
     expect(runGates).toContain('gate:$n=fail');
     expect(runGates).toContain('::group::$n');
+  });
+
+  it('runs dist parity as a separate job after gate with rebuild and expected-dist upload', () => {
+    expect(distParity).toContain('needs: gate');
+    expect(distParity).toContain('runs-on: ubuntu-24.04');
+    expect(distParity).toContain('- run: npm ci');
+    expect(distParity).toContain('- run: npm run build');
+    expect(distParity).toContain('- run: npm run check:dist:parity');
+    expect(distParity).not.toContain('check:dist:assert');
+    expect(distParity).not.toContain('check:dist:shape');
+    const upload = namedStep(distParity, 'Upload expected dist on mismatch');
+    expect(upload).toContain('if: failure()');
+    expect(upload).toContain('uses: actions/upload-artifact@v7');
+    expect(upload).toContain('name: expected-dist');
+    expect(upload).toContain('path: dist/');
+    expect(linux).not.toContain('name: expected-dist');
+  });
+
+  it('aggregates gate, dist-parity, and windows in a required ready job', () => {
+    expect(ready).toContain('if: always()');
+    expect(ready).toContain('needs: [gate, dist-parity, windows]');
+    expect(ready).toContain('needs.gate.result');
+    expect(ready).toContain('needs.dist-parity.result');
+    expect(ready).toContain('needs.windows.result');
+    expect(ready).toContain('exit 1');
+    expect(ready).toContain('CI ready');
   });
 
   it('caches Windows node_modules with exact key and miss-only prefer-offline npm ci', () => {
@@ -133,9 +163,14 @@ describe('CI workflow contract', () => {
     expect(windows).not.toMatch(/^\s*cache:\s*npm\s*$/m);
 
     expect(windows).toContain('id: windows-node-modules');
-    expect(windows).toContain(
-      'uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0',
-    );
+    // Semantic pin: any 40-char hex SHA, consistent across file, with semver comment
+    {
+      const cachePins = [...ciWorkflow.matchAll(/actions\/cache@([0-9a-f]{40})/g)].map((m) => m[1]!);
+      expect(cachePins.length).toBeGreaterThanOrEqual(1);
+      for (const sha of cachePins) expect(sha).toMatch(/^[0-9a-f]{40}$/);
+      expect(new Set(cachePins).size).toBe(1);
+      expect(windows).toMatch(/uses:\s*actions\/cache@[0-9a-f]{40}\s+#\s*v\d+\.\d+\.\d+/);
+    }
     expect(windows).toContain('path: node_modules');
     expect(windows).toContain(
       "key: Windows/node-24/exact-${{ hashFiles('package-lock.json') }}",
@@ -206,7 +241,11 @@ describe('CI workflow contract', () => {
     expect(ciWorkflow).not.toContain('go install github.com/rhysd/actionlint');
   });
 
-  it('defines the read-only dist assertion exactly', () => {
-    expect(packageJson.scripts['check:dist:assert']).toBe('git diff --exit-code -- dist');
+  it('defines the read-only dist parity split exactly', () => {
+    expect(packageJson.scripts['check:dist:parity']).toBe('git diff --exit-code -- dist');
+    // Shape is same as parity since no artifact verifier exists — kept as alias for queue symmetry.
+    expect(packageJson.scripts['check:dist:shape']).toBe('git diff --exit-code -- dist');
+    expect(packageJson.scripts['check:dist:assert']).toBe('npm run check:dist:parity');
+    expect(packageJson.scripts['check:dist']).toBe('npm run build && npm run check:dist:parity');
   });
 });
