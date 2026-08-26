@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { DefaultArtifactClient } from '@actions/artifact';
-import { actionSink, createLogger, createTelemetryContext, type Logger } from '@postman-cse/automation-core';
+import { actionSink, createLogger, createTelemetryContext, type Logger } from '@postman-cs/automation-core';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 

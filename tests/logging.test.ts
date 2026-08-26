@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLogger, type LogSink } from '@postman-cse/automation-core';
+import { createLogger, type LogSink } from '@postman-cs/automation-core';
 
 import { runAction } from '../src/index.js';
 import type { GitHubPrClient } from '../src/github/pr-comment.js';

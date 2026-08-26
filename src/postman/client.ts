@@ -1,4 +1,4 @@
-import { HttpError } from '@postman-cse/automation-core';
+import { HttpError } from '@postman-cs/automation-core';
 import { createSecretMasker, type SecretMasker } from '../secrets.js';
 
 type JsonRecord = Record<string, unknown>;
