@@ -116,6 +116,7 @@ describe('CI workflow contract', () => {
       'run test       npm test',
       'run typecheck  npm run typecheck',
       'run actionlint "$ACTIONLINT_BIN" .github/workflows/*.yml .postman-template/workflows/*.yml .postman-template/workflows/agents/*.yml',
+      'run docs-pins  npm run docs:pins',
     ]);
 
     expect(runGates).not.toContain('npm run build');

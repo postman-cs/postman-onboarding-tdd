@@ -59,6 +59,7 @@ jobs:
           run test       npm test
           run typecheck  npm run typecheck
           run actionlint "$ACTIONLINT_BIN" .github/workflows/*.yml .postman-template/workflows/*.yml .postman-template/workflows/agents/*.yml
+          run docs-pins  npm run docs:pins
 
           while [ "${#pid[@]}" -gt 0 ]; do finish_one; done
           fail=0

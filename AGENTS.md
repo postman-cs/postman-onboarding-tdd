@@ -70,15 +70,6 @@ snapshots real CI event payload. Pure filesystem-read tests
 `tests/harness-templates.test.ts`) need no scrub. Never print or hardcode
 secrets; mask with existing `createSecretMasker()` helpers in `src/`.
 
-## PRD / ledger workflow
-
-Long-horizon development is packet-driven. Master plan and per-phase PRDs
-live in `../.plans/` (relative to this repo root, inside parent
-`postman-actions` workspace): `long-horizon-development.md` is master plan,
-and `pN-prd.json` files carry each phase's atomic packets with `passes:false`
-flipped to `true` as each packet lands. When picking up phase, read the PRD
-fully first — its `seamCorrections[]` are authoritative over plan prose.
-
 ## Non-conflation invariant
 
 This root `AGENTS.md` is NOT in `package.json` `files` (D26): it is a
