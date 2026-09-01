@@ -24,7 +24,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "lint:actions": "actionlint .github/workflows/*.yml .postman-template/workflows/*.yml .postman-template/workflows/agents/*.yml",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "docs:pins": "node scripts/check-doc-pins.mjs"
   },
   "keywords": [
     "github-action",
