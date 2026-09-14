@@ -12,6 +12,26 @@ For each PR, the action:
 
 The optional repair worker can also call a configured AI repair provider, make implementation-only changes, run the same Postman collection locally, and push one repair commit only after the local TDD run passes.
 
+- [End-To-End Flow](#end-to-end-flow)
+- [What Customers Configure](#what-customers-configure)
+- [Quick Start](#quick-start)
+- [Repository Config](#repository-config)
+- [GitHub Secrets](#github-secrets)
+- [Repair Setup Checklist](#repair-setup-checklist)
+- [Setup Validation Workflow](#setup-validation-workflow)
+- [Agent Harness](#agent-harness)
+- [Preview Workflow](#preview-workflow)
+- [PR Feedback](#pr-feedback)
+- [Agent Instructions](#agent-instructions)
+- [Immutable Spec Guard](#immutable-spec-guard)
+- [Optional Local Agent Policy](#optional-local-agent-policy)
+- [Optional Automated Repair Worker](#optional-automated-repair-worker)
+- [Action Inputs](#action-inputs)
+- [Action Outputs](#action-outputs)
+- [Agent-Consumer Ergonomics](#agent-consumer-ergonomics)
+- [Telemetry](#telemetry)
+- [Development](#development)
+
 ## End-To-End Flow
 
 ```mermaid
