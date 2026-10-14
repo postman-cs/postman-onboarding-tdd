@@ -16,6 +16,7 @@ concurrency:
 jobs:
   gate:
     runs-on: ubuntu-24.04
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -74,6 +75,7 @@ jobs:
   dist-parity:
     needs: gate
     runs-on: ubuntu-24.04
+    timeout-minutes: 8
     permissions:
       contents: read
     steps:
@@ -95,6 +97,7 @@ jobs:
   windows:
     name: Windows gate
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -113,6 +116,7 @@ jobs:
     needs: [gate, dist-parity, windows]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - name: Require all CI jobs succeeded
         run: |
